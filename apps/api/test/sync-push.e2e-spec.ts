@@ -201,6 +201,62 @@ describe('Sync push', () => {
     expect(sale?.soldById).toBe(login.user.id);
   });
 
+  it('POST /sync/push accepts weighted line totals rounded half-up to VND', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 0, clientId: shiftId })
+      .expect(201);
+
+    const saleId = randomUUID();
+    const unitPrice = 15500;
+    const lineTotal = 5162;
+    const sale = {
+      id: saleId,
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      paymentMethod: 'cash',
+      cashAmount: lineTotal,
+      transferAmount: 0,
+      debtAmount: 0,
+      discountVnd: 0,
+      totalVnd: lineTotal,
+      customerId: null,
+      clientCreatedAt: new Date().toISOString(),
+      lines: [
+        {
+          productId: product.id,
+          qty: '0.333',
+          unitPrice,
+          lineTotal,
+        },
+      ],
+    };
+
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ deviceId: 'dev-weighted', sales: [sale] })
+      .expect(201);
+
+    expect(res.body.acceptedIds).toEqual([saleId]);
+    expect(res.body.rejected).toEqual([]);
+  });
+
   it('POST /sync/push rejects invalid quantities and client money mismatches', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())

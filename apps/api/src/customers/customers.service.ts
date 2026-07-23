@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,9 @@ export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertStoreAccess(user: AuthUser, storeId: string) {
+    if (user.role === Role.owner) {
+      return;
+    }
     if (!storeId || !user.storeIds.includes(storeId)) {
       throw new ForbiddenException('No access to this store');
     }

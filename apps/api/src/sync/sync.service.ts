@@ -364,7 +364,7 @@ export class SyncService {
         if (!qty.isFinite() || qty.lessThanOrEqualTo(0)) {
           return 'invalid_quantity';
         }
-        const expectedLineTotal = qty.times(line.unitPrice);
+        const expectedLineTotal = qty.times(line.unitPrice).round();
         if (!expectedLineTotal.equals(line.lineTotal)) {
           return 'line_total_mismatch';
         }
