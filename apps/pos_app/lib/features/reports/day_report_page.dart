@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
 
 import 'day_report_repository.dart';
+import 'ict_date.dart';
 
 class DayReportPage extends StatefulWidget {
   const DayReportPage({
     super.key,
     required this.repository,
     required this.storeId,
+    required this.role,
   });
 
   final DayReportRepository repository;
   final String storeId;
+  final String role;
 
   @override
   State<DayReportPage> createState() => _DayReportPageState();
 }
 
 class _DayReportPageState extends State<DayReportPage> {
-  DateTime _selectedDate = DateTime.now();
+  DateTime _selectedDate = ictToday();
   DayReport? _report;
   bool _isLoading = true;
   String? _message;
@@ -34,9 +37,10 @@ class _DayReportPageState extends State<DayReportPage> {
       _message = null;
     });
     try {
+      final storeId = widget.role == 'owner' ? null : widget.storeId;
       final report = await widget.repository.fetchDayReport(
         date: _selectedDate,
-        storeId: widget.storeId,
+        storeId: storeId,
       );
       if (!mounted) return;
       setState(() {

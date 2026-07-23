@@ -163,4 +163,75 @@ describe('Reports day', () => {
     expect(report.body.totalRevenueVnd).toBe(50000);
     expect(report.body.byStore).toHaveLength(2);
   });
+
+  it('GET /reports/day uses Asia/Ho_Chi_Minh day boundaries', async () => {
+    const login = await loginAsOwner(app);
+    const storesRes = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const ch1 = storesRes.body.find(
+      (store: { code: string }) => store.code === 'CH1',
+    );
+    if (!ch1) {
+      throw new Error('Seed store CH1 not found');
+    }
+
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+
+    const reportDate = '2026-07-23';
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId: ch1.id, openingCash: 500000, clientId: shiftId })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-ict',
+        sales: [
+          makeSaleDto(randomUUID(), {
+            storeId: ch1.id,
+            shiftId,
+            soldById: login.user.id,
+            productId: product.id,
+            totalVnd: 11000,
+            clientCreatedAt: '2026-07-22T17:30:00.000Z',
+          }),
+          makeSaleDto(randomUUID(), {
+            storeId: ch1.id,
+            shiftId,
+            soldById: login.user.id,
+            productId: product.id,
+            totalVnd: 22000,
+            clientCreatedAt: '2026-07-23T16:30:00.000Z',
+          }),
+          makeSaleDto(randomUUID(), {
+            storeId: ch1.id,
+            shiftId,
+            soldById: login.user.id,
+            productId: product.id,
+            totalVnd: 33000,
+            clientCreatedAt: '2026-07-23T17:30:00.000Z',
+          }),
+        ],
+      })
+      .expect(201);
+
+    const report = await request(app.getHttpServer())
+      .get(`/reports/day?date=${reportDate}&storeId=${ch1.id}`)
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(200);
+
+    expect(report.body.totalRevenueVnd).toBe(33000);
+    expect(report.body.byStore).toHaveLength(1);
+    expect(report.body.byStore[0].orderCount).toBe(2);
+  });
 });

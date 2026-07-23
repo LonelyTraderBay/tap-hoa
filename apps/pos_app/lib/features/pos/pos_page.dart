@@ -20,6 +20,7 @@ class PosPage extends StatefulWidget {
     required this.outboxWorker,
     required this.dayReportRepository,
     required this.storeId,
+    required this.role,
   });
 
   final ProductRepository productRepository;
@@ -28,6 +29,7 @@ class PosPage extends StatefulWidget {
   final OutboxWorker outboxWorker;
   final DayReportRepository dayReportRepository;
   final String storeId;
+  final String role;
 
   @override
   State<PosPage> createState() => _PosPageState();
@@ -136,6 +138,7 @@ class _PosPageState extends State<PosPage> {
                   builder: (_) => DayReportPage(
                     repository: widget.dayReportRepository,
                     storeId: widget.storeId,
+                    role: widget.role,
                   ),
                 ),
               );

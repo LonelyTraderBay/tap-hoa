@@ -21,6 +21,8 @@ export type DayReportResponse = {
   totalRevenueVnd: number;
 };
 
+const ICT_OFFSET_HOURS = 7;
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -42,15 +44,20 @@ export class ReportsService {
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = Number(match[3]);
-    const start = new Date(Date.UTC(year, month - 1, day));
-    const end = new Date(Date.UTC(year, month - 1, day + 1));
+    const probe = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
     if (
-      start.getUTCFullYear() !== year ||
-      start.getUTCMonth() !== month - 1 ||
-      start.getUTCDate() !== day
+      probe.getUTCFullYear() !== year ||
+      probe.getUTCMonth() !== month - 1 ||
+      probe.getUTCDate() !== day
     ) {
       throw new BadRequestException('date must be YYYY-MM-DD');
     }
+    const start = new Date(
+      Date.UTC(year, month - 1, day, -ICT_OFFSET_HOURS, 0, 0, 0),
+    );
+    const end = new Date(
+      Date.UTC(year, month - 1, day + 1, -ICT_OFFSET_HOURS, 0, 0, 0),
+    );
     return { start, end };
   }
 

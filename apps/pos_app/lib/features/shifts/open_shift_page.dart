@@ -105,6 +105,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
             outboxWorker: widget.outboxWorker,
             dayReportRepository: widget.dayReportRepository,
             storeId: store.id,
+            role: widget.user.role,
           ),
         ),
       );
