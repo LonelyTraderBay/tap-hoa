@@ -5,6 +5,7 @@ import 'data/remote/api_client.dart';
 import 'data/sync/pull_catalog.dart';
 import 'features/auth/auth_repository.dart';
 import 'features/auth/login_page.dart';
+import 'features/pos/checkout_service.dart';
 import 'features/products/product_repository.dart';
 import 'features/shifts/shift_repository.dart';
 
@@ -20,12 +21,17 @@ void main() {
   final shiftRepository = ShiftRepository(dio: apiClient.dio, db: database);
   final productRepository = ProductRepository(database);
   final pullCatalog = PullCatalog(db: database, dio: apiClient.dio);
+  final checkoutService = CheckoutService(
+    db: database,
+    shiftRepository: shiftRepository,
+  );
   runApp(
     PosApp(
       authRepository: repository,
       shiftRepository: shiftRepository,
       productRepository: productRepository,
       pullCatalog: pullCatalog,
+      checkoutService: checkoutService,
     ),
   );
 }
@@ -37,12 +43,14 @@ class PosApp extends StatelessWidget {
     required this.shiftRepository,
     required this.productRepository,
     required this.pullCatalog,
+    required this.checkoutService,
   });
 
   final AuthRepository authRepository;
   final ShiftRepository shiftRepository;
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
+  final CheckoutService checkoutService;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +61,7 @@ class PosApp extends StatelessWidget {
         shiftRepository: shiftRepository,
         productRepository: productRepository,
         pullCatalog: pullCatalog,
+        checkoutService: checkoutService,
       ),
     );
   }

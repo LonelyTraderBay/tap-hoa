@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/sync/pull_catalog.dart';
 import 'auth_repository.dart';
+import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
 import '../shifts/open_shift_page.dart';
 import '../shifts/shift_repository.dart';
@@ -13,12 +14,14 @@ class LoginPage extends StatefulWidget {
     required this.shiftRepository,
     required this.productRepository,
     required this.pullCatalog,
+    required this.checkoutService,
   });
 
   final AuthRepository repository;
   final ShiftRepository shiftRepository;
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
+  final CheckoutService checkoutService;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -55,6 +58,7 @@ class _LoginPageState extends State<LoginPage> {
               user: user,
               productRepository: widget.productRepository,
               pullCatalog: widget.pullCatalog,
+              checkoutService: widget.checkoutService,
             ),
           ),
         );

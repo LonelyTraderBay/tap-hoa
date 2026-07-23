@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pos_app/data/sync/pull_catalog.dart';
 import 'package:pos_app/features/auth/auth_repository.dart';
+import 'package:pos_app/features/pos/checkout_service.dart';
 import 'package:pos_app/features/products/product_repository.dart';
 import 'package:pos_app/features/shifts/shift_repository.dart';
 import 'package:pos_app/main.dart';
@@ -15,6 +16,8 @@ class MockProductRepository extends Mock implements ProductRepository {}
 
 class MockPullCatalog extends Mock implements PullCatalog {}
 
+class MockCheckoutService extends Mock implements CheckoutService {}
+
 void main() {
   testWidgets('shows login form', (tester) async {
     await tester.pumpWidget(
@@ -23,6 +26,7 @@ void main() {
         shiftRepository: MockShiftRepository(),
         productRepository: MockProductRepository(),
         pullCatalog: MockPullCatalog(),
+        checkoutService: MockCheckoutService(),
       ),
     );
 
@@ -54,6 +58,7 @@ void main() {
         shiftRepository: shiftRepository,
         productRepository: MockProductRepository(),
         pullCatalog: MockPullCatalog(),
+        checkoutService: MockCheckoutService(),
       ),
     );
 

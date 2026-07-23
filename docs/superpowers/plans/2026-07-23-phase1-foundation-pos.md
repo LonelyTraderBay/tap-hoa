@@ -782,7 +782,7 @@ git commit -m "feat(pos): cart domain with discount and weighted qty"
 - Consumes: `Cart`, `AppDatabase`, open `Shift`
 - Produces: `CheckoutService.complete({cart, payment, customerId?})` → local `Sale` id; decrements `ProductStocks`; inserts `OutboxEntries` with `entityType: 'sale'`
 
-- [ ] **Step 1: Test checkout decreases stock and enqueues outbox**
+- [x] **Step 1: Test checkout decreases stock and enqueues outbox**
 
 ```dart
 test('checkout writes sale and decrements stock', () async {
@@ -800,7 +800,7 @@ test('checkout writes sale and decrements stock', () async {
 });
 ```
 
-- [ ] **Step 2: Implement in a single Drift transaction**
+- [x] **Step 2: Implement in a single Drift transaction**
 
 ```dart
 await db.transaction(() async {
@@ -820,11 +820,11 @@ Prefer reading qty as Decimal, subtract in Dart, write string back — avoid SQL
 
 If `allowNegativeStock` meta is false and qty would go negative → throw `InsufficientStockException` (still allow override flag for owner later).
 
-- [ ] **Step 3: POS UI — search by barcode/name, add to cart, pay**
+- [x] **Step 3: POS UI — search by barcode/name, add to cart, pay**
 
 Payment sheet fields: cash, transfer, debt (sum must equal `cart.totalVnd`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(pos): offline checkout with stock and outbox"

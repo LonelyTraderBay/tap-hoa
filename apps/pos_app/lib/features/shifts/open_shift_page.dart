@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../../data/sync/pull_catalog.dart';
 import '../auth/auth_repository.dart';
-import '../products/product_list_page.dart';
+import '../pos/pos_page.dart';
+import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
 import 'shift_repository.dart';
 
@@ -14,12 +15,14 @@ class OpenShiftPage extends StatefulWidget {
     required this.user,
     required this.productRepository,
     required this.pullCatalog,
+    required this.checkoutService,
   });
 
   final ShiftRepository repository;
   final AuthUser user;
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
+  final CheckoutService checkoutService;
 
   @override
   State<OpenShiftPage> createState() => _OpenShiftPageState();
@@ -89,8 +92,9 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => ProductListPage(
-            repository: widget.productRepository,
+          builder: (_) => PosPage(
+            productRepository: widget.productRepository,
+            checkoutService: widget.checkoutService,
             pullCatalog: widget.pullCatalog,
             storeId: store.id,
           ),
