@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role, Shift } from '@prisma/client';
 import { AuthUser } from '../auth/jwt.strategy';
+import {
+  ShiftCashInputs,
+  computeShiftCashSnapshot,
+} from '../cash/expected-cash';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type OpenShiftDto = {
@@ -49,6 +53,65 @@ export class ShiftsService {
     if (shift.closedAt != null) {
       throw new ConflictException('Shift already closed');
     }
+  }
+
+  async loadShiftCashInputs(shiftId: string): Promise<ShiftCashInputs> {
+    const shift = await this.prisma.shift.findUniqueOrThrow({
+      where: { id: shiftId },
+    });
+
+    const salesAgg = await this.prisma.sale.aggregate({
+      where: { shiftId },
+      _sum: { cashAmount: true, transferAmount: true },
+    });
+
+    const debtPayments = await this.prisma.debtLedgerEntry.findMany({
+      where: { shiftId, type: 'payment' },
+      select: { paymentMethod: true, amountVnd: true },
+    });
+
+    const vouchers = await this.prisma.cashVoucher.findMany({
+      where: { shiftId },
+      select: { direction: true, channel: true, amountVnd: true },
+    });
+
+    let debtPaymentCashTotal = 0;
+    let debtPaymentTransferTotal = 0;
+    for (const entry of debtPayments) {
+      if (entry.paymentMethod === 'cash') {
+        debtPaymentCashTotal += entry.amountVnd;
+      } else if (entry.paymentMethod === 'transfer') {
+        debtPaymentTransferTotal += entry.amountVnd;
+      }
+    }
+
+    let voucherCashInTotal = 0;
+    let voucherCashOutTotal = 0;
+    let voucherTransferInTotal = 0;
+    let voucherTransferOutTotal = 0;
+    for (const voucher of vouchers) {
+      if (voucher.direction === 'in' && voucher.channel === 'cash') {
+        voucherCashInTotal += voucher.amountVnd;
+      } else if (voucher.direction === 'out' && voucher.channel === 'cash') {
+        voucherCashOutTotal += voucher.amountVnd;
+      } else if (voucher.direction === 'in' && voucher.channel === 'transfer') {
+        voucherTransferInTotal += voucher.amountVnd;
+      } else if (voucher.direction === 'out' && voucher.channel === 'transfer') {
+        voucherTransferOutTotal += voucher.amountVnd;
+      }
+    }
+
+    return {
+      openingCash: shift.openingCash,
+      saleCashTotal: salesAgg._sum.cashAmount ?? 0,
+      saleTransferTotal: salesAgg._sum.transferAmount ?? 0,
+      debtPaymentCashTotal,
+      debtPaymentTransferTotal,
+      voucherCashInTotal,
+      voucherCashOutTotal,
+      voucherTransferInTotal,
+      voucherTransferOutTotal,
+    };
   }
 
   async open(user: AuthUser, dto: OpenShiftDto) {
@@ -126,12 +189,18 @@ export class ShiftsService {
       throw new ConflictException('Shift already closed');
     }
 
+    const inputs = await this.loadShiftCashInputs(shiftId);
+    const snapshot = computeShiftCashSnapshot(inputs, dto.closingCash);
+
     return this.prisma.shift.update({
       where: { id: shiftId },
       data: {
         closedAt: dto.closedAt ? new Date(dto.closedAt) : new Date(),
         closingCash: dto.closingCash,
         note: dto.note,
+        expectedCashVnd: snapshot.expectedCashVnd,
+        varianceVnd: snapshot.varianceVnd,
+        transferInShiftVnd: snapshot.transferInShiftVnd,
       },
     });
   }

@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { ShiftsService } from '../shifts/shifts.service';
 import {
+  PushCashVoucherDto,
   PushCustomerUpsertDto,
   PushDebtPaymentDto,
   PushSaleDto,
@@ -39,13 +40,21 @@ export class SyncService {
     this.assertStoreAccess(user, storeId);
     const serverTime = new Date();
 
-    const [products, stocks, customers, debtLedger] = await Promise.all([
+    const [products, stocks, customers, debtLedger, cashCategories, cashVouchers] =
+      await Promise.all([
       this.productsService.findUpdatedSince(since),
       this.productsService.findStocksForStoreSince(storeId, since),
       this.prisma.customer.findMany({
         where: { storeId, updatedAt: { gt: since } },
       }),
       this.prisma.debtLedgerEntry.findMany({
+        where: { storeId, updatedAt: { gt: since } },
+        orderBy: { clientCreatedAt: 'asc' },
+      }),
+      this.prisma.cashCategory.findMany({
+        orderBy: { sortOrder: 'asc' },
+      }),
+      this.prisma.cashVoucher.findMany({
         where: { storeId, updatedAt: { gt: since } },
         orderBy: { clientCreatedAt: 'asc' },
       }),
@@ -95,6 +104,26 @@ export class SyncService {
         clientCreatedAt: e.clientCreatedAt.toISOString(),
         updatedAt: e.updatedAt.toISOString(),
       })),
+      cashCategories: cashCategories.map((c) => ({
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        direction: c.direction,
+        sortOrder: c.sortOrder,
+      })),
+      cashVouchers: cashVouchers.map((v) => ({
+        id: v.id,
+        storeId: v.storeId,
+        shiftId: v.shiftId,
+        categoryId: v.categoryId,
+        direction: v.direction,
+        channel: v.channel,
+        amountVnd: v.amountVnd,
+        note: v.note,
+        recordedById: v.recordedById,
+        clientCreatedAt: v.clientCreatedAt.toISOString(),
+        updatedAt: v.updatedAt.toISOString(),
+      })),
       serverTime: serverTime.toISOString(),
     };
   }
@@ -112,6 +141,11 @@ export class SyncService {
     }
 
     const salesResult = await this.pushSales(user, body.deviceId, body.sales);
+
+    const voucherResult = await this.pushCashVouchers(
+      user,
+      body.cashVouchers ?? [],
+    );
 
     const acceptedShiftCloseIds: string[] = [];
     for (const shift of body.shiftCloses ?? []) {
@@ -137,9 +171,113 @@ export class SyncService {
       acceptedShiftCloseIds,
       rejectedShifts,
       ...salesResult,
+      ...voucherResult,
       ...debtResult,
       ...customerResult,
     };
+  }
+
+  private async pushCashVouchers(
+    user: AuthUser,
+    vouchers: PushCashVoucherDto[],
+  ) {
+    const acceptedCashVoucherIds: string[] = [];
+    const rejectedCashVouchers: { id: string; reason: string }[] = [];
+    for (const voucher of vouchers) {
+      const result = await this.processCashVoucher(user, voucher);
+      if (result.accepted) {
+        acceptedCashVoucherIds.push(voucher.id);
+      } else {
+        rejectedCashVouchers.push({
+          id: voucher.id,
+          reason: result.reason ?? 'invalid_voucher',
+        });
+      }
+    }
+    return { acceptedCashVoucherIds, rejectedCashVouchers };
+  }
+
+  private async processCashVoucher(
+    user: AuthUser,
+    voucher: PushCashVoucherDto,
+  ): Promise<{ accepted: boolean; reason?: string }> {
+    if (
+      !voucher.id ||
+      !voucher.storeId ||
+      !voucher.shiftId ||
+      !voucher.categoryId ||
+      (voucher.direction !== 'in' && voucher.direction !== 'out') ||
+      (voucher.channel !== 'cash' && voucher.channel !== 'transfer') ||
+      Number.isNaN(Date.parse(voucher.clientCreatedAt))
+    ) {
+      return { accepted: false, reason: 'invalid_voucher' };
+    }
+    if (
+      !Number.isSafeInteger(voucher.amountVnd) ||
+      voucher.amountVnd <= 0
+    ) {
+      return { accepted: false, reason: 'invalid_amount' };
+    }
+
+    try {
+      this.assertStoreAccess(user, voucher.storeId);
+    } catch {
+      return { accepted: false, reason: 'store_forbidden' };
+    }
+
+    const existing = await this.prisma.cashVoucher.findUnique({
+      where: { id: voucher.id },
+    });
+    if (existing) {
+      return { accepted: true };
+    }
+
+    const category = await this.prisma.cashCategory.findUnique({
+      where: { id: voucher.categoryId },
+    });
+    if (!category) {
+      return { accepted: false, reason: 'invalid_voucher' };
+    }
+    if (category.direction !== voucher.direction) {
+      return { accepted: false, reason: 'category_direction_mismatch' };
+    }
+
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: voucher.shiftId },
+    });
+    if (
+      !shift ||
+      shift.closedAt != null ||
+      shift.storeId !== voucher.storeId
+    ) {
+      return { accepted: false, reason: 'shift_not_open' };
+    }
+
+    try {
+      await this.prisma.cashVoucher.create({
+        data: {
+          id: voucher.id,
+          storeId: voucher.storeId,
+          shiftId: voucher.shiftId,
+          categoryId: voucher.categoryId,
+          direction: voucher.direction,
+          channel: voucher.channel,
+          amountVnd: voucher.amountVnd,
+          note: voucher.note?.trim() || null,
+          recordedById: voucher.recordedById ?? user.userId,
+          clientCreatedAt: new Date(voucher.clientCreatedAt),
+        },
+      });
+      return { accepted: true };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return { accepted: true };
+      }
+      throw error;
+    }
   }
 
   private async pushDebtPayments(

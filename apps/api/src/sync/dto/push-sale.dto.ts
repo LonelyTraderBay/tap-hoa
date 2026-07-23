@@ -41,6 +41,22 @@ export type PushShiftCloseDto = {
   closingCash: number;
   note?: string | null;
   closedAt: string;
+  expectedCashVnd?: number;
+  varianceVnd?: number;
+  transferInShiftVnd?: number;
+};
+
+export type PushCashVoucherDto = {
+  id: string;
+  storeId: string;
+  shiftId: string;
+  categoryId: string;
+  direction: 'in' | 'out';
+  channel: 'cash' | 'transfer';
+  amountVnd: number;
+  note?: string | null;
+  recordedById?: string;
+  clientCreatedAt: string;
 };
 
 export type PushDebtPaymentDto = {
@@ -69,5 +85,6 @@ export type PushSyncDto = {
   shiftCloses?: PushShiftCloseDto[];
   sales: PushSaleDto[];
   debtPayments?: PushDebtPaymentDto[];
+  cashVouchers?: PushCashVoucherDto[];
   customerUpserts?: PushCustomerUpsertDto[];
 };
