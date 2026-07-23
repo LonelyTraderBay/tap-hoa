@@ -4,6 +4,7 @@
 
 - `a1fe1cb` — `fix(api): secure offline sync foundation`
 - `62b6ad0` — `fix(pos): sync shift outbox before sales`
+- `d919c28` — `test(api): serialize shared-database e2e suites`
 
 ## Changes
 
@@ -20,7 +21,7 @@
 
 ## Verification
 
-- `cd apps/api && npm run test:e2e -- --runInBand` — PASS, 8 suites / 24 tests.
+- `cd apps/api && npm run test:e2e` — PASS, 8 suites / 24 tests.
 - `cd apps/api && npm run build` — PASS.
 - `npx prisma validate` and `npx prisma generate` — PASS.
 - `npx prisma migrate deploy` — PASS against the configured local Supabase PostgreSQL database.
