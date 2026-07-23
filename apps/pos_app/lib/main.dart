@@ -10,10 +10,11 @@ import 'features/shifts/shift_repository.dart';
 
 void main() {
   final database = AppDatabase();
-  final apiClient = ApiClient();
+  const tokenStorage = SecureTokenStorage();
+  final apiClient = ApiClient(tokenStorage: tokenStorage);
   final repository = AuthRepository(
     dio: apiClient.dio,
-    secureStorage: const SecureTokenStorage(),
+    secureStorage: tokenStorage,
     db: database,
   );
   final shiftRepository = ShiftRepository(dio: apiClient.dio, db: database);

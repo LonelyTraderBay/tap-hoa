@@ -12,7 +12,8 @@ class PullCatalog {
 
   Future<void> pullCatalog(String storeId) async {
     final since =
-        await _db.lastPullAt() ?? DateTime.fromMillisecondsSinceEpoch(0);
+        await _db.lastPullAt(storeId) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
     final response = await _dio.get<Map<String, dynamic>>(
       '/sync/pull',
       queryParameters: {
@@ -33,7 +34,7 @@ class PullCatalog {
 
     await _db.upsertProductsAndStocks(products: products, stocks: stocks);
     if (serverTime != null) {
-      await _db.setLastPullAt(DateTime.parse(serverTime));
+      await _db.setLastPullAt(storeId, DateTime.parse(serverTime));
     }
   }
 }

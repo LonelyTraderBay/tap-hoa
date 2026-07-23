@@ -44,16 +44,21 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<DateTime?> lastPullAt() async {
-    final value = await metaValue('lastPullAt');
+  String _lastPullAtKey(String storeId) => 'lastPullAt:$storeId';
+
+  Future<DateTime?> lastPullAt(String storeId) async {
+    final value = await metaValue(_lastPullAtKey(storeId));
     if (value == null) {
       return null;
     }
     return DateTime.parse(value);
   }
 
-  Future<void> setLastPullAt(DateTime at) {
-    return setMetaValue('lastPullAt', at.toUtc().toIso8601String());
+  Future<void> setLastPullAt(String storeId, DateTime at) {
+    return setMetaValue(
+      _lastPullAtKey(storeId),
+      at.toUtc().toIso8601String(),
+    );
   }
 
   Future<void> upsertProductsAndStocks({
