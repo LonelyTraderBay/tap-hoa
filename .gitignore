@@ -1,0 +1,8 @@
+.superpowers/
+.worktrees/
+node_modules/
+.env
+*.log
+apps/api/dist/
+apps/pos_app/build/
+apps/pos_app/.dart_tool/
