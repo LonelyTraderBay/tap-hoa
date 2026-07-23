@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/data/sync/pull_catalog.dart';
 import 'package:pos_app/features/auth/auth_repository.dart';
+import 'package:pos_app/features/products/product_repository.dart';
 import 'package:pos_app/features/shifts/shift_repository.dart';
 import 'package:pos_app/main.dart';
 
@@ -9,12 +11,18 @@ class MockAuthRepository extends Mock implements AuthRepository {}
 
 class MockShiftRepository extends Mock implements ShiftRepository {}
 
+class MockProductRepository extends Mock implements ProductRepository {}
+
+class MockPullCatalog extends Mock implements PullCatalog {}
+
 void main() {
   testWidgets('shows login form', (tester) async {
     await tester.pumpWidget(
       PosApp(
         authRepository: MockAuthRepository(),
         shiftRepository: MockShiftRepository(),
+        productRepository: MockProductRepository(),
+        pullCatalog: MockPullCatalog(),
       ),
     );
 
@@ -44,6 +52,8 @@ void main() {
       PosApp(
         authRepository: repository,
         shiftRepository: shiftRepository,
+        productRepository: MockProductRepository(),
+        pullCatalog: MockPullCatalog(),
       ),
     );
 

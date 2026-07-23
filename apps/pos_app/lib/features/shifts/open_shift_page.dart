@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/sync/pull_catalog.dart';
 import '../auth/auth_repository.dart';
+import '../products/product_list_page.dart';
+import '../products/product_repository.dart';
 import 'shift_repository.dart';
 
 class OpenShiftPage extends StatefulWidget {
@@ -9,10 +12,14 @@ class OpenShiftPage extends StatefulWidget {
     super.key,
     required this.repository,
     required this.user,
+    required this.productRepository,
+    required this.pullCatalog,
   });
 
   final ShiftRepository repository;
   final AuthUser user;
+  final ProductRepository productRepository;
+  final PullCatalog pullCatalog;
 
   @override
   State<OpenShiftPage> createState() => _OpenShiftPageState();
@@ -74,14 +81,20 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
     });
 
     try {
-      final shiftId = await widget.repository.openShift(
+      await widget.repository.openShift(
         storeId: store.id,
         openingCash: openingCash,
         userId: widget.user.id,
       );
       if (!mounted) return;
-      setState(
-        () => _message = 'Đã mở ca ${store.code} (ca $shiftId)',
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ProductListPage(
+            repository: widget.productRepository,
+            pullCatalog: widget.pullCatalog,
+            storeId: store.id,
+          ),
+        ),
       );
     } on ShiftAlreadyOpenException {
       if (!mounted) return;

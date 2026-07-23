@@ -43,6 +43,54 @@ class AppDatabase extends _$AppDatabase {
       ),
     );
   }
+
+  Future<DateTime?> lastPullAt() async {
+    final value = await metaValue('lastPullAt');
+    if (value == null) {
+      return null;
+    }
+    return DateTime.parse(value);
+  }
+
+  Future<void> setLastPullAt(DateTime at) {
+    return setMetaValue('lastPullAt', at.toUtc().toIso8601String());
+  }
+
+  Future<void> upsertProductsAndStocks({
+    required List<Map<String, dynamic>> products,
+    required List<Map<String, dynamic>> stocks,
+  }) async {
+    await transaction(() async {
+      for (final product in products) {
+        await into(this.products).insertOnConflictUpdate(
+          ProductsCompanion.insert(
+            id: product['id'] as String,
+            sku: product['sku'] as String,
+            barcode: Value(product['barcode'] as String?),
+            name: product['name'] as String,
+            unit: product['unit'] as String,
+            isWeighted: Value(product['isWeighted'] as bool? ?? false),
+            basePriceVnd: product['basePriceVnd'] as int,
+            costVnd: Value(product['costVnd'] as int? ?? 0),
+            active: Value(product['active'] as bool? ?? true),
+            updatedAt: DateTime.parse(product['updatedAt'] as String),
+          ),
+        );
+      }
+
+      for (final stock in stocks) {
+        await into(productStocks).insertOnConflictUpdate(
+          ProductStocksCompanion.insert(
+            productId: stock['productId'] as String,
+            storeId: stock['storeId'] as String,
+            qty: stock['qty'] as String,
+            minQty: stock['minQty'] as String,
+            updatedAt: DateTime.parse(stock['updatedAt'] as String),
+          ),
+        );
+      }
+    });
+  }
 }
 
 LazyDatabase _openConnection() {
