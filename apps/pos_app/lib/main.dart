@@ -9,6 +9,7 @@ import 'features/auth/auth_repository.dart';
 import 'features/auth/login_page.dart';
 import 'features/pos/checkout_service.dart';
 import 'features/products/product_repository.dart';
+import 'features/reports/day_report_repository.dart';
 import 'features/shifts/shift_repository.dart';
 import 'features/sync_status/sync_status_banner.dart';
 
@@ -22,6 +23,10 @@ void main() {
     db: database,
   );
   final shiftRepository = ShiftRepository(dio: apiClient.dio, db: database);
+  final dayReportRepository = DayReportRepository(
+    dio: apiClient.dio,
+    db: database,
+  );
   final productRepository = ProductRepository(database);
   final pullCatalog = PullCatalog(db: database, dio: apiClient.dio);
   final outboxWorker = OutboxWorker(db: database, dio: apiClient.dio);
@@ -36,6 +41,7 @@ void main() {
         database: database,
         authRepository: repository,
         shiftRepository: shiftRepository,
+        dayReportRepository: dayReportRepository,
         productRepository: productRepository,
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
@@ -51,6 +57,7 @@ class PosApp extends StatelessWidget {
     required this.database,
     required this.authRepository,
     required this.shiftRepository,
+    required this.dayReportRepository,
     required this.productRepository,
     required this.pullCatalog,
     required this.checkoutService,
@@ -60,6 +67,7 @@ class PosApp extends StatelessWidget {
   final AppDatabase database;
   final AuthRepository authRepository;
   final ShiftRepository shiftRepository;
+  final DayReportRepository dayReportRepository;
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
@@ -81,6 +89,7 @@ class PosApp extends StatelessWidget {
       home: LoginPage(
         repository: authRepository,
         shiftRepository: shiftRepository,
+        dayReportRepository: dayReportRepository,
         productRepository: productRepository,
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,

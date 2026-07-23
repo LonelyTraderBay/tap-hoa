@@ -5,6 +5,7 @@ import '../../data/sync/pull_catalog.dart';
 import 'auth_repository.dart';
 import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
+import '../reports/day_report_repository.dart';
 import '../shifts/open_shift_page.dart';
 import '../shifts/shift_repository.dart';
 
@@ -13,6 +14,7 @@ class LoginPage extends StatefulWidget {
     super.key,
     required this.repository,
     required this.shiftRepository,
+    required this.dayReportRepository,
     required this.productRepository,
     required this.pullCatalog,
     required this.checkoutService,
@@ -21,6 +23,7 @@ class LoginPage extends StatefulWidget {
 
   final AuthRepository repository;
   final ShiftRepository shiftRepository;
+  final DayReportRepository dayReportRepository;
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
@@ -59,6 +62,7 @@ class _LoginPageState extends State<LoginPage> {
             builder: (_) => OpenShiftPage(
               repository: widget.shiftRepository,
               user: user,
+              dayReportRepository: widget.dayReportRepository,
               productRepository: widget.productRepository,
               pullCatalog: widget.pullCatalog,
               checkoutService: widget.checkoutService,

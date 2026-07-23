@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { StoresModule } from './stores/stores.module';
+import { ReportsModule } from './reports/reports.module';
 import { SyncModule } from './sync/sync.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { SyncModule } from './sync/sync.module';
     ShiftsModule,
     ProductsModule,
     SyncModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
 })

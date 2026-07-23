@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
+import '../reports/day_report_page.dart';
+import '../reports/day_report_repository.dart';
 import '../products/product_list_page.dart';
 import '../products/product_repository.dart';
 import 'cart.dart';
@@ -16,6 +18,7 @@ class PosPage extends StatefulWidget {
     required this.checkoutService,
     required this.pullCatalog,
     required this.outboxWorker,
+    required this.dayReportRepository,
     required this.storeId,
   });
 
@@ -23,6 +26,7 @@ class PosPage extends StatefulWidget {
   final CheckoutService checkoutService;
   final PullCatalog pullCatalog;
   final OutboxWorker outboxWorker;
+  final DayReportRepository dayReportRepository;
   final String storeId;
 
   @override
@@ -124,6 +128,20 @@ class _PosPageState extends State<PosPage> {
                   )
                 : const Icon(Icons.cloud_upload_outlined),
             tooltip: 'Đồng bộ',
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DayReportPage(
+                    repository: widget.dayReportRepository,
+                    storeId: widget.storeId,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.bar_chart_outlined),
+            tooltip: 'Báo cáo ngày',
           ),
           IconButton(
             onPressed: () {

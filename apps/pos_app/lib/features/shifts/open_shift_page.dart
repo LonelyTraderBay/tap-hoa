@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import '../auth/auth_repository.dart';
+import '../reports/day_report_repository.dart';
 import '../pos/pos_page.dart';
 import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
@@ -14,6 +15,7 @@ class OpenShiftPage extends StatefulWidget {
     super.key,
     required this.repository,
     required this.user,
+    required this.dayReportRepository,
     required this.productRepository,
     required this.pullCatalog,
     required this.checkoutService,
@@ -22,6 +24,7 @@ class OpenShiftPage extends StatefulWidget {
 
   final ShiftRepository repository;
   final AuthUser user;
+  final DayReportRepository dayReportRepository;
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
@@ -100,6 +103,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
             checkoutService: widget.checkoutService,
             pullCatalog: widget.pullCatalog,
             outboxWorker: widget.outboxWorker,
+            dayReportRepository: widget.dayReportRepository,
             storeId: store.id,
           ),
         ),
