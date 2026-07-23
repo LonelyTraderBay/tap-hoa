@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -95,6 +96,51 @@ class AppDatabase extends _$AppDatabase {
         );
       }
     });
+  }
+
+  Future<List<OutboxEntry>> pendingOutbox({int limit = 50}) {
+    return (select(outboxEntries)
+          ..where((entry) => entry.status.equals('pending'))
+          ..orderBy([(entry) => OrderingTerm.asc(entry.createdAt)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<void> markOutboxDone(List<String> saleIds) async {
+    if (saleIds.isEmpty) {
+      return;
+    }
+    final pending = await pendingOutbox(limit: 500);
+    final accepted = saleIds.toSet();
+    for (final entry in pending) {
+      final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
+      final saleId = payload['id'] as String?;
+      if (saleId == null || !accepted.contains(saleId)) {
+        continue;
+      }
+      await (update(outboxEntries)..where((row) => row.id.equals(entry.id)))
+          .write(const OutboxEntriesCompanion(status: Value('done')));
+      await (update(salesLocal)..where((row) => row.id.equals(saleId))).write(
+        SalesLocalCompanion(syncedAt: Value(DateTime.now())),
+      );
+    }
+  }
+
+  Future<void> markOutboxError(String saleId, String reason) async {
+    final pending = await pendingOutbox(limit: 500);
+    for (final entry in pending) {
+      final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
+      if (payload['id'] != saleId) {
+        continue;
+      }
+      await (update(outboxEntries)..where((row) => row.id.equals(entry.id)))
+          .write(
+        OutboxEntriesCompanion(
+          status: const Value('error'),
+          lastError: Value(reason),
+        ),
+      );
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import 'auth_repository.dart';
 import '../pos/checkout_service.dart';
@@ -15,6 +16,7 @@ class LoginPage extends StatefulWidget {
     required this.productRepository,
     required this.pullCatalog,
     required this.checkoutService,
+    required this.outboxWorker,
   });
 
   final AuthRepository repository;
@@ -22,6 +24,7 @@ class LoginPage extends StatefulWidget {
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
+  final OutboxWorker outboxWorker;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -59,6 +62,7 @@ class _LoginPageState extends State<LoginPage> {
               productRepository: widget.productRepository,
               pullCatalog: widget.pullCatalog,
               checkoutService: widget.checkoutService,
+              outboxWorker: widget.outboxWorker,
             ),
           ),
         );

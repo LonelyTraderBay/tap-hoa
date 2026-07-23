@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'data/local/database.dart';
 import 'data/remote/api_client.dart';
+import 'data/sync/outbox_worker.dart';
 import 'data/sync/pull_catalog.dart';
+import 'data/sync/sync_scheduler.dart';
 import 'features/auth/auth_repository.dart';
 import 'features/auth/login_page.dart';
 import 'features/pos/checkout_service.dart';
@@ -21,17 +23,22 @@ void main() {
   final shiftRepository = ShiftRepository(dio: apiClient.dio, db: database);
   final productRepository = ProductRepository(database);
   final pullCatalog = PullCatalog(db: database, dio: apiClient.dio);
+  final outboxWorker = OutboxWorker(db: database, dio: apiClient.dio);
   final checkoutService = CheckoutService(
     db: database,
     shiftRepository: shiftRepository,
   );
   runApp(
-    PosApp(
-      authRepository: repository,
-      shiftRepository: shiftRepository,
-      productRepository: productRepository,
-      pullCatalog: pullCatalog,
-      checkoutService: checkoutService,
+    SyncScheduler(
+      outboxWorker: outboxWorker,
+      child: PosApp(
+        authRepository: repository,
+        shiftRepository: shiftRepository,
+        productRepository: productRepository,
+        pullCatalog: pullCatalog,
+        checkoutService: checkoutService,
+        outboxWorker: outboxWorker,
+      ),
     ),
   );
 }
@@ -44,6 +51,7 @@ class PosApp extends StatelessWidget {
     required this.productRepository,
     required this.pullCatalog,
     required this.checkoutService,
+    required this.outboxWorker,
   });
 
   final AuthRepository authRepository;
@@ -51,6 +59,7 @@ class PosApp extends StatelessWidget {
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
+  final OutboxWorker outboxWorker;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +71,7 @@ class PosApp extends StatelessWidget {
         productRepository: productRepository,
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
+        outboxWorker: outboxWorker,
       ),
     );
   }

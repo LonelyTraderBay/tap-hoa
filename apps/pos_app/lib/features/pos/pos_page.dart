@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 
+import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import '../products/product_list_page.dart';
 import '../products/product_repository.dart';
@@ -14,12 +15,14 @@ class PosPage extends StatefulWidget {
     required this.productRepository,
     required this.checkoutService,
     required this.pullCatalog,
+    required this.outboxWorker,
     required this.storeId,
   });
 
   final ProductRepository productRepository;
   final CheckoutService checkoutService;
   final PullCatalog pullCatalog;
+  final OutboxWorker outboxWorker;
   final String storeId;
 
   @override
@@ -31,6 +34,7 @@ class _PosPageState extends State<PosPage> {
   final _cart = Cart();
   String _query = '';
   String? _message;
+  bool _isSyncing = false;
 
   @override
   void dispose() {
@@ -77,6 +81,25 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
+  Future<void> _sync() async {
+    setState(() {
+      _isSyncing = true;
+      _message = null;
+    });
+    try {
+      await widget.outboxWorker.tick();
+      if (!mounted) return;
+      setState(() => _message = 'Đã đồng bộ');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _message = 'Đồng bộ thất bại');
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
   bool _matches(ProductWithStock product) {
     if (_query.isEmpty) {
       return true;
@@ -92,6 +115,16 @@ class _PosPageState extends State<PosPage> {
       appBar: AppBar(
         title: const Text('Bán hàng'),
         actions: [
+          IconButton(
+            onPressed: _isSyncing ? null : _sync,
+            icon: _isSyncing
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_upload_outlined),
+            tooltip: 'Đồng bộ',
+          ),
           IconButton(
             onPressed: () {
               Navigator.of(context).push(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import '../auth/auth_repository.dart';
 import '../pos/pos_page.dart';
@@ -16,6 +17,7 @@ class OpenShiftPage extends StatefulWidget {
     required this.productRepository,
     required this.pullCatalog,
     required this.checkoutService,
+    required this.outboxWorker,
   });
 
   final ShiftRepository repository;
@@ -23,6 +25,7 @@ class OpenShiftPage extends StatefulWidget {
   final ProductRepository productRepository;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
+  final OutboxWorker outboxWorker;
 
   @override
   State<OpenShiftPage> createState() => _OpenShiftPageState();
@@ -96,6 +99,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
             productRepository: widget.productRepository,
             checkoutService: widget.checkoutService,
             pullCatalog: widget.pullCatalog,
+            outboxWorker: widget.outboxWorker,
             storeId: store.id,
           ),
         ),
