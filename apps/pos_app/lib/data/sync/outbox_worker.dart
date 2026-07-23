@@ -8,11 +8,17 @@ import '../local/database.dart';
 class PushSyncResult {
   const PushSyncResult({
     required this.acceptedIds,
+    required this.acceptedShiftIds,
+    required this.acceptedShiftCloseIds,
     required this.rejected,
+    required this.rejectedShifts,
   });
 
   final List<String> acceptedIds;
+  final List<String> acceptedShiftIds;
+  final List<String> acceptedShiftCloseIds;
   final List<RejectedSale> rejected;
+  final List<RejectedSale> rejectedShifts;
 
   factory PushSyncResult.fromJson(Map<String, dynamic> json) {
     final rejected = (json['rejected'] as List<dynamic>? ?? [])
@@ -21,8 +27,24 @@ class PushSyncResult {
       acceptedIds: (json['acceptedIds'] as List<dynamic>? ?? [])
           .map((id) => id as String)
           .toList(),
+      acceptedShiftIds: (json['acceptedShiftIds'] as List<dynamic>? ?? [])
+          .map((id) => id as String)
+          .toList(),
+      acceptedShiftCloseIds:
+          (json['acceptedShiftCloseIds'] as List<dynamic>? ?? [])
+              .map((id) => id as String)
+              .toList(),
       rejected: [
         for (final item in rejected)
+          RejectedSale(
+            id: item['id'] as String,
+            reason: item['reason'] as String,
+          ),
+      ],
+      rejectedShifts: [
+        for (final item
+            in (json['rejectedShifts'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>())
           RejectedSale(
             id: item['id'] as String,
             reason: item['reason'] as String,
@@ -51,13 +73,20 @@ class OutboxWorker {
   Future<void> tick() async {
     final pending = await _db.pendingOutbox(limit: 50);
     final sales = <Map<String, dynamic>>[];
+    final shiftOpens = <Map<String, dynamic>>[];
+    final shiftCloses = <Map<String, dynamic>>[];
     for (final entry in pending) {
-      if (entry.entityType != 'sale') {
-        continue;
+      final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
+      switch (entry.entityType) {
+        case 'shift_open':
+          shiftOpens.add(payload);
+        case 'sale':
+          sales.add(payload);
+        case 'shift_close':
+          shiftCloses.add(payload);
       }
-      sales.add(jsonDecode(entry.payloadJson) as Map<String, dynamic>);
     }
-    if (sales.isEmpty) {
+    if (shiftOpens.isEmpty && sales.isEmpty && shiftCloses.isEmpty) {
       return;
     }
 
@@ -65,15 +94,32 @@ class OutboxWorker {
       final deviceId = await _deviceId();
       final response = await _dio.post<Map<String, dynamic>>(
         '/sync/push',
-        data: {'deviceId': deviceId, 'sales': sales},
+        data: {
+          'deviceId': deviceId,
+          'shiftOpens': shiftOpens,
+          'sales': sales,
+          'shiftCloses': shiftCloses,
+        },
       );
       final data = response.data;
       if (data == null) {
         return;
       }
       final result = PushSyncResult.fromJson(data);
+      await _db.markOutboxEntitiesDone('shift_open', result.acceptedShiftIds);
       await _db.markOutboxDone(result.acceptedIds);
+      await _db.markOutboxEntitiesDone(
+        'shift_close',
+        result.acceptedShiftCloseIds,
+      );
       for (final rejected in result.rejected) {
+        await _db.markOutboxError(
+          rejected.id,
+          rejected.reason,
+          entityType: 'sale',
+        );
+      }
+      for (final rejected in result.rejectedShifts) {
         await _db.markOutboxError(rejected.id, rejected.reason);
       }
     } on DioException {

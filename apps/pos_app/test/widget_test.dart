@@ -6,6 +6,7 @@ import 'package:pos_app/data/local/database.dart';
 import 'package:pos_app/data/sync/outbox_worker.dart';
 import 'package:pos_app/data/sync/pull_catalog.dart';
 import 'package:pos_app/features/auth/auth_repository.dart';
+import 'package:pos_app/features/customers/customer_repository.dart';
 import 'package:pos_app/features/pos/checkout_service.dart';
 import 'package:pos_app/features/products/product_repository.dart';
 import 'package:pos_app/features/reports/day_report_repository.dart';
@@ -26,6 +27,8 @@ class MockCheckoutService extends Mock implements CheckoutService {}
 class MockOutboxWorker extends Mock implements OutboxWorker {}
 
 class MockDayReportRepository extends Mock implements DayReportRepository {}
+
+class MockCustomerRepository extends Mock implements CustomerRepository {}
 
 void main() {
   late AppDatabase database;
@@ -52,6 +55,7 @@ void main() {
         productRepository: MockProductRepository(),
         pullCatalog: MockPullCatalog(),
         checkoutService: MockCheckoutService(),
+        customerRepository: MockCustomerRepository(),
         outboxWorker: MockOutboxWorker(),
         dayReportRepository: MockDayReportRepository(),
       ),
@@ -78,6 +82,7 @@ void main() {
         productRepository: MockProductRepository(),
         pullCatalog: MockPullCatalog(),
         checkoutService: MockCheckoutService(),
+        customerRepository: MockCustomerRepository(),
         outboxWorker: MockOutboxWorker(),
         dayReportRepository: MockDayReportRepository(),
       ),
@@ -114,6 +119,7 @@ void main() {
         productRepository: MockProductRepository(),
         pullCatalog: MockPullCatalog(),
         checkoutService: MockCheckoutService(),
+        customerRepository: MockCustomerRepository(),
         outboxWorker: MockOutboxWorker(),
         dayReportRepository: MockDayReportRepository(),
       ),

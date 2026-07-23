@@ -76,4 +76,28 @@ void main() {
     );
     expect(shift.id, shiftId);
   });
+
+  test('closeShift updates the shift and enqueues close outbox', () async {
+    final shiftId = await repository.openShift(
+      storeId: 'store-1',
+      openingCash: 300000,
+      userId: 'user-1',
+    );
+
+    await repository.closeShift(
+      shiftId: shiftId,
+      closingCash: 350000,
+      note: 'done',
+    );
+
+    final shift = await (db.select(
+      db.shiftsLocal,
+    )..where((row) => row.id.equals(shiftId))).getSingle();
+    expect(shift.closedAt, isNotNull);
+    final closeEntry = await (db.select(
+      db.outboxEntries,
+    )..where((entry) => entry.entityType.equals('shift_close'))).getSingle();
+    expect(closeEntry.payloadJson, contains('"id":"$shiftId"'));
+    expect(closeEntry.payloadJson, contains('"closingCash":350000'));
+  });
 }

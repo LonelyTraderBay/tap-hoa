@@ -15,11 +15,7 @@ class NoOpenShiftException implements Exception {
 }
 
 class StoreOption {
-  const StoreOption({
-    required this.id,
-    required this.code,
-    required this.name,
-  });
+  const StoreOption({required this.id, required this.code, required this.name});
 
   factory StoreOption.fromJson(Map<String, dynamic> json) {
     return StoreOption(
@@ -49,10 +45,7 @@ class ShiftRepository {
     if (data == null) {
       return [];
     }
-    return data
-        .cast<Map<String, dynamic>>()
-        .map(StoreOption.fromJson)
-        .toList();
+    return data.cast<Map<String, dynamic>>().map(StoreOption.fromJson).toList();
   }
 
   Future<String> openShift({
@@ -76,30 +69,34 @@ class ShiftRepository {
         throw const ShiftAlreadyOpenException();
       }
 
-      await _db.into(_db.shiftsLocal).insert(
-        ShiftsLocalCompanion.insert(
-          id: shiftId,
-          storeId: storeId,
-          userId: userId,
-          openedAt: openedAt,
-          openingCash: openingCash,
-        ),
-      );
+      await _db
+          .into(_db.shiftsLocal)
+          .insert(
+            ShiftsLocalCompanion.insert(
+              id: shiftId,
+              storeId: storeId,
+              userId: userId,
+              openedAt: openedAt,
+              openingCash: openingCash,
+            ),
+          );
 
-      await _db.into(_db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: _uuid.v4(),
-          entityType: 'shift_open',
-          payloadJson: jsonEncode({
-            'id': shiftId,
-            'storeId': storeId,
-            'userId': userId,
-            'openingCash': openingCash,
-            'openedAt': openedAt.toUtc().toIso8601String(),
-          }),
-          createdAt: openedAt,
-        ),
-      );
+      await _db
+          .into(_db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: _uuid.v4(),
+              entityType: 'shift_open',
+              payloadJson: jsonEncode({
+                'id': shiftId,
+                'storeId': storeId,
+                'userId': userId,
+                'openingCash': openingCash,
+                'openedAt': openedAt.toUtc().toIso8601String(),
+              }),
+              createdAt: openedAt,
+            ),
+          );
 
       await _db.setMetaValue('currentStoreId', storeId);
     });
@@ -130,13 +127,32 @@ class ShiftRepository {
     required int closingCash,
     String? note,
   }) async {
-    await (_db.update(_db.shiftsLocal)..where((s) => s.id.equals(shiftId)))
-        .write(
-          ShiftsLocalCompanion(
-            closedAt: Value(DateTime.now()),
-            closingCash: Value(closingCash),
-            note: Value(note),
-          ),
-        );
+    final closedAt = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.shiftsLocal,
+      )..where((s) => s.id.equals(shiftId))).write(
+        ShiftsLocalCompanion(
+          closedAt: Value(closedAt),
+          closingCash: Value(closingCash),
+          note: Value(note),
+        ),
+      );
+      await _db
+          .into(_db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: _uuid.v4(),
+              entityType: 'shift_close',
+              payloadJson: jsonEncode({
+                'id': shiftId,
+                'closingCash': closingCash,
+                'note': note,
+                'closedAt': closedAt.toUtc().toIso8601String(),
+              }),
+              createdAt: closedAt,
+            ),
+          );
+    });
   }
 }

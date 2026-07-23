@@ -29,36 +29,88 @@ void main() {
     required String saleId,
     String status = 'pending',
   }) async {
-    await db.into(db.outboxEntries).insert(
-      OutboxEntriesCompanion.insert(
-        id: 'outbox-$saleId',
-        entityType: 'sale',
-        payloadJson: jsonEncode({
-          'id': saleId,
-          'storeId': 'store-1',
-          'shiftId': 'shift-1',
-          'soldById': 'user-1',
-          'paymentMethod': 'cash',
-          'cashAmount': 20000,
-          'transferAmount': 0,
-          'debtAmount': 0,
-          'discountVnd': 0,
-          'totalVnd': 20000,
-          'clientCreatedAt': DateTime.utc(2026).toIso8601String(),
-          'lines': [
-            {
-              'productId': 'p1',
-              'qty': '2',
-              'unitPrice': 10000,
-              'lineTotal': 20000,
-            },
-          ],
-        }),
-        createdAt: DateTime(2026),
-        status: Value(status),
-      ),
-    );
+    await db
+        .into(db.outboxEntries)
+        .insert(
+          OutboxEntriesCompanion.insert(
+            id: 'outbox-$saleId',
+            entityType: 'sale',
+            payloadJson: jsonEncode({
+              'id': saleId,
+              'storeId': 'store-1',
+              'shiftId': 'shift-1',
+              'soldById': 'user-1',
+              'paymentMethod': 'cash',
+              'cashAmount': 20000,
+              'transferAmount': 0,
+              'debtAmount': 0,
+              'discountVnd': 0,
+              'totalVnd': 20000,
+              'clientCreatedAt': DateTime.utc(2026).toIso8601String(),
+              'lines': [
+                {
+                  'productId': 'p1',
+                  'qty': '2',
+                  'unitPrice': 10000,
+                  'lineTotal': 20000,
+                },
+              ],
+            }),
+            createdAt: DateTime(2026),
+            status: Value(status),
+          ),
+        );
   }
+
+  test('tick pushes shift open before its pending sale', () async {
+    await db
+        .into(db.outboxEntries)
+        .insert(
+          OutboxEntriesCompanion.insert(
+            id: 'outbox-shift-1',
+            entityType: 'shift_open',
+            payloadJson: jsonEncode({
+              'id': 'shift-1',
+              'storeId': 'store-1',
+              'userId': 'user-1',
+              'openingCash': 100000,
+              'openedAt': DateTime.utc(2026).toIso8601String(),
+            }),
+            createdAt: DateTime(2026),
+          ),
+        );
+    await seedSaleOutbox(saleId: 'sale-after-shift');
+    final response = MockResponse();
+    when(() => response.data).thenReturn({
+      'acceptedShiftIds': ['shift-1'],
+      'acceptedIds': ['sale-after-shift'],
+      'rejected': [],
+    });
+    when(
+      () => dio.post<Map<String, dynamic>>(
+        '/sync/push',
+        data: any(named: 'data'),
+      ),
+    ).thenAnswer((_) async => response);
+
+    await worker.tick();
+
+    verify(
+      () => dio.post<Map<String, dynamic>>(
+        '/sync/push',
+        data: any(
+          named: 'data',
+          that: predicate<Map<String, dynamic>>(
+            (body) =>
+                (body['shiftOpens'] as List).single['id'] == 'shift-1' &&
+                (body['sales'] as List).single['shiftId'] == 'shift-1',
+          ),
+        ),
+      ),
+    ).called(1);
+    final entries = await db.select(db.outboxEntries).get();
+    expect(entries.every((entry) => entry.status == 'done'), isTrue);
+  });
 
   test('tick pushes pending sales and marks accepted outbox done', () async {
     const saleId = 'sale-1';
@@ -78,9 +130,9 @@ void main() {
 
     await worker.tick();
 
-    final outbox = await (db.select(db.outboxEntries)
-          ..where((entry) => entry.id.equals('outbox-$saleId')))
-        .getSingle();
+    final outbox = await (db.select(
+      db.outboxEntries,
+    )..where((entry) => entry.id.equals('outbox-$saleId'))).getSingle();
     expect(outbox.status, 'done');
 
     verify(
@@ -119,9 +171,9 @@ void main() {
 
     await worker.tick();
 
-    final outbox = await (db.select(db.outboxEntries)
-          ..where((entry) => entry.id.equals('outbox-$saleId')))
-        .getSingle();
+    final outbox = await (db.select(
+      db.outboxEntries,
+    )..where((entry) => entry.id.equals('outbox-$saleId'))).getSingle();
     expect(outbox.status, 'error');
     expect(outbox.lastError, 'insufficient_stock');
   });
@@ -135,13 +187,15 @@ void main() {
         '/sync/push',
         data: any(named: 'data'),
       ),
-    ).thenThrow(DioException(requestOptions: RequestOptions(path: '/sync/push')));
+    ).thenThrow(
+      DioException(requestOptions: RequestOptions(path: '/sync/push')),
+    );
 
     await worker.tick();
 
-    final outbox = await (db.select(db.outboxEntries)
-          ..where((entry) => entry.id.equals('outbox-$saleId')))
-        .getSingle();
+    final outbox = await (db.select(
+      db.outboxEntries,
+    )..where((entry) => entry.id.equals('outbox-$saleId'))).getSingle();
     expect(outbox.status, 'pending');
   });
 }

@@ -54,7 +54,9 @@ class _PosPageState extends State<PosPage> {
 
   void _addProduct(ProductWithStock product) {
     setState(() {
-      final existing = _cart.lines.indexWhere((line) => line.productId == product.id);
+      final existing = _cart.lines.indexWhere(
+        (line) => line.productId == product.id,
+      );
       if (existing >= 0) {
         final line = _cart.lines[existing];
         _cart.update(product.id, line.qty + Decimal.one);
@@ -209,7 +211,7 @@ class _PosPageState extends State<PosPage> {
                 }
                 return ListView.separated(
                   itemCount: products.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final product = products[index];
                     return ListTile(
@@ -234,7 +236,7 @@ class _PosPageState extends State<PosPage> {
                 ? const Center(child: Text('Chưa có sản phẩm trong giỏ'))
                 : ListView.separated(
                     itemCount: _cart.lines.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final line = _cart.lines[index];
                       return ListTile(

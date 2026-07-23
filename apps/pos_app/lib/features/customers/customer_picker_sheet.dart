@@ -130,7 +130,7 @@ class _CustomerPickerSheetState extends State<CustomerPickerSheet> {
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: _customers.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final customer = _customers[index];
                   return ListTile(
@@ -147,10 +147,7 @@ class _CustomerPickerSheetState extends State<CustomerPickerSheet> {
               ),
             ),
           const Divider(height: 24),
-          Text(
-            'Tạo khách mới',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Tạo khách mới', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           TextField(
             controller: _nameController,

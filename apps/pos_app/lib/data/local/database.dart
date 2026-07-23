@@ -69,10 +69,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> setLastPullAt(String storeId, DateTime at) {
-    return setMetaValue(
-      _lastPullAtKey(storeId),
-      at.toUtc().toIso8601String(),
-    );
+    return setMetaValue(_lastPullAtKey(storeId), at.toUtc().toIso8601String());
   }
 
   Future<void> upsertProductsAndStocks({
@@ -120,34 +117,53 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> markOutboxDone(List<String> saleIds) async {
-    if (saleIds.isEmpty) {
+    await markOutboxEntitiesDone('sale', saleIds);
+  }
+
+  Future<void> markOutboxEntitiesDone(
+    String entityType,
+    List<String> entityIds,
+  ) async {
+    if (entityIds.isEmpty) {
       return;
     }
     final pending = await pendingOutbox(limit: 500);
-    final accepted = saleIds.toSet();
+    final accepted = entityIds.toSet();
     for (final entry in pending) {
+      if (entry.entityType != entityType) {
+        continue;
+      }
       final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
-      final saleId = payload['id'] as String?;
-      if (saleId == null || !accepted.contains(saleId)) {
+      final entityId = payload['id'] as String?;
+      if (entityId == null || !accepted.contains(entityId)) {
         continue;
       }
       await (update(outboxEntries)..where((row) => row.id.equals(entry.id)))
           .write(const OutboxEntriesCompanion(status: Value('done')));
-      await (update(salesLocal)..where((row) => row.id.equals(saleId))).write(
-        SalesLocalCompanion(syncedAt: Value(DateTime.now())),
-      );
+      if (entityType == 'sale') {
+        await (update(salesLocal)..where((row) => row.id.equals(entityId)))
+            .write(SalesLocalCompanion(syncedAt: Value(DateTime.now())));
+      }
     }
   }
 
-  Future<void> markOutboxError(String saleId, String reason) async {
+  Future<void> markOutboxError(
+    String entityId,
+    String reason, {
+    String? entityType,
+  }) async {
     final pending = await pendingOutbox(limit: 500);
     for (final entry in pending) {
-      final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
-      if (payload['id'] != saleId) {
+      if (entityType != null && entry.entityType != entityType) {
         continue;
       }
-      await (update(outboxEntries)..where((row) => row.id.equals(entry.id)))
-          .write(
+      final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
+      if (payload['id'] != entityId) {
+        continue;
+      }
+      await (update(
+        outboxEntries,
+      )..where((row) => row.id.equals(entry.id))).write(
         OutboxEntriesCompanion(
           status: const Value('error'),
           lastError: Value(reason),
@@ -167,8 +183,7 @@ class AppDatabase extends _$AppDatabase {
     return query.watch().map((entries) {
       final pendingCount = entries
           .where(
-            (entry) =>
-                entry.status == 'pending' && entry.entityType == 'sale',
+            (entry) => entry.status == 'pending' && entry.entityType == 'sale',
           )
           .length;
       final lastError = entries
@@ -184,10 +199,7 @@ class AppDatabase extends _$AppDatabase {
 }
 
 class SyncStatusSnapshot {
-  const SyncStatusSnapshot({
-    required this.pendingCount,
-    this.lastError,
-  });
+  const SyncStatusSnapshot({required this.pendingCount, this.lastError});
 
   final int pendingCount;
   final String? lastError;

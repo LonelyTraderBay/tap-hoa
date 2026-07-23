@@ -20,7 +20,7 @@ class DebtCustomerListPage extends StatelessWidget {
           }
           return ListView.separated(
             itemCount: customers.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final customer = customers[index];
               return ListTile(
