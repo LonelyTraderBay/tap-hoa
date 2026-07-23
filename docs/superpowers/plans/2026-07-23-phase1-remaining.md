@@ -24,10 +24,10 @@
 
 ## Customer debt (beyond stub)
 
-- [ ] Debt payment recording and history
-- [ ] Credit limit enforcement at checkout
+- [x] Debt payment recording and history
+- [x] Credit limit enforcement at checkout
 - [ ] Debt aging / overdue views
-- [ ] Customer search and detail screen polish
+- [x] Customer search and detail screen polish
 
 ## Cash management
 
@@ -58,7 +58,7 @@
 
 ## Suggested implementation order
 
-1. **Debt payments + history** — completes the debt stub from MVP
+1. ~~**Debt payments + history**~~ — done (`feat/debt-payments-credit-limit`)
 2. **Cash in/out + shift reconciliation** — daily store ops
 3. **Inter-store transfer + stocktake** — multi-store inventory
 4. **Product CRUD + barcode labels** — catalog self-service

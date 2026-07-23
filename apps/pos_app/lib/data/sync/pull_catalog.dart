@@ -30,9 +30,17 @@ class PullCatalog {
         .cast<Map<String, dynamic>>();
     final stocks = (data['stocks'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
+    final customers = (data['customers'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final debtLedger = (data['debtLedger'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
     final serverTime = data['serverTime'] as String?;
 
     await _db.upsertProductsAndStocks(products: products, stocks: stocks);
+    await _db.upsertCustomersAndDebtLedger(
+      customers: customers,
+      debtLedger: debtLedger,
+    );
     if (serverTime != null) {
       await _db.setLastPullAt(storeId, DateTime.parse(serverTime));
     }

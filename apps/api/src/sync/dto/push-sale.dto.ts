@@ -43,9 +43,31 @@ export type PushShiftCloseDto = {
   closedAt: string;
 };
 
+export type PushDebtPaymentDto = {
+  id: string;
+  storeId: string;
+  customerId: string;
+  amountVnd: number;
+  paymentMethod: 'cash' | 'transfer';
+  note?: string | null;
+  shiftId?: string | null;
+  clientCreatedAt: string;
+  recordedById?: string;
+};
+
+export type PushCustomerUpsertDto = {
+  id: string;
+  storeId: string;
+  name: string;
+  phone?: string | null;
+  creditLimitVnd?: number | null;
+};
+
 export type PushSyncDto = {
   deviceId: string;
   shiftOpens?: PushShiftOpenDto[];
   shiftCloses?: PushShiftCloseDto[];
   sales: PushSaleDto[];
+  debtPayments?: PushDebtPaymentDto[];
+  customerUpserts?: PushCustomerUpsertDto[];
 };

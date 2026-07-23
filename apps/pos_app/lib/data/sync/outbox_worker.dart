@@ -10,15 +10,21 @@ class PushSyncResult {
     required this.acceptedIds,
     required this.acceptedShiftIds,
     required this.acceptedShiftCloseIds,
+    required this.acceptedDebtPaymentIds,
+    required this.acceptedCustomerUpsertIds,
     required this.rejected,
     required this.rejectedShifts,
+    required this.rejectedDebtPayments,
   });
 
   final List<String> acceptedIds;
   final List<String> acceptedShiftIds;
   final List<String> acceptedShiftCloseIds;
+  final List<String> acceptedDebtPaymentIds;
+  final List<String> acceptedCustomerUpsertIds;
   final List<RejectedSale> rejected;
   final List<RejectedSale> rejectedShifts;
+  final List<RejectedSale> rejectedDebtPayments;
 
   factory PushSyncResult.fromJson(Map<String, dynamic> json) {
     final rejected = (json['rejected'] as List<dynamic>? ?? [])
@@ -34,6 +40,14 @@ class PushSyncResult {
           (json['acceptedShiftCloseIds'] as List<dynamic>? ?? [])
               .map((id) => id as String)
               .toList(),
+      acceptedDebtPaymentIds:
+          (json['acceptedDebtPaymentIds'] as List<dynamic>? ?? [])
+              .map((id) => id as String)
+              .toList(),
+      acceptedCustomerUpsertIds:
+          (json['acceptedCustomerUpsertIds'] as List<dynamic>? ?? [])
+              .map((id) => id as String)
+              .toList(),
       rejected: [
         for (final item in rejected)
           RejectedSale(
@@ -44,6 +58,15 @@ class PushSyncResult {
       rejectedShifts: [
         for (final item
             in (json['rejectedShifts'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>())
+          RejectedSale(
+            id: item['id'] as String,
+            reason: item['reason'] as String,
+          ),
+      ],
+      rejectedDebtPayments: [
+        for (final item
+            in (json['rejectedDebtPayments'] as List<dynamic>? ?? [])
                 .cast<Map<String, dynamic>>())
           RejectedSale(
             id: item['id'] as String,
@@ -75,6 +98,8 @@ class OutboxWorker {
     final sales = <Map<String, dynamic>>[];
     final shiftOpens = <Map<String, dynamic>>[];
     final shiftCloses = <Map<String, dynamic>>[];
+    final debtPayments = <Map<String, dynamic>>[];
+    final customerUpserts = <Map<String, dynamic>>[];
     for (final entry in pending) {
       final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
       switch (entry.entityType) {
@@ -84,9 +109,17 @@ class OutboxWorker {
           sales.add(payload);
         case 'shift_close':
           shiftCloses.add(payload);
+        case 'debt_payment':
+          debtPayments.add(payload);
+        case 'customer_upsert':
+          customerUpserts.add(payload);
       }
     }
-    if (shiftOpens.isEmpty && sales.isEmpty && shiftCloses.isEmpty) {
+    if (shiftOpens.isEmpty &&
+        sales.isEmpty &&
+        shiftCloses.isEmpty &&
+        debtPayments.isEmpty &&
+        customerUpserts.isEmpty) {
       return;
     }
 
@@ -99,6 +132,8 @@ class OutboxWorker {
           'shiftOpens': shiftOpens,
           'sales': sales,
           'shiftCloses': shiftCloses,
+          'debtPayments': debtPayments,
+          'customerUpserts': customerUpserts,
         },
       );
       final data = response.data;
@@ -112,6 +147,14 @@ class OutboxWorker {
         'shift_close',
         result.acceptedShiftCloseIds,
       );
+      await _db.markOutboxEntitiesDone(
+        'debt_payment',
+        result.acceptedDebtPaymentIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'customer_upsert',
+        result.acceptedCustomerUpsertIds,
+      );
       for (final rejected in result.rejected) {
         await _db.markOutboxError(
           rejected.id,
@@ -121,6 +164,13 @@ class OutboxWorker {
       }
       for (final rejected in result.rejectedShifts) {
         await _db.markOutboxError(rejected.id, rejected.reason);
+      }
+      for (final rejected in result.rejectedDebtPayments) {
+        await _db.markOutboxError(
+          rejected.id,
+          rejected.reason,
+          entityType: 'debt_payment',
+        );
       }
     } on DioException {
       // stay pending; do not throw to UI

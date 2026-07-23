@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
@@ -10,12 +12,14 @@ class CustomerRecord {
     required this.name,
     this.phone,
     required this.balanceVnd,
+    this.creditLimitVnd,
   });
 
   final String id;
   final String name;
   final String? phone;
   final int balanceVnd;
+  final int? creditLimitVnd;
 }
 
 class CustomerRepository {
@@ -37,16 +41,33 @@ class CustomerRepository {
         .watch()
         .map(
           (rows) => rows
-              .map(
-                (row) => CustomerRecord(
-                  id: row.id,
-                  name: row.name,
-                  phone: row.phone,
-                  balanceVnd: row.balanceVnd,
-                ),
-              )
+              .map(_toRecord)
               .toList(),
         );
+  }
+
+  Stream<CustomerRecord?> watchById(String customerId) {
+    return (_db.select(_db.customersLocal)
+          ..where((row) => row.id.equals(customerId)))
+        .watch()
+        .map((rows) => rows.isEmpty ? null : _toRecord(rows.first));
+  }
+
+  Stream<List<DebtLedgerLocalData>> watchLedger(String customerId) {
+    return (_db.select(_db.debtLedgerLocal)
+          ..where((row) => row.customerId.equals(customerId))
+          ..orderBy([(row) => OrderingTerm.desc(row.clientCreatedAt)]))
+        .watch();
+  }
+
+  CustomerRecord _toRecord(CustomersLocalData row) {
+    return CustomerRecord(
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      balanceVnd: row.balanceVnd,
+      creditLimitVnd: row.creditLimitVnd,
+    );
   }
 
   Future<List<CustomerRecord>> searchByName(String query) async {
@@ -67,6 +88,7 @@ class CustomerRepository {
             name: row.name,
             phone: row.phone,
             balanceVnd: row.balanceVnd,
+            creditLimitVnd: row.creditLimitVnd,
           ),
         )
         .toList();
@@ -86,6 +108,7 @@ class CustomerRepository {
             name: trimmedName,
             phone: Value(trimmedPhone?.isEmpty ?? true ? null : trimmedPhone),
             balanceVnd: const Value(0),
+            creditLimitVnd: const Value(null),
             updatedAt: now,
           ),
         );
@@ -118,6 +141,39 @@ class CustomerRepository {
       name: trimmedName,
       phone: trimmedPhone?.isEmpty ?? true ? null : trimmedPhone,
       balanceVnd: 0,
+    );
+  }
+
+  Future<void> updateCreditLimit({
+    required String customerId,
+    required int? creditLimitVnd,
+  }) async {
+    final now = DateTime.now();
+    final row = await (_db.select(_db.customersLocal)
+          ..where((r) => r.id.equals(customerId)))
+        .getSingle();
+    await (_db.update(_db.customersLocal)..where((r) => r.id.equals(customerId)))
+        .write(
+      CustomersLocalCompanion(
+        creditLimitVnd: Value(creditLimitVnd),
+        updatedAt: Value(now),
+      ),
+    );
+    final storeId = await _db.metaValue('currentStoreId');
+    if (storeId == null) return;
+    await _db.into(_db.outboxEntries).insert(
+      OutboxEntriesCompanion.insert(
+        id: _uuid.v4(),
+        entityType: 'customer_upsert',
+        payloadJson: jsonEncode({
+          'id': row.id,
+          'storeId': storeId,
+          'name': row.name,
+          'phone': row.phone,
+          'creditLimitVnd': creditLimitVnd,
+        }),
+        createdAt: now,
+      ),
     );
   }
 }

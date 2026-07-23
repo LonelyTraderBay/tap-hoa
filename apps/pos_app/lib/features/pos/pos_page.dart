@@ -5,6 +5,7 @@ import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import '../customers/customer_repository.dart';
 import '../customers/debt_customer_list_page.dart';
+import '../customers/debt_payment_service.dart';
 import '../reports/day_report_page.dart';
 import '../reports/day_report_repository.dart';
 import '../products/product_list_page.dart';
@@ -19,6 +20,7 @@ class PosPage extends StatefulWidget {
     required this.productRepository,
     required this.checkoutService,
     required this.customerRepository,
+    required this.debtPaymentService,
     required this.pullCatalog,
     required this.outboxWorker,
     required this.dayReportRepository,
@@ -29,6 +31,7 @@ class PosPage extends StatefulWidget {
   final ProductRepository productRepository;
   final CheckoutService checkoutService;
   final CustomerRepository customerRepository;
+  final DebtPaymentService debtPaymentService;
   final PullCatalog pullCatalog;
   final OutboxWorker outboxWorker;
   final DayReportRepository dayReportRepository;
@@ -159,6 +162,7 @@ class _PosPageState extends State<PosPage> {
                 MaterialPageRoute<void>(
                   builder: (_) => DebtCustomerListPage(
                     repository: widget.customerRepository,
+                    debtPaymentService: widget.debtPaymentService,
                   ),
                 ),
               );

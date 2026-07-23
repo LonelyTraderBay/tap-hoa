@@ -3,4 +3,5 @@ export type CreateCustomerDto = {
   storeId: string;
   name: string;
   phone?: string | null;
+  creditLimitVnd?: number | null;
 };

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../customers/credit_limit.dart';
 import '../customers/customer_picker_sheet.dart';
 import '../customers/customer_repository.dart';
 import 'cart.dart';
@@ -101,6 +102,22 @@ class _PaymentSheetState extends State<PaymentSheet> {
       return;
     }
 
+    if (debt > 0 &&
+        _selectedCustomer != null &&
+        exceedsCreditLimit(
+          balanceVnd: _selectedCustomer!.balanceVnd,
+          debtAmount: debt,
+          creditLimitVnd: _selectedCustomer!.creditLimitVnd,
+        )) {
+      final limit = _selectedCustomer!.creditLimitVnd!;
+      final remaining = limit - _selectedCustomer!.balanceVnd;
+      setState(() {
+        _error =
+            'Vượt hạn mức nợ (còn được nợ: ${remaining < 0 ? 0 : remaining} VND)';
+      });
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -121,6 +138,13 @@ class _PaymentSheetState extends State<PaymentSheet> {
     } on InsufficientStockException {
       if (!mounted) return;
       setState(() => _error = 'Không đủ tồn kho');
+    } on CreditLimitExceededException catch (error) {
+      if (!mounted) return;
+      final remaining = error.creditLimitVnd - error.balanceVnd;
+      setState(() {
+        _error =
+            'Vượt hạn mức nợ (còn được nợ: ${remaining < 0 ? 0 : remaining} VND)';
+      });
     } on StateError catch (error) {
       if (!mounted) return;
       setState(() => _error = error.message);

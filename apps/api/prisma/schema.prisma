@@ -21,6 +21,16 @@ enum PaymentMethod {
   debt
 }
 
+enum DebtLedgerType {
+  sale_debt
+  payment
+}
+
+enum DebtPaymentChannel {
+  cash
+  transfer
+}
+
 model Store {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -33,6 +43,7 @@ model Store {
   sales     Sale[]
   shifts    Shift[]
   customers Customer[]
+  debtLedger DebtLedgerEntry[]
 }
 
 model User {
@@ -47,6 +58,7 @@ model User {
   stores       UserStore[]
   shifts       Shift[]
   sales        Sale[]   @relation("SoldBy")
+  debtLedger   DebtLedgerEntry[]
 }
 
 model UserStore {
@@ -98,16 +110,41 @@ model Shift {
 }
 
 model Customer {
-  id         String   @id @default(uuid())
-  storeId    String
-  name       String
-  phone      String?
-  balanceVnd Int      @default(0)
-  updatedAt  DateTime @updatedAt
-  createdAt  DateTime @default(now())
-  store      Store    @relation(fields: [storeId], references: [id])
-  sales      Sale[]
+  id              String            @id @default(uuid())
+  storeId         String
+  name            String
+  phone           String?
+  balanceVnd      Int               @default(0)
+  creditLimitVnd  Int?
+  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime          @default(now())
+  store           Store             @relation(fields: [storeId], references: [id])
+  sales           Sale[]
+  debtLedger      DebtLedgerEntry[]
   @@index([storeId])
+}
+
+model DebtLedgerEntry {
+  id              String               @id @default(uuid())
+  storeId         String
+  customerId      String
+  type            DebtLedgerType
+  amountVnd       Int
+  balanceAfterVnd Int
+  saleId          String?              @unique
+  shiftId         String?
+  recordedById    String
+  paymentMethod   DebtPaymentChannel?
+  note            String?
+  clientCreatedAt DateTime
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  store           Store                @relation(fields: [storeId], references: [id])
+  customer        Customer             @relation(fields: [customerId], references: [id])
+  sale            Sale?                @relation(fields: [saleId], references: [id])
+  recordedBy      User                 @relation(fields: [recordedById], references: [id])
+  @@index([storeId, clientCreatedAt])
+  @@index([customerId, clientCreatedAt])
 }
 
 model Sale {
@@ -130,6 +167,7 @@ model Sale {
   soldBy         User          @relation("SoldBy", fields: [soldById], references: [id])
   customer       Customer?     @relation(fields: [customerId], references: [id])
   lines          SaleLine[]
+  debtLedger     DebtLedgerEntry?
   @@index([storeId, clientCreatedAt])
 }
 

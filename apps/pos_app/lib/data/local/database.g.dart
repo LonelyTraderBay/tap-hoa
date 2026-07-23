@@ -3653,6 +3653,17 @@ class $CustomersLocalTable extends CustomersLocal
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _creditLimitVndMeta = const VerificationMeta(
+    'creditLimitVnd',
+  );
+  @override
+  late final GeneratedColumn<int> creditLimitVnd = GeneratedColumn<int>(
+    'credit_limit_vnd',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -3670,6 +3681,7 @@ class $CustomersLocalTable extends CustomersLocal
     name,
     phone,
     balanceVnd,
+    creditLimitVnd,
     updatedAt,
   ];
   @override
@@ -3709,6 +3721,15 @@ class $CustomersLocalTable extends CustomersLocal
         balanceVnd.isAcceptableOrUnknown(data['balance_vnd']!, _balanceVndMeta),
       );
     }
+    if (data.containsKey('credit_limit_vnd')) {
+      context.handle(
+        _creditLimitVndMeta,
+        creditLimitVnd.isAcceptableOrUnknown(
+          data['credit_limit_vnd']!,
+          _creditLimitVndMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -3742,6 +3763,10 @@ class $CustomersLocalTable extends CustomersLocal
         DriftSqlType.int,
         data['${effectivePrefix}balance_vnd'],
       )!,
+      creditLimitVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}credit_limit_vnd'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -3761,12 +3786,14 @@ class CustomersLocalData extends DataClass
   final String name;
   final String? phone;
   final int balanceVnd;
+  final int? creditLimitVnd;
   final DateTime updatedAt;
   const CustomersLocalData({
     required this.id,
     required this.name,
     this.phone,
     required this.balanceVnd,
+    this.creditLimitVnd,
     required this.updatedAt,
   });
   @override
@@ -3778,6 +3805,9 @@ class CustomersLocalData extends DataClass
       map['phone'] = Variable<String>(phone);
     }
     map['balance_vnd'] = Variable<int>(balanceVnd);
+    if (!nullToAbsent || creditLimitVnd != null) {
+      map['credit_limit_vnd'] = Variable<int>(creditLimitVnd);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -3790,6 +3820,9 @@ class CustomersLocalData extends DataClass
           ? const Value.absent()
           : Value(phone),
       balanceVnd: Value(balanceVnd),
+      creditLimitVnd: creditLimitVnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(creditLimitVnd),
       updatedAt: Value(updatedAt),
     );
   }
@@ -3804,6 +3837,7 @@ class CustomersLocalData extends DataClass
       name: serializer.fromJson<String>(json['name']),
       phone: serializer.fromJson<String?>(json['phone']),
       balanceVnd: serializer.fromJson<int>(json['balanceVnd']),
+      creditLimitVnd: serializer.fromJson<int?>(json['creditLimitVnd']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -3815,6 +3849,7 @@ class CustomersLocalData extends DataClass
       'name': serializer.toJson<String>(name),
       'phone': serializer.toJson<String?>(phone),
       'balanceVnd': serializer.toJson<int>(balanceVnd),
+      'creditLimitVnd': serializer.toJson<int?>(creditLimitVnd),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -3824,12 +3859,16 @@ class CustomersLocalData extends DataClass
     String? name,
     Value<String?> phone = const Value.absent(),
     int? balanceVnd,
+    Value<int?> creditLimitVnd = const Value.absent(),
     DateTime? updatedAt,
   }) => CustomersLocalData(
     id: id ?? this.id,
     name: name ?? this.name,
     phone: phone.present ? phone.value : this.phone,
     balanceVnd: balanceVnd ?? this.balanceVnd,
+    creditLimitVnd: creditLimitVnd.present
+        ? creditLimitVnd.value
+        : this.creditLimitVnd,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   CustomersLocalData copyWithCompanion(CustomersLocalCompanion data) {
@@ -3840,6 +3879,9 @@ class CustomersLocalData extends DataClass
       balanceVnd: data.balanceVnd.present
           ? data.balanceVnd.value
           : this.balanceVnd,
+      creditLimitVnd: data.creditLimitVnd.present
+          ? data.creditLimitVnd.value
+          : this.creditLimitVnd,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -3851,13 +3893,15 @@ class CustomersLocalData extends DataClass
           ..write('name: $name, ')
           ..write('phone: $phone, ')
           ..write('balanceVnd: $balanceVnd, ')
+          ..write('creditLimitVnd: $creditLimitVnd, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, phone, balanceVnd, updatedAt);
+  int get hashCode =>
+      Object.hash(id, name, phone, balanceVnd, creditLimitVnd, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3866,6 +3910,7 @@ class CustomersLocalData extends DataClass
           other.name == this.name &&
           other.phone == this.phone &&
           other.balanceVnd == this.balanceVnd &&
+          other.creditLimitVnd == this.creditLimitVnd &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -3874,6 +3919,7 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
   final Value<String> name;
   final Value<String?> phone;
   final Value<int> balanceVnd;
+  final Value<int?> creditLimitVnd;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const CustomersLocalCompanion({
@@ -3881,6 +3927,7 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
     this.name = const Value.absent(),
     this.phone = const Value.absent(),
     this.balanceVnd = const Value.absent(),
+    this.creditLimitVnd = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -3889,6 +3936,7 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
     required String name,
     this.phone = const Value.absent(),
     this.balanceVnd = const Value.absent(),
+    this.creditLimitVnd = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -3899,6 +3947,7 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
     Expression<String>? name,
     Expression<String>? phone,
     Expression<int>? balanceVnd,
+    Expression<int>? creditLimitVnd,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -3907,6 +3956,7 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
       if (name != null) 'name': name,
       if (phone != null) 'phone': phone,
       if (balanceVnd != null) 'balance_vnd': balanceVnd,
+      if (creditLimitVnd != null) 'credit_limit_vnd': creditLimitVnd,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -3917,6 +3967,7 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
     Value<String>? name,
     Value<String?>? phone,
     Value<int>? balanceVnd,
+    Value<int?>? creditLimitVnd,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -3925,6 +3976,7 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
       name: name ?? this.name,
       phone: phone ?? this.phone,
       balanceVnd: balanceVnd ?? this.balanceVnd,
+      creditLimitVnd: creditLimitVnd ?? this.creditLimitVnd,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -3945,6 +3997,9 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
     if (balanceVnd.present) {
       map['balance_vnd'] = Variable<int>(balanceVnd.value);
     }
+    if (creditLimitVnd.present) {
+      map['credit_limit_vnd'] = Variable<int>(creditLimitVnd.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -3961,6 +4016,781 @@ class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
           ..write('name: $name, ')
           ..write('phone: $phone, ')
           ..write('balanceVnd: $balanceVnd, ')
+          ..write('creditLimitVnd: $creditLimitVnd, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DebtLedgerLocalTable extends DebtLedgerLocal
+    with TableInfo<$DebtLedgerLocalTable, DebtLedgerLocalData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DebtLedgerLocalTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _customerIdMeta = const VerificationMeta(
+    'customerId',
+  );
+  @override
+  late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
+    'customer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountVndMeta = const VerificationMeta(
+    'amountVnd',
+  );
+  @override
+  late final GeneratedColumn<int> amountVnd = GeneratedColumn<int>(
+    'amount_vnd',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _balanceAfterVndMeta = const VerificationMeta(
+    'balanceAfterVnd',
+  );
+  @override
+  late final GeneratedColumn<int> balanceAfterVnd = GeneratedColumn<int>(
+    'balance_after_vnd',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _saleIdMeta = const VerificationMeta('saleId');
+  @override
+  late final GeneratedColumn<String> saleId = GeneratedColumn<String>(
+    'sale_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _shiftIdMeta = const VerificationMeta(
+    'shiftId',
+  );
+  @override
+  late final GeneratedColumn<String> shiftId = GeneratedColumn<String>(
+    'shift_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _recordedByIdMeta = const VerificationMeta(
+    'recordedById',
+  );
+  @override
+  late final GeneratedColumn<String> recordedById = GeneratedColumn<String>(
+    'recorded_by_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _paymentMethodMeta = const VerificationMeta(
+    'paymentMethod',
+  );
+  @override
+  late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
+    'payment_method',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _clientCreatedAtMeta = const VerificationMeta(
+    'clientCreatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> clientCreatedAt =
+      GeneratedColumn<DateTime>(
+        'client_created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    storeId,
+    customerId,
+    type,
+    amountVnd,
+    balanceAfterVnd,
+    saleId,
+    shiftId,
+    recordedById,
+    paymentMethod,
+    note,
+    clientCreatedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'debt_ledger_local';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DebtLedgerLocalData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+        _customerIdMeta,
+        customerId.isAcceptableOrUnknown(data['customer_id']!, _customerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_customerIdMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('amount_vnd')) {
+      context.handle(
+        _amountVndMeta,
+        amountVnd.isAcceptableOrUnknown(data['amount_vnd']!, _amountVndMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountVndMeta);
+    }
+    if (data.containsKey('balance_after_vnd')) {
+      context.handle(
+        _balanceAfterVndMeta,
+        balanceAfterVnd.isAcceptableOrUnknown(
+          data['balance_after_vnd']!,
+          _balanceAfterVndMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_balanceAfterVndMeta);
+    }
+    if (data.containsKey('sale_id')) {
+      context.handle(
+        _saleIdMeta,
+        saleId.isAcceptableOrUnknown(data['sale_id']!, _saleIdMeta),
+      );
+    }
+    if (data.containsKey('shift_id')) {
+      context.handle(
+        _shiftIdMeta,
+        shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
+      );
+    }
+    if (data.containsKey('recorded_by_id')) {
+      context.handle(
+        _recordedByIdMeta,
+        recordedById.isAcceptableOrUnknown(
+          data['recorded_by_id']!,
+          _recordedByIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recordedByIdMeta);
+    }
+    if (data.containsKey('payment_method')) {
+      context.handle(
+        _paymentMethodMeta,
+        paymentMethod.isAcceptableOrUnknown(
+          data['payment_method']!,
+          _paymentMethodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('client_created_at')) {
+      context.handle(
+        _clientCreatedAtMeta,
+        clientCreatedAt.isAcceptableOrUnknown(
+          data['client_created_at']!,
+          _clientCreatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_clientCreatedAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DebtLedgerLocalData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DebtLedgerLocalData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      customerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}customer_id'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      amountVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_vnd'],
+      )!,
+      balanceAfterVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}balance_after_vnd'],
+      )!,
+      saleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sale_id'],
+      ),
+      shiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shift_id'],
+      ),
+      recordedById: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recorded_by_id'],
+      )!,
+      paymentMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_method'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      clientCreatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}client_created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DebtLedgerLocalTable createAlias(String alias) {
+    return $DebtLedgerLocalTable(attachedDatabase, alias);
+  }
+}
+
+class DebtLedgerLocalData extends DataClass
+    implements Insertable<DebtLedgerLocalData> {
+  final String id;
+  final String storeId;
+  final String customerId;
+  final String type;
+  final int amountVnd;
+  final int balanceAfterVnd;
+  final String? saleId;
+  final String? shiftId;
+  final String recordedById;
+  final String? paymentMethod;
+  final String? note;
+  final DateTime clientCreatedAt;
+  final DateTime updatedAt;
+  const DebtLedgerLocalData({
+    required this.id,
+    required this.storeId,
+    required this.customerId,
+    required this.type,
+    required this.amountVnd,
+    required this.balanceAfterVnd,
+    this.saleId,
+    this.shiftId,
+    required this.recordedById,
+    this.paymentMethod,
+    this.note,
+    required this.clientCreatedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['store_id'] = Variable<String>(storeId);
+    map['customer_id'] = Variable<String>(customerId);
+    map['type'] = Variable<String>(type);
+    map['amount_vnd'] = Variable<int>(amountVnd);
+    map['balance_after_vnd'] = Variable<int>(balanceAfterVnd);
+    if (!nullToAbsent || saleId != null) {
+      map['sale_id'] = Variable<String>(saleId);
+    }
+    if (!nullToAbsent || shiftId != null) {
+      map['shift_id'] = Variable<String>(shiftId);
+    }
+    map['recorded_by_id'] = Variable<String>(recordedById);
+    if (!nullToAbsent || paymentMethod != null) {
+      map['payment_method'] = Variable<String>(paymentMethod);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['client_created_at'] = Variable<DateTime>(clientCreatedAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  DebtLedgerLocalCompanion toCompanion(bool nullToAbsent) {
+    return DebtLedgerLocalCompanion(
+      id: Value(id),
+      storeId: Value(storeId),
+      customerId: Value(customerId),
+      type: Value(type),
+      amountVnd: Value(amountVnd),
+      balanceAfterVnd: Value(balanceAfterVnd),
+      saleId: saleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(saleId),
+      shiftId: shiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shiftId),
+      recordedById: Value(recordedById),
+      paymentMethod: paymentMethod == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethod),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      clientCreatedAt: Value(clientCreatedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory DebtLedgerLocalData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DebtLedgerLocalData(
+      id: serializer.fromJson<String>(json['id']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      customerId: serializer.fromJson<String>(json['customerId']),
+      type: serializer.fromJson<String>(json['type']),
+      amountVnd: serializer.fromJson<int>(json['amountVnd']),
+      balanceAfterVnd: serializer.fromJson<int>(json['balanceAfterVnd']),
+      saleId: serializer.fromJson<String?>(json['saleId']),
+      shiftId: serializer.fromJson<String?>(json['shiftId']),
+      recordedById: serializer.fromJson<String>(json['recordedById']),
+      paymentMethod: serializer.fromJson<String?>(json['paymentMethod']),
+      note: serializer.fromJson<String?>(json['note']),
+      clientCreatedAt: serializer.fromJson<DateTime>(json['clientCreatedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'storeId': serializer.toJson<String>(storeId),
+      'customerId': serializer.toJson<String>(customerId),
+      'type': serializer.toJson<String>(type),
+      'amountVnd': serializer.toJson<int>(amountVnd),
+      'balanceAfterVnd': serializer.toJson<int>(balanceAfterVnd),
+      'saleId': serializer.toJson<String?>(saleId),
+      'shiftId': serializer.toJson<String?>(shiftId),
+      'recordedById': serializer.toJson<String>(recordedById),
+      'paymentMethod': serializer.toJson<String?>(paymentMethod),
+      'note': serializer.toJson<String?>(note),
+      'clientCreatedAt': serializer.toJson<DateTime>(clientCreatedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  DebtLedgerLocalData copyWith({
+    String? id,
+    String? storeId,
+    String? customerId,
+    String? type,
+    int? amountVnd,
+    int? balanceAfterVnd,
+    Value<String?> saleId = const Value.absent(),
+    Value<String?> shiftId = const Value.absent(),
+    String? recordedById,
+    Value<String?> paymentMethod = const Value.absent(),
+    Value<String?> note = const Value.absent(),
+    DateTime? clientCreatedAt,
+    DateTime? updatedAt,
+  }) => DebtLedgerLocalData(
+    id: id ?? this.id,
+    storeId: storeId ?? this.storeId,
+    customerId: customerId ?? this.customerId,
+    type: type ?? this.type,
+    amountVnd: amountVnd ?? this.amountVnd,
+    balanceAfterVnd: balanceAfterVnd ?? this.balanceAfterVnd,
+    saleId: saleId.present ? saleId.value : this.saleId,
+    shiftId: shiftId.present ? shiftId.value : this.shiftId,
+    recordedById: recordedById ?? this.recordedById,
+    paymentMethod: paymentMethod.present
+        ? paymentMethod.value
+        : this.paymentMethod,
+    note: note.present ? note.value : this.note,
+    clientCreatedAt: clientCreatedAt ?? this.clientCreatedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  DebtLedgerLocalData copyWithCompanion(DebtLedgerLocalCompanion data) {
+    return DebtLedgerLocalData(
+      id: data.id.present ? data.id.value : this.id,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      customerId: data.customerId.present
+          ? data.customerId.value
+          : this.customerId,
+      type: data.type.present ? data.type.value : this.type,
+      amountVnd: data.amountVnd.present ? data.amountVnd.value : this.amountVnd,
+      balanceAfterVnd: data.balanceAfterVnd.present
+          ? data.balanceAfterVnd.value
+          : this.balanceAfterVnd,
+      saleId: data.saleId.present ? data.saleId.value : this.saleId,
+      shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
+      recordedById: data.recordedById.present
+          ? data.recordedById.value
+          : this.recordedById,
+      paymentMethod: data.paymentMethod.present
+          ? data.paymentMethod.value
+          : this.paymentMethod,
+      note: data.note.present ? data.note.value : this.note,
+      clientCreatedAt: data.clientCreatedAt.present
+          ? data.clientCreatedAt.value
+          : this.clientCreatedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DebtLedgerLocalData(')
+          ..write('id: $id, ')
+          ..write('storeId: $storeId, ')
+          ..write('customerId: $customerId, ')
+          ..write('type: $type, ')
+          ..write('amountVnd: $amountVnd, ')
+          ..write('balanceAfterVnd: $balanceAfterVnd, ')
+          ..write('saleId: $saleId, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('recordedById: $recordedById, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('note: $note, ')
+          ..write('clientCreatedAt: $clientCreatedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    storeId,
+    customerId,
+    type,
+    amountVnd,
+    balanceAfterVnd,
+    saleId,
+    shiftId,
+    recordedById,
+    paymentMethod,
+    note,
+    clientCreatedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DebtLedgerLocalData &&
+          other.id == this.id &&
+          other.storeId == this.storeId &&
+          other.customerId == this.customerId &&
+          other.type == this.type &&
+          other.amountVnd == this.amountVnd &&
+          other.balanceAfterVnd == this.balanceAfterVnd &&
+          other.saleId == this.saleId &&
+          other.shiftId == this.shiftId &&
+          other.recordedById == this.recordedById &&
+          other.paymentMethod == this.paymentMethod &&
+          other.note == this.note &&
+          other.clientCreatedAt == this.clientCreatedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class DebtLedgerLocalCompanion extends UpdateCompanion<DebtLedgerLocalData> {
+  final Value<String> id;
+  final Value<String> storeId;
+  final Value<String> customerId;
+  final Value<String> type;
+  final Value<int> amountVnd;
+  final Value<int> balanceAfterVnd;
+  final Value<String?> saleId;
+  final Value<String?> shiftId;
+  final Value<String> recordedById;
+  final Value<String?> paymentMethod;
+  final Value<String?> note;
+  final Value<DateTime> clientCreatedAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const DebtLedgerLocalCompanion({
+    this.id = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.customerId = const Value.absent(),
+    this.type = const Value.absent(),
+    this.amountVnd = const Value.absent(),
+    this.balanceAfterVnd = const Value.absent(),
+    this.saleId = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    this.recordedById = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    this.note = const Value.absent(),
+    this.clientCreatedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DebtLedgerLocalCompanion.insert({
+    required String id,
+    required String storeId,
+    required String customerId,
+    required String type,
+    required int amountVnd,
+    required int balanceAfterVnd,
+    this.saleId = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    required String recordedById,
+    this.paymentMethod = const Value.absent(),
+    this.note = const Value.absent(),
+    required DateTime clientCreatedAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       storeId = Value(storeId),
+       customerId = Value(customerId),
+       type = Value(type),
+       amountVnd = Value(amountVnd),
+       balanceAfterVnd = Value(balanceAfterVnd),
+       recordedById = Value(recordedById),
+       clientCreatedAt = Value(clientCreatedAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<DebtLedgerLocalData> custom({
+    Expression<String>? id,
+    Expression<String>? storeId,
+    Expression<String>? customerId,
+    Expression<String>? type,
+    Expression<int>? amountVnd,
+    Expression<int>? balanceAfterVnd,
+    Expression<String>? saleId,
+    Expression<String>? shiftId,
+    Expression<String>? recordedById,
+    Expression<String>? paymentMethod,
+    Expression<String>? note,
+    Expression<DateTime>? clientCreatedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (storeId != null) 'store_id': storeId,
+      if (customerId != null) 'customer_id': customerId,
+      if (type != null) 'type': type,
+      if (amountVnd != null) 'amount_vnd': amountVnd,
+      if (balanceAfterVnd != null) 'balance_after_vnd': balanceAfterVnd,
+      if (saleId != null) 'sale_id': saleId,
+      if (shiftId != null) 'shift_id': shiftId,
+      if (recordedById != null) 'recorded_by_id': recordedById,
+      if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (note != null) 'note': note,
+      if (clientCreatedAt != null) 'client_created_at': clientCreatedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DebtLedgerLocalCompanion copyWith({
+    Value<String>? id,
+    Value<String>? storeId,
+    Value<String>? customerId,
+    Value<String>? type,
+    Value<int>? amountVnd,
+    Value<int>? balanceAfterVnd,
+    Value<String?>? saleId,
+    Value<String?>? shiftId,
+    Value<String>? recordedById,
+    Value<String?>? paymentMethod,
+    Value<String?>? note,
+    Value<DateTime>? clientCreatedAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return DebtLedgerLocalCompanion(
+      id: id ?? this.id,
+      storeId: storeId ?? this.storeId,
+      customerId: customerId ?? this.customerId,
+      type: type ?? this.type,
+      amountVnd: amountVnd ?? this.amountVnd,
+      balanceAfterVnd: balanceAfterVnd ?? this.balanceAfterVnd,
+      saleId: saleId ?? this.saleId,
+      shiftId: shiftId ?? this.shiftId,
+      recordedById: recordedById ?? this.recordedById,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      note: note ?? this.note,
+      clientCreatedAt: clientCreatedAt ?? this.clientCreatedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (customerId.present) {
+      map['customer_id'] = Variable<String>(customerId.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (amountVnd.present) {
+      map['amount_vnd'] = Variable<int>(amountVnd.value);
+    }
+    if (balanceAfterVnd.present) {
+      map['balance_after_vnd'] = Variable<int>(balanceAfterVnd.value);
+    }
+    if (saleId.present) {
+      map['sale_id'] = Variable<String>(saleId.value);
+    }
+    if (shiftId.present) {
+      map['shift_id'] = Variable<String>(shiftId.value);
+    }
+    if (recordedById.present) {
+      map['recorded_by_id'] = Variable<String>(recordedById.value);
+    }
+    if (paymentMethod.present) {
+      map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (clientCreatedAt.present) {
+      map['client_created_at'] = Variable<DateTime>(clientCreatedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DebtLedgerLocalCompanion(')
+          ..write('id: $id, ')
+          ..write('storeId: $storeId, ')
+          ..write('customerId: $customerId, ')
+          ..write('type: $type, ')
+          ..write('amountVnd: $amountVnd, ')
+          ..write('balanceAfterVnd: $balanceAfterVnd, ')
+          ..write('saleId: $saleId, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('recordedById: $recordedById, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('note: $note, ')
+          ..write('clientCreatedAt: $clientCreatedAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3980,6 +4810,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $StoresLocalTable storesLocal = $StoresLocalTable(this);
   late final $MetaLocalTable metaLocal = $MetaLocalTable(this);
   late final $CustomersLocalTable customersLocal = $CustomersLocalTable(this);
+  late final $DebtLedgerLocalTable debtLedgerLocal = $DebtLedgerLocalTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3994,6 +4827,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     storesLocal,
     metaLocal,
     customersLocal,
+    debtLedgerLocal,
   ];
 }
 
@@ -5893,6 +6727,7 @@ typedef $$CustomersLocalTableCreateCompanionBuilder =
       required String name,
       Value<String?> phone,
       Value<int> balanceVnd,
+      Value<int?> creditLimitVnd,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -5902,6 +6737,7 @@ typedef $$CustomersLocalTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> phone,
       Value<int> balanceVnd,
+      Value<int?> creditLimitVnd,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -5932,6 +6768,11 @@ class $$CustomersLocalTableFilterComposer
 
   ColumnFilters<int> get balanceVnd => $composableBuilder(
     column: $table.balanceVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get creditLimitVnd => $composableBuilder(
+    column: $table.creditLimitVnd,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5970,6 +6811,11 @@ class $$CustomersLocalTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get creditLimitVnd => $composableBuilder(
+    column: $table.creditLimitVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -5996,6 +6842,11 @@ class $$CustomersLocalTableAnnotationComposer
 
   GeneratedColumn<int> get balanceVnd => $composableBuilder(
     column: $table.balanceVnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get creditLimitVnd => $composableBuilder(
+    column: $table.creditLimitVnd,
     builder: (column) => column,
   );
 
@@ -6044,6 +6895,7 @@ class $$CustomersLocalTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> phone = const Value.absent(),
                 Value<int> balanceVnd = const Value.absent(),
+                Value<int?> creditLimitVnd = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CustomersLocalCompanion(
@@ -6051,6 +6903,7 @@ class $$CustomersLocalTableTableManager
                 name: name,
                 phone: phone,
                 balanceVnd: balanceVnd,
+                creditLimitVnd: creditLimitVnd,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -6060,6 +6913,7 @@ class $$CustomersLocalTableTableManager
                 required String name,
                 Value<String?> phone = const Value.absent(),
                 Value<int> balanceVnd = const Value.absent(),
+                Value<int?> creditLimitVnd = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => CustomersLocalCompanion.insert(
@@ -6067,6 +6921,7 @@ class $$CustomersLocalTableTableManager
                 name: name,
                 phone: phone,
                 balanceVnd: balanceVnd,
+                creditLimitVnd: creditLimitVnd,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -6095,6 +6950,378 @@ typedef $$CustomersLocalTableProcessedTableManager =
       CustomersLocalData,
       PrefetchHooks Function()
     >;
+typedef $$DebtLedgerLocalTableCreateCompanionBuilder =
+    DebtLedgerLocalCompanion Function({
+      required String id,
+      required String storeId,
+      required String customerId,
+      required String type,
+      required int amountVnd,
+      required int balanceAfterVnd,
+      Value<String?> saleId,
+      Value<String?> shiftId,
+      required String recordedById,
+      Value<String?> paymentMethod,
+      Value<String?> note,
+      required DateTime clientCreatedAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$DebtLedgerLocalTableUpdateCompanionBuilder =
+    DebtLedgerLocalCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> customerId,
+      Value<String> type,
+      Value<int> amountVnd,
+      Value<int> balanceAfterVnd,
+      Value<String?> saleId,
+      Value<String?> shiftId,
+      Value<String> recordedById,
+      Value<String?> paymentMethod,
+      Value<String?> note,
+      Value<DateTime> clientCreatedAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$DebtLedgerLocalTableFilterComposer
+    extends Composer<_$AppDatabase, $DebtLedgerLocalTable> {
+  $$DebtLedgerLocalTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountVnd => $composableBuilder(
+    column: $table.amountVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get balanceAfterVnd => $composableBuilder(
+    column: $table.balanceAfterVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get saleId => $composableBuilder(
+    column: $table.saleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shiftId => $composableBuilder(
+    column: $table.shiftId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recordedById => $composableBuilder(
+    column: $table.recordedById,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DebtLedgerLocalTableOrderingComposer
+    extends Composer<_$AppDatabase, $DebtLedgerLocalTable> {
+  $$DebtLedgerLocalTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountVnd => $composableBuilder(
+    column: $table.amountVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get balanceAfterVnd => $composableBuilder(
+    column: $table.balanceAfterVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get saleId => $composableBuilder(
+    column: $table.saleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get shiftId => $composableBuilder(
+    column: $table.shiftId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recordedById => $composableBuilder(
+    column: $table.recordedById,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DebtLedgerLocalTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DebtLedgerLocalTable> {
+  $$DebtLedgerLocalTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get storeId =>
+      $composableBuilder(column: $table.storeId, builder: (column) => column);
+
+  GeneratedColumn<String> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<int> get amountVnd =>
+      $composableBuilder(column: $table.amountVnd, builder: (column) => column);
+
+  GeneratedColumn<int> get balanceAfterVnd => $composableBuilder(
+    column: $table.balanceAfterVnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get saleId =>
+      $composableBuilder(column: $table.saleId, builder: (column) => column);
+
+  GeneratedColumn<String> get shiftId =>
+      $composableBuilder(column: $table.shiftId, builder: (column) => column);
+
+  GeneratedColumn<String> get recordedById => $composableBuilder(
+    column: $table.recordedById,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DebtLedgerLocalTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DebtLedgerLocalTable,
+          DebtLedgerLocalData,
+          $$DebtLedgerLocalTableFilterComposer,
+          $$DebtLedgerLocalTableOrderingComposer,
+          $$DebtLedgerLocalTableAnnotationComposer,
+          $$DebtLedgerLocalTableCreateCompanionBuilder,
+          $$DebtLedgerLocalTableUpdateCompanionBuilder,
+          (
+            DebtLedgerLocalData,
+            BaseReferences<
+              _$AppDatabase,
+              $DebtLedgerLocalTable,
+              DebtLedgerLocalData
+            >,
+          ),
+          DebtLedgerLocalData,
+          PrefetchHooks Function()
+        > {
+  $$DebtLedgerLocalTableTableManager(
+    _$AppDatabase db,
+    $DebtLedgerLocalTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DebtLedgerLocalTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DebtLedgerLocalTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DebtLedgerLocalTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> customerId = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<int> amountVnd = const Value.absent(),
+                Value<int> balanceAfterVnd = const Value.absent(),
+                Value<String?> saleId = const Value.absent(),
+                Value<String?> shiftId = const Value.absent(),
+                Value<String> recordedById = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> clientCreatedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DebtLedgerLocalCompanion(
+                id: id,
+                storeId: storeId,
+                customerId: customerId,
+                type: type,
+                amountVnd: amountVnd,
+                balanceAfterVnd: balanceAfterVnd,
+                saleId: saleId,
+                shiftId: shiftId,
+                recordedById: recordedById,
+                paymentMethod: paymentMethod,
+                note: note,
+                clientCreatedAt: clientCreatedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String storeId,
+                required String customerId,
+                required String type,
+                required int amountVnd,
+                required int balanceAfterVnd,
+                Value<String?> saleId = const Value.absent(),
+                Value<String?> shiftId = const Value.absent(),
+                required String recordedById,
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                required DateTime clientCreatedAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => DebtLedgerLocalCompanion.insert(
+                id: id,
+                storeId: storeId,
+                customerId: customerId,
+                type: type,
+                amountVnd: amountVnd,
+                balanceAfterVnd: balanceAfterVnd,
+                saleId: saleId,
+                shiftId: shiftId,
+                recordedById: recordedById,
+                paymentMethod: paymentMethod,
+                note: note,
+                clientCreatedAt: clientCreatedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DebtLedgerLocalTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DebtLedgerLocalTable,
+      DebtLedgerLocalData,
+      $$DebtLedgerLocalTableFilterComposer,
+      $$DebtLedgerLocalTableOrderingComposer,
+      $$DebtLedgerLocalTableAnnotationComposer,
+      $$DebtLedgerLocalTableCreateCompanionBuilder,
+      $$DebtLedgerLocalTableUpdateCompanionBuilder,
+      (
+        DebtLedgerLocalData,
+        BaseReferences<
+          _$AppDatabase,
+          $DebtLedgerLocalTable,
+          DebtLedgerLocalData
+        >,
+      ),
+      DebtLedgerLocalData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6117,4 +7344,6 @@ class $AppDatabaseManager {
       $$MetaLocalTableTableManager(_db, _db.metaLocal);
   $$CustomersLocalTableTableManager get customersLocal =>
       $$CustomersLocalTableTableManager(_db, _db.customersLocal);
+  $$DebtLedgerLocalTableTableManager get debtLedgerLocal =>
+      $$DebtLedgerLocalTableTableManager(_db, _db.debtLedgerLocal);
 }

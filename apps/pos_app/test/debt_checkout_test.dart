@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pos_app/data/local/database.dart';
+import 'package:pos_app/features/customers/credit_limit.dart';
 import 'package:pos_app/features/customers/customer_repository.dart';
 import 'package:pos_app/features/pos/cart.dart';
 import 'package:pos_app/features/pos/checkout_service.dart';
@@ -144,6 +145,49 @@ void main() {
       'name': 'Anh Ba',
       'phone': '0900111222',
     });
+  });
+
+  test('checkout debt writes sale_debt ledger and blocks over credit limit', () async {
+    await seedProductStock(db);
+    await seedSession(db);
+    await openShift(shiftRepository);
+
+    final limited = await customerRepository.create(name: 'Limited');
+    await (db.update(db.customersLocal)..where((r) => r.id.equals(limited.id)))
+        .write(
+      CustomersLocalCompanion(
+        creditLimitVnd: const Value(15000),
+        updatedAt: Value(DateTime(2026)),
+      ),
+    );
+
+    await expectLater(
+      checkout.complete(
+        cart: cartWithStingQty2(),
+        payment: const PaymentSplit(debt: 20000),
+        customerId: limited.id,
+      ),
+      throwsA(isA<CreditLimitExceededException>()),
+    );
+
+    final unlimited = await customerRepository.create(name: 'Unlimited');
+    final saleId = await checkout.complete(
+      cart: cartWithStingQty2(),
+      payment: const PaymentSplit(debt: 20000),
+      customerId: unlimited.id,
+    );
+
+    final row = await (db.select(db.customersLocal)
+          ..where((r) => r.id.equals(unlimited.id)))
+        .getSingle();
+    expect(row.balanceVnd, 20000);
+
+    final ledger = await (db.select(db.debtLedgerLocal)
+          ..where((t) => t.saleId.equals(saleId)))
+        .getSingle();
+    expect(ledger.type, 'sale_debt');
+    expect(ledger.amountVnd, 20000);
+    expect(ledger.balanceAfterVnd, 20000);
   });
 
   test('customer repository lists only customers with debt', () async {

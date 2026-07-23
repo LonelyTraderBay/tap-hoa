@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/local/database.dart';
+import '../customers/credit_limit.dart';
 import '../shifts/shift_repository.dart';
 import 'cart.dart';
 
@@ -166,6 +167,18 @@ class CheckoutService {
         debtCustomer = await (_db.select(_db.customersLocal)
               ..where((row) => row.id.equals(customerId)))
             .getSingleOrNull();
+        if (debtCustomer == null) throw StateError('customer not found');
+        if (exceedsCreditLimit(
+          balanceVnd: debtCustomer.balanceVnd,
+          debtAmount: payment.debt,
+          creditLimitVnd: debtCustomer.creditLimitVnd,
+        )) {
+          throw CreditLimitExceededException(
+            balanceVnd: debtCustomer.balanceVnd,
+            creditLimitVnd: debtCustomer.creditLimitVnd!,
+            debtAmount: payment.debt,
+          );
+        }
       }
 
       await _db.into(_db.outboxEntries).insert(
@@ -206,12 +219,29 @@ class CheckoutService {
       );
 
       if (debtCustomer != null) {
+        final newBalance = debtCustomer.balanceVnd + payment.debt;
+        final now = DateTime.now();
         await (_db.update(_db.customersLocal)
               ..where((row) => row.id.equals(debtCustomer!.id)))
             .write(
           CustomersLocalCompanion(
-            balanceVnd: Value(debtCustomer.balanceVnd + payment.debt),
-            updatedAt: Value(DateTime.now()),
+            balanceVnd: Value(newBalance),
+            updatedAt: Value(now),
+          ),
+        );
+        await _db.into(_db.debtLedgerLocal).insert(
+          DebtLedgerLocalCompanion.insert(
+            id: _uuid.v4(),
+            storeId: storeId,
+            customerId: debtCustomer.id,
+            type: 'sale_debt',
+            amountVnd: payment.debt,
+            balanceAfterVnd: newBalance,
+            saleId: Value(saleId),
+            shiftId: Value(shift.id),
+            recordedById: userId,
+            clientCreatedAt: clientCreatedAt,
+            updatedAt: now,
           ),
         );
       }
