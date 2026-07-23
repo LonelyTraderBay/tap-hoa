@@ -1,6 +1,9 @@
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/data/local/database.dart';
+import 'package:pos_app/data/sync/outbox_worker.dart';
 import 'package:pos_app/data/sync/pull_catalog.dart';
 import 'package:pos_app/features/auth/auth_repository.dart';
 import 'package:pos_app/features/pos/checkout_service.dart';
@@ -18,15 +21,34 @@ class MockPullCatalog extends Mock implements PullCatalog {}
 
 class MockCheckoutService extends Mock implements CheckoutService {}
 
+class MockOutboxWorker extends Mock implements OutboxWorker {}
+
 void main() {
+  late AppDatabase database;
+
+  setUp(() {
+    database = AppDatabase(NativeDatabase.memory());
+  });
+
+  tearDown(() async {
+    await database.close();
+  });
+
+  Future<void> unmount(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  }
+
   testWidgets('shows login form', (tester) async {
     await tester.pumpWidget(
       PosApp(
+        database: database,
         authRepository: MockAuthRepository(),
         shiftRepository: MockShiftRepository(),
         productRepository: MockProductRepository(),
         pullCatalog: MockPullCatalog(),
         checkoutService: MockCheckoutService(),
+        outboxWorker: MockOutboxWorker(),
       ),
     );
 
@@ -34,6 +56,7 @@ void main() {
     expect(find.widgetWithText(TextField, 'Số điện thoại'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Mật khẩu'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Đăng nhập'), findsOneWidget);
+    await unmount(tester);
   });
 
   testWidgets('navigates to open shift after login', (tester) async {
@@ -54,11 +77,13 @@ void main() {
     );
     await tester.pumpWidget(
       PosApp(
+        database: database,
         authRepository: repository,
         shiftRepository: shiftRepository,
         productRepository: MockProductRepository(),
         pullCatalog: MockPullCatalog(),
         checkoutService: MockCheckoutService(),
+        outboxWorker: MockOutboxWorker(),
       ),
     );
 
@@ -69,5 +94,6 @@ void main() {
 
     expect(find.text('Mở ca'), findsWidgets);
     expect(find.text('Xin chào Owner'), findsOneWidget);
+    await unmount(tester);
   });
 }

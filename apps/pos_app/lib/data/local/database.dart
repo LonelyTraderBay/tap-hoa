@@ -142,6 +142,41 @@ class AppDatabase extends _$AppDatabase {
       );
     }
   }
+
+  Stream<SyncStatusSnapshot> watchSyncStatus() {
+    final query = select(outboxEntries)
+      ..where(
+        (entry) =>
+            entry.status.equals('pending') | entry.status.equals('error'),
+      )
+      ..orderBy([(entry) => OrderingTerm.desc(entry.createdAt)]);
+
+    return query.watch().map((entries) {
+      final pendingCount = entries
+          .where((entry) => entry.status == 'pending')
+          .length;
+      final lastError = entries
+          .where((entry) => entry.status == 'error' && entry.lastError != null)
+          .map((entry) => entry.lastError!)
+          .firstOrNull;
+      return SyncStatusSnapshot(
+        pendingCount: pendingCount,
+        lastError: lastError,
+      );
+    });
+  }
+}
+
+class SyncStatusSnapshot {
+  const SyncStatusSnapshot({
+    required this.pendingCount,
+    this.lastError,
+  });
+
+  final int pendingCount;
+  final String? lastError;
+
+  bool get isVisible => pendingCount > 0 || lastError != null;
 }
 
 LazyDatabase _openConnection() {

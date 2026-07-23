@@ -10,6 +10,7 @@ import 'features/auth/login_page.dart';
 import 'features/pos/checkout_service.dart';
 import 'features/products/product_repository.dart';
 import 'features/shifts/shift_repository.dart';
+import 'features/sync_status/sync_status_banner.dart';
 
 void main() {
   final database = AppDatabase();
@@ -32,6 +33,7 @@ void main() {
     SyncScheduler(
       outboxWorker: outboxWorker,
       child: PosApp(
+        database: database,
         authRepository: repository,
         shiftRepository: shiftRepository,
         productRepository: productRepository,
@@ -46,6 +48,7 @@ void main() {
 class PosApp extends StatelessWidget {
   const PosApp({
     super.key,
+    required this.database,
     required this.authRepository,
     required this.shiftRepository,
     required this.productRepository,
@@ -54,6 +57,7 @@ class PosApp extends StatelessWidget {
     required this.outboxWorker,
   });
 
+  final AppDatabase database;
   final AuthRepository authRepository;
   final ShiftRepository shiftRepository;
   final ProductRepository productRepository;
@@ -65,6 +69,12 @@ class PosApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Tap Hoa POS',
+      builder: (context, child) => Column(
+        children: [
+          SyncStatusBanner(db: database),
+          Expanded(child: child ?? const SizedBox.shrink()),
+        ],
+      ),
       home: LoginPage(
         repository: authRepository,
         shiftRepository: shiftRepository,
