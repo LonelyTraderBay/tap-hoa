@@ -1,0 +1,135 @@
+// apps/api/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  owner
+  store_manager
+  cashier
+}
+
+enum PaymentMethod {
+  cash
+  transfer
+  mixed
+  debt
+}
+
+model Store {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     UserStore[]
+  products  ProductStoreStock[]
+  sales     Sale[]
+  shifts    Shift[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  phone        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  stores       UserStore[]
+  shifts       Shift[]
+  sales        Sale[]   @relation("SoldBy")
+}
+
+model UserStore {
+  userId  String
+  storeId String
+  user    User  @relation(fields: [userId], references: [id])
+  store   Store @relation(fields: [storeId], references: [id])
+  @@id([userId, storeId])
+}
+
+model Product {
+  id           String   @id @default(uuid())
+  sku          String   @unique
+  barcode      String?
+  name         String
+  unit         String
+  isWeighted   Boolean  @default(false)
+  basePriceVnd Int
+  costVnd      Int      @default(0)
+  active       Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  stocks       ProductStoreStock[]
+}
+
+model ProductStoreStock {
+  productId      String
+  storeId        String
+  qty            Decimal  @db.Decimal(18, 3)
+  minQty         Decimal  @default(0) @db.Decimal(18, 3)
+  updatedAt      DateTime @updatedAt
+  product        Product  @relation(fields: [productId], references: [id])
+  store          Store    @relation(fields: [storeId], references: [id])
+  @@id([productId, storeId])
+}
+
+model Shift {
+  id           String    @id @default(uuid())
+  storeId      String
+  userId       String
+  openedAt     DateTime
+  closedAt     DateTime?
+  openingCash  Int
+  closingCash  Int?
+  note         String?
+  store        Store     @relation(fields: [storeId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
+  sales        Sale[]
+}
+
+model Sale {
+  id             String        @id @default(uuid())
+  storeId        String
+  shiftId        String
+  soldById       String
+  paymentMethod  PaymentMethod
+  cashAmount     Int           @default(0)
+  transferAmount Int           @default(0)
+  debtAmount     Int           @default(0)
+  discountVnd    Int           @default(0)
+  totalVnd       Int
+  customerId     String?
+  clientCreatedAt DateTime
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  store          Store         @relation(fields: [storeId], references: [id])
+  shift          Shift         @relation(fields: [shiftId], references: [id])
+  soldBy         User          @relation("SoldBy", fields: [soldById], references: [id])
+  lines          SaleLine[]
+  @@index([storeId, clientCreatedAt])
+}
+
+model SaleLine {
+  id          String  @id @default(uuid())
+  saleId      String
+  productId   String
+  qty         Decimal @db.Decimal(18, 3)
+  unitPrice   Int
+  lineTotal   Int
+  sale        Sale    @relation(fields: [saleId], references: [id])
+}
+
+model SyncCursor {
+  deviceId   String   @id
+  userId     String
+  lastPullAt DateTime
+}
