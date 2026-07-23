@@ -1,8 +1,13 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 
+import '../../data/local/database.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
+import '../auth/auth_repository.dart';
+import '../cash/cash_ledger_page.dart';
+import '../cash/cash_voucher_service.dart';
+import '../cash/close_shift_page.dart';
 import '../customers/customer_repository.dart';
 import '../customers/debt_customer_list_page.dart';
 import '../customers/debt_payment_service.dart';
@@ -10,6 +15,7 @@ import '../reports/day_report_page.dart';
 import '../reports/day_report_repository.dart';
 import '../products/product_list_page.dart';
 import '../products/product_repository.dart';
+import '../shifts/shift_repository.dart';
 import 'cart.dart';
 import 'checkout_service.dart';
 import 'payment_sheet.dart';
@@ -24,6 +30,10 @@ class PosPage extends StatefulWidget {
     required this.pullCatalog,
     required this.outboxWorker,
     required this.dayReportRepository,
+    required this.shiftRepository,
+    required this.cashVoucherService,
+    required this.database,
+    required this.user,
     required this.storeId,
     required this.role,
   });
@@ -35,6 +45,10 @@ class PosPage extends StatefulWidget {
   final PullCatalog pullCatalog;
   final OutboxWorker outboxWorker;
   final DayReportRepository dayReportRepository;
+  final ShiftRepository shiftRepository;
+  final CashVoucherService cashVoucherService;
+  final AppDatabase database;
+  final AuthUser user;
   final String storeId;
   final String role;
 
@@ -155,6 +169,47 @@ class _PosPageState extends State<PosPage> {
             },
             icon: const Icon(Icons.bar_chart_outlined),
             tooltip: 'Báo cáo ngày',
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CashLedgerPage(
+                    db: widget.database,
+                    cashVoucherService: widget.cashVoucherService,
+                    shiftRepository: widget.shiftRepository,
+                    storeId: widget.storeId,
+                    userId: widget.user.id,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            tooltip: 'Thu chi',
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CloseShiftPage(
+                    shiftRepository: widget.shiftRepository,
+                    storeId: widget.storeId,
+                    user: widget.user,
+                    dayReportRepository: widget.dayReportRepository,
+                    productRepository: widget.productRepository,
+                    customerRepository: widget.customerRepository,
+                    debtPaymentService: widget.debtPaymentService,
+                    cashVoucherService: widget.cashVoucherService,
+                    database: widget.database,
+                    pullCatalog: widget.pullCatalog,
+                    checkoutService: widget.checkoutService,
+                    outboxWorker: widget.outboxWorker,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.lock_clock_outlined),
+            tooltip: 'Đóng ca',
           ),
           IconButton(
             onPressed: () {

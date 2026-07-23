@@ -7,6 +7,7 @@ import 'data/sync/pull_catalog.dart';
 import 'data/sync/sync_scheduler.dart';
 import 'features/auth/auth_repository.dart';
 import 'features/auth/login_page.dart';
+import 'features/cash/cash_voucher_service.dart';
 import 'features/customers/customer_repository.dart';
 import 'features/customers/debt_payment_service.dart';
 import 'features/pos/checkout_service.dart';
@@ -38,6 +39,10 @@ void main() {
     db: database,
     shiftRepository: shiftRepository,
   );
+  final cashVoucherService = CashVoucherService(
+    db: database,
+    shiftRepository: shiftRepository,
+  );
   final pullCatalog = PullCatalog(db: database, dio: apiClient.dio);
   final outboxWorker = OutboxWorker(db: database, dio: apiClient.dio);
   final checkoutService = CheckoutService(
@@ -55,6 +60,7 @@ void main() {
         productRepository: productRepository,
         customerRepository: customerRepository,
         debtPaymentService: debtPaymentService,
+        cashVoucherService: cashVoucherService,
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
         outboxWorker: outboxWorker,
@@ -73,6 +79,7 @@ class PosApp extends StatelessWidget {
     required this.productRepository,
     required this.customerRepository,
     required this.debtPaymentService,
+    required this.cashVoucherService,
     required this.pullCatalog,
     required this.checkoutService,
     required this.outboxWorker,
@@ -85,6 +92,7 @@ class PosApp extends StatelessWidget {
   final ProductRepository productRepository;
   final CustomerRepository customerRepository;
   final DebtPaymentService debtPaymentService;
+  final CashVoucherService cashVoucherService;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
   final OutboxWorker outboxWorker;
@@ -109,6 +117,8 @@ class PosApp extends StatelessWidget {
         productRepository: productRepository,
         customerRepository: customerRepository,
         debtPaymentService: debtPaymentService,
+        cashVoucherService: cashVoucherService,
+        database: database,
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
         outboxWorker: outboxWorker,
