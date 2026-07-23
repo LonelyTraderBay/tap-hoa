@@ -356,6 +356,100 @@ describe('Cash vouchers sync', () => {
     expect(closed.body.closingCash).toBe(closingCash);
   });
 
+  it('same-push debt payment and close includes payment in expectedCash', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({ where: { sku: 'STING-330' } });
+    if (!product) throw new Error('missing seed product');
+
+    const customerId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/customers')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ id: customerId, storeId, name: 'Debt Same Push' })
+      .expect(201);
+
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 500000, clientId: shiftId })
+      .expect(201);
+
+    const debtSaleId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-single-push',
+        sales: [
+          {
+            id: debtSaleId,
+            storeId,
+            shiftId,
+            soldById: login.user.id,
+            paymentMethod: 'debt',
+            cashAmount: 0,
+            transferAmount: 0,
+            debtAmount: 100000,
+            discountVnd: 0,
+            totalVnd: 100000,
+            customerId,
+            clientCreatedAt: new Date().toISOString(),
+            lines: [
+              {
+                productId: product.id,
+                qty: '10',
+                unitPrice: 10000,
+                lineTotal: 100000,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201);
+
+    const paymentId = randomUUID();
+    const closingCash = 550000;
+    const push = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-single-push',
+        sales: [],
+        shiftCloses: [
+          {
+            id: shiftId,
+            closingCash,
+            closedAt: new Date().toISOString(),
+          },
+        ],
+        debtPayments: [
+          {
+            id: paymentId,
+            storeId,
+            customerId,
+            amountVnd: 50000,
+            paymentMethod: 'cash',
+            shiftId,
+            clientCreatedAt: new Date().toISOString(),
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(push.body.acceptedShiftCloseIds).toContain(shiftId);
+    expect(push.body.acceptedDebtPaymentIds).toContain(paymentId);
+
+    const shift = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
+    expect(shift.expectedCashVnd).toBe(550000);
+    expect(shift.varianceVnd).toBe(0);
+    expect(shift.closingCash).toBe(closingCash);
+  });
+
   it('pull returns seeded categories and pushed vouchers', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())

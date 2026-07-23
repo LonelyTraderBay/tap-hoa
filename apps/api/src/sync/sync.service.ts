@@ -147,6 +147,11 @@ export class SyncService {
       body.cashVouchers ?? [],
     );
 
+    const debtResult = await this.pushDebtPayments(
+      user,
+      body.debtPayments ?? [],
+    );
+
     const acceptedShiftCloseIds: string[] = [];
     for (const shift of body.shiftCloses ?? []) {
       const reason = await this.processShiftClose(user, shift);
@@ -156,11 +161,6 @@ export class SyncService {
         acceptedShiftCloseIds.push(shift.id);
       }
     }
-
-    const debtResult = await this.pushDebtPayments(
-      user,
-      body.debtPayments ?? [],
-    );
     const customerResult = await this.pushCustomerUpserts(
       user,
       body.customerUpserts ?? [],
