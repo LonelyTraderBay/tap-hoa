@@ -34,6 +34,10 @@ class PullCatalog {
         .cast<Map<String, dynamic>>();
     final debtLedger = (data['debtLedger'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
+    final cashCategories = (data['cashCategories'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final cashVouchers = (data['cashVouchers'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
     final serverTime = data['serverTime'] as String?;
 
     await _db.upsertProductsAndStocks(products: products, stocks: stocks);
@@ -41,6 +45,12 @@ class PullCatalog {
       customers: customers,
       debtLedger: debtLedger,
     );
+    for (final category in cashCategories) {
+      await _db.upsertCashCategory(category);
+    }
+    for (final voucher in cashVouchers) {
+      await _db.upsertCashVoucher(voucher);
+    }
     if (serverTime != null) {
       await _db.setLastPullAt(storeId, DateTime.parse(serverTime));
     }

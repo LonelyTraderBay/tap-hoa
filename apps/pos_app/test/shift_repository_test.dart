@@ -87,6 +87,9 @@ void main() {
     await repository.closeShift(
       shiftId: shiftId,
       closingCash: 350000,
+      expectedCashVnd: 350000,
+      varianceVnd: 0,
+      transferInShiftVnd: 0,
       note: 'done',
     );
 
@@ -94,6 +97,9 @@ void main() {
       db.shiftsLocal,
     )..where((row) => row.id.equals(shiftId))).getSingle();
     expect(shift.closedAt, isNotNull);
+    expect(shift.expectedCashVnd, 350000);
+    expect(shift.varianceVnd, 0);
+    expect(shift.transferInShiftVnd, 0);
     final closeEntry = await (db.select(
       db.outboxEntries,
     )..where((entry) => entry.entityType.equals('shift_close'))).getSingle();

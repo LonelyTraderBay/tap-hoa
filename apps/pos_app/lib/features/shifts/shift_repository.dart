@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/local/database.dart';
+import '../cash/expected_cash.dart';
 
 class ShiftAlreadyOpenException implements Exception {
   const ShiftAlreadyOpenException();
@@ -122,9 +123,81 @@ class ShiftRepository {
     return shift;
   }
 
+  Future<ShiftCashBreakdown> breakdownForOpenShift({
+    required String storeId,
+    required String userId,
+  }) async {
+    final shift = await requireOpenShift(storeId: storeId, userId: userId);
+    return breakdownForShift(shift.id, openingCash: shift.openingCash);
+  }
+
+  Future<ShiftCashBreakdown> breakdownForShift(
+    String shiftId, {
+    required int openingCash,
+  }) async {
+    final sales = await (_db.select(_db.salesLocal)
+          ..where((s) => s.shiftId.equals(shiftId)))
+        .get();
+    var saleCash = 0;
+    var saleTransfer = 0;
+    for (final sale in sales) {
+      saleCash += sale.cashAmount;
+      saleTransfer += sale.transferAmount;
+    }
+
+    final debtPayments = await (_db.select(_db.debtLedgerLocal)
+          ..where(
+            (d) => d.shiftId.equals(shiftId) & d.type.equals('payment'),
+          ))
+        .get();
+    var debtPaymentCash = 0;
+    var debtPaymentTransfer = 0;
+    for (final payment in debtPayments) {
+      if (payment.paymentMethod == 'cash') {
+        debtPaymentCash += payment.amountVnd;
+      } else if (payment.paymentMethod == 'transfer') {
+        debtPaymentTransfer += payment.amountVnd;
+      }
+    }
+
+    final vouchers = await (_db.select(_db.cashVouchersLocal)
+          ..where((v) => v.shiftId.equals(shiftId)))
+        .get();
+    var voucherCashIn = 0;
+    var voucherCashOut = 0;
+    var voucherTransferIn = 0;
+    var voucherTransferOut = 0;
+    for (final voucher in vouchers) {
+      if (voucher.direction == 'in' && voucher.channel == 'cash') {
+        voucherCashIn += voucher.amountVnd;
+      } else if (voucher.direction == 'out' && voucher.channel == 'cash') {
+        voucherCashOut += voucher.amountVnd;
+      } else if (voucher.direction == 'in' && voucher.channel == 'transfer') {
+        voucherTransferIn += voucher.amountVnd;
+      } else if (voucher.direction == 'out' && voucher.channel == 'transfer') {
+        voucherTransferOut += voucher.amountVnd;
+      }
+    }
+
+    return computeBreakdown(
+      openingCash: openingCash,
+      saleCashTotal: saleCash,
+      saleTransferTotal: saleTransfer,
+      debtPaymentCashTotal: debtPaymentCash,
+      debtPaymentTransferTotal: debtPaymentTransfer,
+      voucherCashInTotal: voucherCashIn,
+      voucherCashOutTotal: voucherCashOut,
+      voucherTransferInTotal: voucherTransferIn,
+      voucherTransferOutTotal: voucherTransferOut,
+    );
+  }
+
   Future<void> closeShift({
     required String shiftId,
     required int closingCash,
+    required int expectedCashVnd,
+    required int varianceVnd,
+    required int transferInShiftVnd,
     String? note,
   }) async {
     final closedAt = DateTime.now();
@@ -136,6 +209,9 @@ class ShiftRepository {
           closedAt: Value(closedAt),
           closingCash: Value(closingCash),
           note: Value(note),
+          expectedCashVnd: Value(expectedCashVnd),
+          varianceVnd: Value(varianceVnd),
+          transferInShiftVnd: Value(transferInShiftVnd),
         ),
       );
       await _db
@@ -149,6 +225,9 @@ class ShiftRepository {
                 'closingCash': closingCash,
                 'note': note,
                 'closedAt': closedAt.toUtc().toIso8601String(),
+                'expectedCashVnd': expectedCashVnd,
+                'varianceVnd': varianceVnd,
+                'transferInShiftVnd': transferInShiftVnd,
               }),
               createdAt: closedAt,
             ),
