@@ -71,7 +71,10 @@ class PosApp extends StatelessWidget {
       title: 'Tap Hoa POS',
       builder: (context, child) => Column(
         children: [
-          SyncStatusBanner(db: database),
+          SafeArea(
+            bottom: false,
+            child: SyncStatusBanner(db: database),
+          ),
           Expanded(child: child ?? const SizedBox.shrink()),
         ],
       ),

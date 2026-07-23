@@ -32,9 +32,6 @@ void main() {
     await tester.pump();
 
     expect(find.text('1 đang chờ đồng bộ'), findsOneWidget);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
   });
 
   testWidgets('shows last sync error', (tester) async {
@@ -55,9 +52,24 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('insufficient_stock'), findsOneWidget);
+  });
 
-    await tester.pumpWidget(const SizedBox.shrink());
+  testWidgets('ignores pending non-sale outbox entries', (tester) async {
+    await db.into(db.outboxEntries).insert(
+      OutboxEntriesCompanion.insert(
+        id: 'outbox-shift',
+        entityType: 'shift_open',
+        payloadJson: '{"shiftId":"shift-1"}',
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: SyncStatusBanner(db: db))),
+    );
     await tester.pump();
+
+    expect(find.textContaining('đang chờ đồng bộ'), findsNothing);
   });
 
   testWidgets('hides when outbox is clear', (tester) async {
@@ -69,8 +81,5 @@ void main() {
     expect(find.byType(SyncStatusBanner), findsOneWidget);
     expect(find.textContaining('đồng bộ'), findsNothing);
     expect(find.textContaining('Lỗi:'), findsNothing);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
   });
 }

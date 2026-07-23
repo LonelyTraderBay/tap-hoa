@@ -153,7 +153,10 @@ class AppDatabase extends _$AppDatabase {
 
     return query.watch().map((entries) {
       final pendingCount = entries
-          .where((entry) => entry.status == 'pending')
+          .where(
+            (entry) =>
+                entry.status == 'pending' && entry.entityType == 'sale',
+          )
           .length;
       final lastError = entries
           .where((entry) => entry.status == 'error' && entry.lastError != null)

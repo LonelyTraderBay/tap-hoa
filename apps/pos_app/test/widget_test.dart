@@ -9,6 +9,7 @@ import 'package:pos_app/features/auth/auth_repository.dart';
 import 'package:pos_app/features/pos/checkout_service.dart';
 import 'package:pos_app/features/products/product_repository.dart';
 import 'package:pos_app/features/shifts/shift_repository.dart';
+import 'package:pos_app/features/sync_status/sync_status_banner.dart';
 import 'package:pos_app/main.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
@@ -38,6 +39,31 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   }
+
+  testWidgets('wraps sync banner in top safe area', (tester) async {
+    await tester.pumpWidget(
+      PosApp(
+        database: database,
+        authRepository: MockAuthRepository(),
+        shiftRepository: MockShiftRepository(),
+        productRepository: MockProductRepository(),
+        pullCatalog: MockPullCatalog(),
+        checkoutService: MockCheckoutService(),
+        outboxWorker: MockOutboxWorker(),
+      ),
+    );
+
+    expect(
+      find.descendant(
+        of: find.byType(SafeArea),
+        matching: find.byType(SyncStatusBanner),
+      ),
+      findsOneWidget,
+    );
+    final safeArea = tester.widget<SafeArea>(find.byType(SafeArea));
+    expect(safeArea.bottom, isFalse);
+    await unmount(tester);
+  });
 
   testWidgets('shows login form', (tester) async {
     await tester.pumpWidget(
