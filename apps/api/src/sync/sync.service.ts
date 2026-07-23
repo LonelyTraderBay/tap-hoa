@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PaymentMethod, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { CustomersService } from '../customers/customers.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { PushSaleDto } from './dto/push-sale.dto';
@@ -12,6 +13,7 @@ const PAYMENT_METHODS = new Set<string>(Object.values(PaymentMethod));
 export class SyncService {
   constructor(
     private readonly productsService: ProductsService,
+    private readonly customersService: CustomersService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -103,6 +105,7 @@ export class SyncService {
     }
 
     if (sale.debtAmount > 0) {
+      await this.ensureDebtCustomer(sale);
       const customer = await this.prisma.customer.findUnique({
         where: { id: sale.customerId! },
       });
@@ -205,6 +208,22 @@ export class SyncService {
       }
       throw error;
     }
+  }
+
+  private async ensureDebtCustomer(sale: PushSaleDto): Promise<void> {
+    const customerId = sale.customerId?.trim();
+    if (!customerId || !sale.customer || sale.customer.id !== customerId) {
+      return;
+    }
+    const name = sale.customer.name?.trim();
+    if (!name) {
+      return;
+    }
+    await this.customersService.create({
+      id: customerId,
+      name,
+      phone: sale.customer.phone ?? null,
+    });
   }
 
   private validateSalePayload(sale: PushSaleDto): string | null {

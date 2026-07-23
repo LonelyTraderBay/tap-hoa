@@ -5,6 +5,12 @@ export type PushSaleLineDto = {
   lineTotal: number;
 };
 
+export type PushSaleCustomerDto = {
+  id: string;
+  name: string;
+  phone?: string | null;
+};
+
 export type PushSaleDto = {
   id: string;
   storeId: string;
@@ -17,6 +23,7 @@ export type PushSaleDto = {
   discountVnd: number;
   totalVnd: number;
   customerId?: string | null;
+  customer?: PushSaleCustomerDto | null;
   clientCreatedAt: string;
   lines: PushSaleLineDto[];
 };

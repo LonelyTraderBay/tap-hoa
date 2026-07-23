@@ -134,6 +134,16 @@ void main() {
     final sale = await db.select(db.salesLocal).getSingle();
     expect(sale.debtAmount, 20000);
     expect(sale.customerId, customer.id);
+
+    final outbox = await (db.select(db.outboxEntries)
+          ..where((entry) => entry.entityType.equals('sale')))
+        .getSingle();
+    final payload = jsonDecode(outbox.payloadJson) as Map<String, dynamic>;
+    expect(payload['customer'], {
+      'id': customer.id,
+      'name': 'Anh Ba',
+      'phone': '0900111222',
+    });
   });
 
   test('customer repository lists only customers with debt', () async {

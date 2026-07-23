@@ -161,6 +161,13 @@ class CheckoutService {
             );
       }
 
+      CustomersLocalData? debtCustomer;
+      if (payment.debt > 0 && customerId != null) {
+        debtCustomer = await (_db.select(_db.customersLocal)
+              ..where((row) => row.id.equals(customerId)))
+            .getSingleOrNull();
+      }
+
       await _db.into(_db.outboxEntries).insert(
         OutboxEntriesCompanion.insert(
           id: outboxId,
@@ -177,6 +184,12 @@ class CheckoutService {
             'discountVnd': draft.discountVnd,
             'totalVnd': draft.totalVnd,
             'customerId': customerId,
+            if (debtCustomer != null)
+              'customer': {
+                'id': debtCustomer.id,
+                'name': debtCustomer.name,
+                'phone': debtCustomer.phone,
+              },
             'clientCreatedAt': clientCreatedAt.toUtc().toIso8601String(),
             'lines': [
               for (final line in draft.lines)
@@ -192,20 +205,15 @@ class CheckoutService {
         ),
       );
 
-      if (payment.debt > 0 && customerId != null) {
-        final customer = await (_db.select(_db.customersLocal)
-              ..where((row) => row.id.equals(customerId)))
-            .getSingleOrNull();
-        if (customer != null) {
-          await (_db.update(_db.customersLocal)
-                ..where((row) => row.id.equals(customerId)))
-              .write(
-            CustomersLocalCompanion(
-              balanceVnd: Value(customer.balanceVnd + payment.debt),
-              updatedAt: Value(DateTime.now()),
-            ),
-          );
-        }
+      if (debtCustomer != null) {
+        await (_db.update(_db.customersLocal)
+              ..where((row) => row.id.equals(debtCustomer!.id)))
+            .write(
+          CustomersLocalCompanion(
+            balanceVnd: Value(debtCustomer.balanceVnd + payment.debt),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
       }
     });
 

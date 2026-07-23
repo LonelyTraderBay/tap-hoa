@@ -53,6 +53,74 @@ describe('Customers debt sync', () => {
 
   afterAll(() => app.close());
 
+  it('POST /sync/push upserts offline customer embedded in debt sale', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+
+    const customerId = randomUUID();
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 500000, clientId: shiftId })
+      .expect(201);
+
+    const saleId = randomUUID();
+    const debtAmount = 20000;
+    const sale = {
+      id: saleId,
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      paymentMethod: 'debt',
+      cashAmount: 0,
+      transferAmount: 0,
+      debtAmount,
+      discountVnd: 0,
+      totalVnd: debtAmount,
+      customerId,
+      customer: { id: customerId, name: 'Offline Anh', phone: '0900999888' },
+      clientCreatedAt: new Date().toISOString(),
+      lines: [
+        {
+          productId: product.id,
+          qty: '2',
+          unitPrice: 10000,
+          lineTotal: debtAmount,
+        },
+      ],
+    };
+
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ deviceId: 'dev-offline-customer', sales: [sale] })
+      .expect(201);
+    expect(res.body.acceptedIds).toEqual([saleId]);
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+    expect(customer?.name).toBe('Offline Anh');
+    expect(customer?.phone).toBe('0900999888');
+    expect(customer?.balanceVnd).toBe(debtAmount);
+
+    await request(app.getHttpServer())
+      .post(`/shifts/${shiftId}/close`)
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ closingCash: 500000 })
+      .expect(201);
+  });
+
   it('POST /sync/push increases customer balance idempotently for debt sales', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())
