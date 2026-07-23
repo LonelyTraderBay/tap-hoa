@@ -176,6 +176,17 @@ export class SyncService {
       if (error instanceof Error && error.message === 'insufficient_stock') {
         return { accepted: false, reason: 'insufficient_stock' };
       }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const raced = await this.prisma.sale.findUnique({
+          where: { id: sale.id },
+        });
+        if (raced) {
+          return { accepted: true };
+        }
+      }
       throw error;
     }
   }

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'data/sync/outbox_worker.dart';
+import 'package:pos_app/data/sync/outbox_worker.dart';
 
 class SyncScheduler extends StatefulWidget {
   const SyncScheduler({
