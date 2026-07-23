@@ -102,6 +102,15 @@ export class SyncService {
       return { accepted: false, reason: 'shift_not_found' };
     }
 
+    if (sale.debtAmount > 0) {
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: sale.customerId! },
+      });
+      if (!customer) {
+        return { accepted: false, reason: 'customer_not_found' };
+      }
+    }
+
     try {
       await this.prisma.$transaction(async (tx) => {
         for (const line of sale.lines) {
@@ -161,6 +170,13 @@ export class SyncService {
           },
         });
 
+        if (sale.debtAmount > 0 && sale.customerId) {
+          await tx.customer.update({
+            where: { id: sale.customerId },
+            data: { balanceVnd: { increment: sale.debtAmount } },
+          });
+        }
+
         await tx.syncCursor.upsert({
           where: { deviceId },
           create: {
@@ -209,6 +225,12 @@ export class SyncService {
       sale.cashAmount + sale.transferAmount + sale.debtAmount;
     if (paymentTotal !== sale.totalVnd) {
       return 'payment_mismatch';
+    }
+
+    if (sale.debtAmount > 0) {
+      if (!sale.customerId || sale.customerId.trim() === '') {
+        return 'customer_required';
+      }
     }
 
     for (const line of sale.lines) {

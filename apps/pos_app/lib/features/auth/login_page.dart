@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import 'auth_repository.dart';
+import '../customers/customer_repository.dart';
 import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
 import '../reports/day_report_repository.dart';
@@ -16,6 +17,7 @@ class LoginPage extends StatefulWidget {
     required this.shiftRepository,
     required this.dayReportRepository,
     required this.productRepository,
+    required this.customerRepository,
     required this.pullCatalog,
     required this.checkoutService,
     required this.outboxWorker,
@@ -25,6 +27,7 @@ class LoginPage extends StatefulWidget {
   final ShiftRepository shiftRepository;
   final DayReportRepository dayReportRepository;
   final ProductRepository productRepository;
+  final CustomerRepository customerRepository;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
   final OutboxWorker outboxWorker;
@@ -64,6 +67,7 @@ class _LoginPageState extends State<LoginPage> {
               user: user,
               dayReportRepository: widget.dayReportRepository,
               productRepository: widget.productRepository,
+              customerRepository: widget.customerRepository,
               pullCatalog: widget.pullCatalog,
               checkoutService: widget.checkoutService,
               outboxWorker: widget.outboxWorker,

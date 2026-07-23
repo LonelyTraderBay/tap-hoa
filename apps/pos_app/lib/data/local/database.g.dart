@@ -3608,6 +3608,366 @@ class MetaLocalCompanion extends UpdateCompanion<MetaLocalData> {
   }
 }
 
+class $CustomersLocalTable extends CustomersLocal
+    with TableInfo<$CustomersLocalTable, CustomersLocalData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomersLocalTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+    'phone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _balanceVndMeta = const VerificationMeta(
+    'balanceVnd',
+  );
+  @override
+  late final GeneratedColumn<int> balanceVnd = GeneratedColumn<int>(
+    'balance_vnd',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    phone,
+    balanceVnd,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'customers_local';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustomersLocalData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+        _phoneMeta,
+        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
+      );
+    }
+    if (data.containsKey('balance_vnd')) {
+      context.handle(
+        _balanceVndMeta,
+        balanceVnd.isAcceptableOrUnknown(data['balance_vnd']!, _balanceVndMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustomersLocalData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomersLocalData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      phone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}phone'],
+      ),
+      balanceVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}balance_vnd'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CustomersLocalTable createAlias(String alias) {
+    return $CustomersLocalTable(attachedDatabase, alias);
+  }
+}
+
+class CustomersLocalData extends DataClass
+    implements Insertable<CustomersLocalData> {
+  final String id;
+  final String name;
+  final String? phone;
+  final int balanceVnd;
+  final DateTime updatedAt;
+  const CustomersLocalData({
+    required this.id,
+    required this.name,
+    this.phone,
+    required this.balanceVnd,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    map['balance_vnd'] = Variable<int>(balanceVnd);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CustomersLocalCompanion toCompanion(bool nullToAbsent) {
+    return CustomersLocalCompanion(
+      id: Value(id),
+      name: Value(name),
+      phone: phone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(phone),
+      balanceVnd: Value(balanceVnd),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CustomersLocalData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomersLocalData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      balanceVnd: serializer.fromJson<int>(json['balanceVnd']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'phone': serializer.toJson<String?>(phone),
+      'balanceVnd': serializer.toJson<int>(balanceVnd),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CustomersLocalData copyWith({
+    String? id,
+    String? name,
+    Value<String?> phone = const Value.absent(),
+    int? balanceVnd,
+    DateTime? updatedAt,
+  }) => CustomersLocalData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    phone: phone.present ? phone.value : this.phone,
+    balanceVnd: balanceVnd ?? this.balanceVnd,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CustomersLocalData copyWithCompanion(CustomersLocalCompanion data) {
+    return CustomersLocalData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      balanceVnd: data.balanceVnd.present
+          ? data.balanceVnd.value
+          : this.balanceVnd,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomersLocalData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('phone: $phone, ')
+          ..write('balanceVnd: $balanceVnd, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, phone, balanceVnd, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomersLocalData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.phone == this.phone &&
+          other.balanceVnd == this.balanceVnd &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CustomersLocalCompanion extends UpdateCompanion<CustomersLocalData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> phone;
+  final Value<int> balanceVnd;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CustomersLocalCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.balanceVnd = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CustomersLocalCompanion.insert({
+    required String id,
+    required String name,
+    this.phone = const Value.absent(),
+    this.balanceVnd = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       updatedAt = Value(updatedAt);
+  static Insertable<CustomersLocalData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? phone,
+    Expression<int>? balanceVnd,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (phone != null) 'phone': phone,
+      if (balanceVnd != null) 'balance_vnd': balanceVnd,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CustomersLocalCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? phone,
+    Value<int>? balanceVnd,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CustomersLocalCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+      balanceVnd: balanceVnd ?? this.balanceVnd,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (balanceVnd.present) {
+      map['balance_vnd'] = Variable<int>(balanceVnd.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomersLocalCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('phone: $phone, ')
+          ..write('balanceVnd: $balanceVnd, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3619,6 +3979,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ShiftsLocalTable shiftsLocal = $ShiftsLocalTable(this);
   late final $StoresLocalTable storesLocal = $StoresLocalTable(this);
   late final $MetaLocalTable metaLocal = $MetaLocalTable(this);
+  late final $CustomersLocalTable customersLocal = $CustomersLocalTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3632,6 +3993,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     shiftsLocal,
     storesLocal,
     metaLocal,
+    customersLocal,
   ];
 }
 
@@ -5525,6 +5887,214 @@ typedef $$MetaLocalTableProcessedTableManager =
       MetaLocalData,
       PrefetchHooks Function()
     >;
+typedef $$CustomersLocalTableCreateCompanionBuilder =
+    CustomersLocalCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> phone,
+      Value<int> balanceVnd,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CustomersLocalTableUpdateCompanionBuilder =
+    CustomersLocalCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> phone,
+      Value<int> balanceVnd,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CustomersLocalTableFilterComposer
+    extends Composer<_$AppDatabase, $CustomersLocalTable> {
+  $$CustomersLocalTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get balanceVnd => $composableBuilder(
+    column: $table.balanceVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CustomersLocalTableOrderingComposer
+    extends Composer<_$AppDatabase, $CustomersLocalTable> {
+  $$CustomersLocalTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get balanceVnd => $composableBuilder(
+    column: $table.balanceVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CustomersLocalTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CustomersLocalTable> {
+  $$CustomersLocalTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<int> get balanceVnd => $composableBuilder(
+    column: $table.balanceVnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CustomersLocalTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CustomersLocalTable,
+          CustomersLocalData,
+          $$CustomersLocalTableFilterComposer,
+          $$CustomersLocalTableOrderingComposer,
+          $$CustomersLocalTableAnnotationComposer,
+          $$CustomersLocalTableCreateCompanionBuilder,
+          $$CustomersLocalTableUpdateCompanionBuilder,
+          (
+            CustomersLocalData,
+            BaseReferences<
+              _$AppDatabase,
+              $CustomersLocalTable,
+              CustomersLocalData
+            >,
+          ),
+          CustomersLocalData,
+          PrefetchHooks Function()
+        > {
+  $$CustomersLocalTableTableManager(
+    _$AppDatabase db,
+    $CustomersLocalTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustomersLocalTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CustomersLocalTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CustomersLocalTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<int> balanceVnd = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomersLocalCompanion(
+                id: id,
+                name: name,
+                phone: phone,
+                balanceVnd: balanceVnd,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> phone = const Value.absent(),
+                Value<int> balanceVnd = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CustomersLocalCompanion.insert(
+                id: id,
+                name: name,
+                phone: phone,
+                balanceVnd: balanceVnd,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CustomersLocalTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CustomersLocalTable,
+      CustomersLocalData,
+      $$CustomersLocalTableFilterComposer,
+      $$CustomersLocalTableOrderingComposer,
+      $$CustomersLocalTableAnnotationComposer,
+      $$CustomersLocalTableCreateCompanionBuilder,
+      $$CustomersLocalTableUpdateCompanionBuilder,
+      (
+        CustomersLocalData,
+        BaseReferences<_$AppDatabase, $CustomersLocalTable, CustomersLocalData>,
+      ),
+      CustomersLocalData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5545,4 +6115,6 @@ class $AppDatabaseManager {
       $$StoresLocalTableTableManager(_db, _db.storesLocal);
   $$MetaLocalTableTableManager get metaLocal =>
       $$MetaLocalTableTableManager(_db, _db.metaLocal);
+  $$CustomersLocalTableTableManager get customersLocal =>
+      $$CustomersLocalTableTableManager(_db, _db.customersLocal);
 }

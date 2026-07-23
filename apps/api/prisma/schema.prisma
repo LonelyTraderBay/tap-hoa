@@ -96,6 +96,16 @@ model Shift {
   sales        Sale[]
 }
 
+model Customer {
+  id         String   @id @default(uuid())
+  name       String
+  phone      String?
+  balanceVnd Int      @default(0)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  sales      Sale[]
+}
+
 model Sale {
   id             String        @id @default(uuid())
   storeId        String
@@ -114,6 +124,7 @@ model Sale {
   store          Store         @relation(fields: [storeId], references: [id])
   shift          Shift         @relation(fields: [shiftId], references: [id])
   soldBy         User          @relation("SoldBy", fields: [soldById], references: [id])
+  customer       Customer?     @relation(fields: [customerId], references: [id])
   lines          SaleLine[]
   @@index([storeId, clientCreatedAt])
 }

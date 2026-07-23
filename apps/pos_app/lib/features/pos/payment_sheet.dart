@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../customers/customer_picker_sheet.dart';
+import '../customers/customer_repository.dart';
 import 'cart.dart';
 import 'checkout_service.dart';
 
@@ -9,17 +11,20 @@ class PaymentSheet extends StatefulWidget {
     super.key,
     required this.cart,
     required this.checkoutService,
+    required this.customerRepository,
     required this.onCompleted,
   });
 
   final Cart cart;
   final CheckoutService checkoutService;
+  final CustomerRepository customerRepository;
   final VoidCallback onCompleted;
 
   static Future<void> show(
     BuildContext context, {
     required Cart cart,
     required CheckoutService checkoutService,
+    required CustomerRepository customerRepository,
     required VoidCallback onCompleted,
   }) {
     return showModalBottomSheet<void>(
@@ -28,6 +33,7 @@ class PaymentSheet extends StatefulWidget {
       builder: (_) => PaymentSheet(
         cart: cart,
         checkoutService: checkoutService,
+        customerRepository: customerRepository,
         onCompleted: onCompleted,
       ),
     );
@@ -43,6 +49,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
   final _debtController = TextEditingController();
   bool _isSubmitting = false;
   String? _error;
+  CustomerRecord? _selectedCustomer;
 
   int get _totalVnd => widget.cart.totalVnd;
 
@@ -52,6 +59,8 @@ class _PaymentSheetState extends State<PaymentSheet> {
     final debt = int.tryParse(_debtController.text.trim()) ?? 0;
     return cash + transfer + debt;
   }
+
+  int get _debtVnd => int.tryParse(_debtController.text.trim()) ?? 0;
 
   @override
   void initState() {
@@ -72,11 +81,25 @@ class _PaymentSheetState extends State<PaymentSheet> {
 
   void _onAmountChanged() => setState(() {});
 
+  Future<void> _pickCustomer() async {
+    final customer = await CustomerPickerSheet.show(
+      context,
+      repository: widget.customerRepository,
+    );
+    if (!mounted || customer == null) return;
+    setState(() => _selectedCustomer = customer);
+  }
+
   Future<void> _complete() async {
     final cash = int.tryParse(_cashController.text.trim()) ?? 0;
     final transfer = int.tryParse(_transferController.text.trim()) ?? 0;
     final debt = int.tryParse(_debtController.text.trim()) ?? 0;
     final payment = PaymentSplit(cash: cash, transfer: transfer, debt: debt);
+
+    if (debt > 0 && _selectedCustomer == null) {
+      setState(() => _error = 'Chọn khách hàng cho công nợ');
+      return;
+    }
 
     setState(() {
       _isSubmitting = true;
@@ -84,7 +107,11 @@ class _PaymentSheetState extends State<PaymentSheet> {
     });
 
     try {
-      await widget.checkoutService.complete(cart: widget.cart, payment: payment);
+      await widget.checkoutService.complete(
+        cart: widget.cart,
+        payment: payment,
+        customerId: _selectedCustomer?.id,
+      );
       if (!mounted) return;
       Navigator.of(context).pop();
       widget.onCompleted();
@@ -94,6 +121,9 @@ class _PaymentSheetState extends State<PaymentSheet> {
     } on InsufficientStockException {
       if (!mounted) return;
       setState(() => _error = 'Không đủ tồn kho');
+    } on StateError catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.message);
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'Thanh toán thất bại');
@@ -135,6 +165,24 @@ class _PaymentSheetState extends State<PaymentSheet> {
           _amountField('Chuyển khoản', _transferController),
           const SizedBox(height: 12),
           _amountField('Công nợ', _debtController),
+          if (_debtVnd > 0) ...[
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                _selectedCustomer == null
+                    ? 'Chưa chọn khách hàng'
+                    : _selectedCustomer!.name,
+              ),
+              subtitle: _selectedCustomer?.phone != null
+                  ? Text(_selectedCustomer!.phone!)
+                  : null,
+              trailing: TextButton(
+                onPressed: _isSubmitting ? null : _pickCustomer,
+                child: const Text('Chọn khách'),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Text(
             remaining == 0

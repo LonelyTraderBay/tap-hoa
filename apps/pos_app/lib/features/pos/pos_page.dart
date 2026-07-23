@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
+import '../customers/customer_repository.dart';
+import '../customers/debt_customer_list_page.dart';
 import '../reports/day_report_page.dart';
 import '../reports/day_report_repository.dart';
 import '../products/product_list_page.dart';
@@ -16,6 +18,7 @@ class PosPage extends StatefulWidget {
     super.key,
     required this.productRepository,
     required this.checkoutService,
+    required this.customerRepository,
     required this.pullCatalog,
     required this.outboxWorker,
     required this.dayReportRepository,
@@ -25,6 +28,7 @@ class PosPage extends StatefulWidget {
 
   final ProductRepository productRepository;
   final CheckoutService checkoutService;
+  final CustomerRepository customerRepository;
   final PullCatalog pullCatalog;
   final OutboxWorker outboxWorker;
   final DayReportRepository dayReportRepository;
@@ -77,6 +81,7 @@ class _PosPageState extends State<PosPage> {
       context,
       cart: _cart,
       checkoutService: widget.checkoutService,
+      customerRepository: widget.customerRepository,
       onCompleted: () {
         setState(() {
           _cart.lines.clear();
@@ -145,6 +150,19 @@ class _PosPageState extends State<PosPage> {
             },
             icon: const Icon(Icons.bar_chart_outlined),
             tooltip: 'Báo cáo ngày',
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DebtCustomerListPage(
+                    repository: widget.customerRepository,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.people_outline),
+            tooltip: 'Khách nợ',
           ),
           IconButton(
             onPressed: () {

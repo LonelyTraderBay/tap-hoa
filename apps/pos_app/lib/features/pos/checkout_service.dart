@@ -78,6 +78,9 @@ class CheckoutService {
     if (payment.total != cart.totalVnd) {
       throw PaymentMismatchException(cart.totalVnd, payment.total);
     }
+    if (payment.debt > 0 && (customerId == null || customerId.isEmpty)) {
+      throw StateError('customer required for debt');
+    }
 
     final storeId = await _db.metaValue('currentStoreId');
     final userJson = await _db.metaValue('currentUser');
@@ -188,6 +191,22 @@ class CheckoutService {
           createdAt: clientCreatedAt,
         ),
       );
+
+      if (payment.debt > 0 && customerId != null) {
+        final customer = await (_db.select(_db.customersLocal)
+              ..where((row) => row.id.equals(customerId)))
+            .getSingleOrNull();
+        if (customer != null) {
+          await (_db.update(_db.customersLocal)
+                ..where((row) => row.id.equals(customerId)))
+              .write(
+            CustomersLocalCompanion(
+              balanceVnd: Value(customer.balanceVnd + payment.debt),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+        }
+      }
     });
 
     return saleId;

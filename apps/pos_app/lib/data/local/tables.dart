@@ -105,3 +105,14 @@ class MetaLocal extends Table {
   @override
   Set<Column> get primaryKey => {key};
 }
+
+class CustomersLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get phone => text().nullable()();
+  IntColumn get balanceVnd => integer().withDefault(const Constant(0))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
