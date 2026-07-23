@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { ShiftsService } from '../shifts/shifts.service';
 import {
+  PushCustomerUpsertDto,
+  PushDebtPaymentDto,
   PushSaleDto,
   PushShiftCloseDto,
   PushShiftOpenDto,
@@ -37,9 +39,16 @@ export class SyncService {
     this.assertStoreAccess(user, storeId);
     const serverTime = new Date();
 
-    const [products, stocks] = await Promise.all([
+    const [products, stocks, customers, debtLedger] = await Promise.all([
       this.productsService.findUpdatedSince(since),
       this.productsService.findStocksForStoreSince(storeId, since),
+      this.prisma.customer.findMany({
+        where: { storeId, updatedAt: { gt: since } },
+      }),
+      this.prisma.debtLedgerEntry.findMany({
+        where: { storeId, updatedAt: { gt: since } },
+        orderBy: { clientCreatedAt: 'asc' },
+      }),
     ]);
 
     return {
@@ -61,6 +70,30 @@ export class SyncService {
         qty: stock.qty.toString(),
         minQty: stock.minQty.toString(),
         updatedAt: stock.updatedAt.toISOString(),
+      })),
+      customers: customers.map((c) => ({
+        id: c.id,
+        storeId: c.storeId,
+        name: c.name,
+        phone: c.phone,
+        balanceVnd: c.balanceVnd,
+        creditLimitVnd: c.creditLimitVnd,
+        updatedAt: c.updatedAt.toISOString(),
+      })),
+      debtLedger: debtLedger.map((e) => ({
+        id: e.id,
+        storeId: e.storeId,
+        customerId: e.customerId,
+        type: e.type,
+        amountVnd: e.amountVnd,
+        balanceAfterVnd: e.balanceAfterVnd,
+        saleId: e.saleId,
+        shiftId: e.shiftId,
+        recordedById: e.recordedById,
+        paymentMethod: e.paymentMethod,
+        note: e.note,
+        clientCreatedAt: e.clientCreatedAt.toISOString(),
+        updatedAt: e.updatedAt.toISOString(),
       })),
       serverTime: serverTime.toISOString(),
     };
@@ -90,12 +123,135 @@ export class SyncService {
       }
     }
 
+    const debtResult = await this.pushDebtPayments(
+      user,
+      body.debtPayments ?? [],
+    );
+    const customerResult = await this.pushCustomerUpserts(
+      user,
+      body.customerUpserts ?? [],
+    );
+
     return {
       acceptedShiftIds,
       acceptedShiftCloseIds,
       rejectedShifts,
       ...salesResult,
+      ...debtResult,
+      ...customerResult,
     };
+  }
+
+  private async pushDebtPayments(
+    user: AuthUser,
+    payments: PushDebtPaymentDto[],
+  ) {
+    const acceptedDebtPaymentIds: string[] = [];
+    const rejectedDebtPayments: { id: string; reason: string }[] = [];
+    for (const payment of payments) {
+      const result = await this.processDebtPayment(user, payment);
+      if (result.accepted) {
+        acceptedDebtPaymentIds.push(payment.id);
+      } else {
+        rejectedDebtPayments.push({
+          id: payment.id,
+          reason: result.reason ?? 'invalid_payment',
+        });
+      }
+    }
+    return { acceptedDebtPaymentIds, rejectedDebtPayments };
+  }
+
+  private async processDebtPayment(
+    user: AuthUser,
+    payment: PushDebtPaymentDto,
+  ): Promise<{ accepted: boolean; reason?: string }> {
+    if (
+      !payment.id ||
+      !payment.storeId ||
+      !payment.customerId ||
+      !Number.isSafeInteger(payment.amountVnd) ||
+      payment.amountVnd <= 0 ||
+      (payment.paymentMethod !== 'cash' &&
+        payment.paymentMethod !== 'transfer') ||
+      Number.isNaN(Date.parse(payment.clientCreatedAt))
+    ) {
+      return { accepted: false, reason: 'invalid_payment' };
+    }
+    this.assertStoreAccess(user, payment.storeId);
+
+    const existing = await this.prisma.debtLedgerEntry.findUnique({
+      where: { id: payment.id },
+    });
+    if (existing) {
+      return { accepted: true };
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const customer = await tx.customer.findUnique({
+          where: { id: payment.customerId },
+        });
+        if (!customer || customer.storeId !== payment.storeId) {
+          throw new Error('customer_not_found');
+        }
+        if (payment.amountVnd > customer.balanceVnd) {
+          throw new Error('payment_exceeds_balance');
+        }
+        const updated = await tx.customer.update({
+          where: { id: customer.id },
+          data: { balanceVnd: { decrement: payment.amountVnd } },
+        });
+        await tx.debtLedgerEntry.create({
+          data: {
+            id: payment.id,
+            storeId: payment.storeId,
+            customerId: payment.customerId,
+            type: 'payment',
+            amountVnd: payment.amountVnd,
+            balanceAfterVnd: updated.balanceVnd,
+            shiftId: payment.shiftId ?? null,
+            recordedById: user.userId,
+            paymentMethod: payment.paymentMethod,
+            note: payment.note?.trim() || null,
+            clientCreatedAt: new Date(payment.clientCreatedAt),
+          },
+        });
+      });
+      return { accepted: true };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'payment_exceeds_balance') {
+          return { accepted: false, reason: 'payment_exceeds_balance' };
+        }
+        if (error.message === 'customer_not_found') {
+          return { accepted: false, reason: 'customer_not_found' };
+        }
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return { accepted: true };
+      }
+      throw error;
+    }
+  }
+
+  private async pushCustomerUpserts(
+    user: AuthUser,
+    upserts: PushCustomerUpsertDto[],
+  ) {
+    const acceptedCustomerUpsertIds: string[] = [];
+    for (const dto of upserts) {
+      try {
+        await this.customersService.create(user, dto);
+        acceptedCustomerUpsertIds.push(dto.id);
+      } catch {
+        // soft-reject per item
+      }
+    }
+    return { acceptedCustomerUpsertIds };
   }
 
   private async processShiftOpen(user: AuthUser, shift: PushShiftOpenDto) {
@@ -210,6 +366,12 @@ export class SyncService {
       if (!customer || customer.storeId !== sale.storeId) {
         return { accepted: false, reason: 'customer_not_found' };
       }
+      if (
+        customer.creditLimitVnd != null &&
+        customer.balanceVnd + sale.debtAmount > customer.creditLimitVnd
+      ) {
+        return { accepted: false, reason: 'credit_limit_exceeded' };
+      }
     }
 
     try {
@@ -258,6 +420,23 @@ export class SyncService {
           await tx.customer.update({
             where: { id: sale.customerId },
             data: { balanceVnd: { increment: sale.debtAmount } },
+          });
+          const updated = await tx.customer.findUniqueOrThrow({
+            where: { id: sale.customerId },
+          });
+          await tx.debtLedgerEntry.create({
+            data: {
+              id: randomUUID(),
+              storeId: sale.storeId,
+              customerId: sale.customerId,
+              type: 'sale_debt',
+              amountVnd: sale.debtAmount,
+              balanceAfterVnd: updated.balanceVnd,
+              saleId: sale.id,
+              shiftId: sale.shiftId,
+              recordedById: user.userId,
+              clientCreatedAt,
+            },
           });
         }
 

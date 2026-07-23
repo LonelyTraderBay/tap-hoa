@@ -39,10 +39,13 @@ export class CustomersService {
         storeId: dto.storeId,
         name: dto.name.trim(),
         phone: dto.phone?.trim() || null,
+        creditLimitVnd: dto.creditLimitVnd ?? null,
       },
       update: {
         name: dto.name.trim(),
         phone: dto.phone?.trim() || null,
+        creditLimitVnd:
+          dto.creditLimitVnd === undefined ? undefined : dto.creditLimitVnd,
       },
       select: {
         id: true,
@@ -50,6 +53,7 @@ export class CustomersService {
         name: true,
         phone: true,
         balanceVnd: true,
+        creditLimitVnd: true,
         updatedAt: true,
         createdAt: true,
       },
@@ -69,6 +73,7 @@ export class CustomersService {
         name: true,
         phone: true,
         balanceVnd: true,
+        creditLimitVnd: true,
         updatedAt: true,
         createdAt: true,
       },

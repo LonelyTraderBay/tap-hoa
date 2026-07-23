@@ -7,6 +7,7 @@ import 'package:pos_app/data/sync/outbox_worker.dart';
 import 'package:pos_app/data/sync/pull_catalog.dart';
 import 'package:pos_app/features/auth/auth_repository.dart';
 import 'package:pos_app/features/customers/customer_repository.dart';
+import 'package:pos_app/features/customers/debt_payment_service.dart';
 import 'package:pos_app/features/pos/checkout_service.dart';
 import 'package:pos_app/features/products/product_repository.dart';
 import 'package:pos_app/features/reports/day_report_repository.dart';
@@ -30,6 +31,26 @@ class MockDayReportRepository extends Mock implements DayReportRepository {}
 
 class MockCustomerRepository extends Mock implements CustomerRepository {}
 
+class MockDebtPaymentService extends Mock implements DebtPaymentService {}
+
+PosApp _buildApp({
+  required AppDatabase database,
+  AuthRepository? authRepository,
+  ShiftRepository? shiftRepository,
+}) {
+  return PosApp(
+    database: database,
+    authRepository: authRepository ?? MockAuthRepository(),
+    shiftRepository: shiftRepository ?? MockShiftRepository(),
+    productRepository: MockProductRepository(),
+    pullCatalog: MockPullCatalog(),
+    checkoutService: MockCheckoutService(),
+    customerRepository: MockCustomerRepository(),
+    debtPaymentService: MockDebtPaymentService(),
+    outboxWorker: MockOutboxWorker(),
+    dayReportRepository: MockDayReportRepository(),
+  );
+}
 void main() {
   late AppDatabase database;
 
@@ -43,23 +64,12 @@ void main() {
 
   Future<void> unmount(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    // Drift stream cancel schedules a zero-duration timer; flush it.
+    await tester.pump(const Duration(milliseconds: 1));
   }
 
   testWidgets('wraps sync banner in top safe area', (tester) async {
-    await tester.pumpWidget(
-      PosApp(
-        database: database,
-        authRepository: MockAuthRepository(),
-        shiftRepository: MockShiftRepository(),
-        productRepository: MockProductRepository(),
-        pullCatalog: MockPullCatalog(),
-        checkoutService: MockCheckoutService(),
-        customerRepository: MockCustomerRepository(),
-        outboxWorker: MockOutboxWorker(),
-        dayReportRepository: MockDayReportRepository(),
-      ),
-    );
+    await tester.pumpWidget(_buildApp(database: database));
 
     expect(
       find.descendant(
@@ -74,19 +84,7 @@ void main() {
   });
 
   testWidgets('shows login form', (tester) async {
-    await tester.pumpWidget(
-      PosApp(
-        database: database,
-        authRepository: MockAuthRepository(),
-        shiftRepository: MockShiftRepository(),
-        productRepository: MockProductRepository(),
-        pullCatalog: MockPullCatalog(),
-        checkoutService: MockCheckoutService(),
-        customerRepository: MockCustomerRepository(),
-        outboxWorker: MockOutboxWorker(),
-        dayReportRepository: MockDayReportRepository(),
-      ),
-    );
+    await tester.pumpWidget(_buildApp(database: database));
 
     expect(find.text('Tap Hoa POS'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Số điện thoại'), findsOneWidget);
@@ -112,16 +110,10 @@ void main() {
       ],
     );
     await tester.pumpWidget(
-      PosApp(
+      _buildApp(
         database: database,
         authRepository: repository,
         shiftRepository: shiftRepository,
-        productRepository: MockProductRepository(),
-        pullCatalog: MockPullCatalog(),
-        checkoutService: MockCheckoutService(),
-        customerRepository: MockCustomerRepository(),
-        outboxWorker: MockOutboxWorker(),
-        dayReportRepository: MockDayReportRepository(),
       ),
     );
 

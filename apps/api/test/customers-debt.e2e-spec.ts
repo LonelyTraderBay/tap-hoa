@@ -30,6 +30,7 @@ describe('Customers debt sync', () => {
   });
 
   beforeEach(async () => {
+    await prisma.debtLedgerEntry.deleteMany();
     await prisma.saleLine.deleteMany();
     await prisma.sale.deleteMany();
     await prisma.customer.deleteMany();

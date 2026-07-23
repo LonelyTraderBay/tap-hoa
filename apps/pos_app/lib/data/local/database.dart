@@ -21,13 +21,14 @@ part 'database.g.dart';
     StoresLocal,
     MetaLocal,
     CustomersLocal,
+    DebtLedgerLocal,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -37,6 +38,10 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
         await migrator.createTable(customersLocal);
+      }
+      if (from < 3) {
+        await migrator.addColumn(customersLocal, customersLocal.creditLimitVnd);
+        await migrator.createTable(debtLedgerLocal);
       }
     },
   );
@@ -70,6 +75,45 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> setLastPullAt(String storeId, DateTime at) {
     return setMetaValue(_lastPullAtKey(storeId), at.toUtc().toIso8601String());
+  }
+
+  Future<void> upsertCustomersAndDebtLedger({
+    required List<Map<String, dynamic>> customers,
+    required List<Map<String, dynamic>> debtLedger,
+  }) async {
+    await transaction(() async {
+      for (final c in customers) {
+        await into(customersLocal).insertOnConflictUpdate(
+          CustomersLocalCompanion.insert(
+            id: c['id'] as String,
+            name: c['name'] as String,
+            phone: Value(c['phone'] as String?),
+            balanceVnd: Value(c['balanceVnd'] as int),
+            creditLimitVnd: Value(c['creditLimitVnd'] as int?),
+            updatedAt: DateTime.parse(c['updatedAt'] as String),
+          ),
+        );
+      }
+      for (final e in debtLedger) {
+        await into(debtLedgerLocal).insertOnConflictUpdate(
+          DebtLedgerLocalCompanion.insert(
+            id: e['id'] as String,
+            storeId: e['storeId'] as String,
+            customerId: e['customerId'] as String,
+            type: e['type'] as String,
+            amountVnd: e['amountVnd'] as int,
+            balanceAfterVnd: e['balanceAfterVnd'] as int,
+            saleId: Value(e['saleId'] as String?),
+            shiftId: Value(e['shiftId'] as String?),
+            recordedById: e['recordedById'] as String,
+            paymentMethod: Value(e['paymentMethod'] as String?),
+            note: Value(e['note'] as String?),
+            clientCreatedAt: DateTime.parse(e['clientCreatedAt'] as String),
+            updatedAt: DateTime.parse(e['updatedAt'] as String),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> upsertProductsAndStocks({

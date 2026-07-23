@@ -8,6 +8,7 @@ import 'data/sync/sync_scheduler.dart';
 import 'features/auth/auth_repository.dart';
 import 'features/auth/login_page.dart';
 import 'features/customers/customer_repository.dart';
+import 'features/customers/debt_payment_service.dart';
 import 'features/pos/checkout_service.dart';
 import 'features/products/product_repository.dart';
 import 'features/reports/day_report_repository.dart';
@@ -33,6 +34,10 @@ void main() {
     db: database,
     dio: apiClient.dio,
   );
+  final debtPaymentService = DebtPaymentService(
+    db: database,
+    shiftRepository: shiftRepository,
+  );
   final pullCatalog = PullCatalog(db: database, dio: apiClient.dio);
   final outboxWorker = OutboxWorker(db: database, dio: apiClient.dio);
   final checkoutService = CheckoutService(
@@ -49,6 +54,7 @@ void main() {
         dayReportRepository: dayReportRepository,
         productRepository: productRepository,
         customerRepository: customerRepository,
+        debtPaymentService: debtPaymentService,
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
         outboxWorker: outboxWorker,
@@ -66,6 +72,7 @@ class PosApp extends StatelessWidget {
     required this.dayReportRepository,
     required this.productRepository,
     required this.customerRepository,
+    required this.debtPaymentService,
     required this.pullCatalog,
     required this.checkoutService,
     required this.outboxWorker,
@@ -77,6 +84,7 @@ class PosApp extends StatelessWidget {
   final DayReportRepository dayReportRepository;
   final ProductRepository productRepository;
   final CustomerRepository customerRepository;
+  final DebtPaymentService debtPaymentService;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
   final OutboxWorker outboxWorker;
@@ -100,6 +108,7 @@ class PosApp extends StatelessWidget {
         dayReportRepository: dayReportRepository,
         productRepository: productRepository,
         customerRepository: customerRepository,
+        debtPaymentService: debtPaymentService,
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
         outboxWorker: outboxWorker,

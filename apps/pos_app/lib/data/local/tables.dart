@@ -111,6 +111,26 @@ class CustomersLocal extends Table {
   TextColumn get name => text()();
   TextColumn get phone => text().nullable()();
   IntColumn get balanceVnd => integer().withDefault(const Constant(0))();
+  IntColumn get creditLimitVnd => integer().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class DebtLedgerLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get customerId => text()();
+  TextColumn get type => text()(); // sale_debt | payment
+  IntColumn get amountVnd => integer()();
+  IntColumn get balanceAfterVnd => integer()();
+  TextColumn get saleId => text().nullable()();
+  TextColumn get shiftId => text().nullable()();
+  TextColumn get recordedById => text()();
+  TextColumn get paymentMethod => text().nullable()();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
