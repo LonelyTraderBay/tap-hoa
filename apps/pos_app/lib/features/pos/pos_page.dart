@@ -118,6 +118,7 @@ class _PosPageState extends State<PosPage> {
     });
     try {
       await widget.outboxWorker.tick();
+      await widget.pullCatalog.pullCatalog(widget.storeId);
       if (!mounted) return;
       setState(() => _message = 'Đã đồng bộ');
     } catch (_) {
@@ -178,6 +179,7 @@ class _PosPageState extends State<PosPage> {
                     db: widget.database,
                     cashVoucherService: widget.cashVoucherService,
                     shiftRepository: widget.shiftRepository,
+                    pullCatalog: widget.pullCatalog,
                     storeId: widget.storeId,
                     userId: widget.user.id,
                   ),

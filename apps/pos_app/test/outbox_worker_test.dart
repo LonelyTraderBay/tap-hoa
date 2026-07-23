@@ -178,6 +178,71 @@ void main() {
     expect(outbox.lastError, 'insufficient_stock');
   });
 
+  test('tick applies closed shift snapshots from push response', () async {
+    const shiftId = 'shift-close-1';
+    await db
+        .into(db.shiftsLocal)
+        .insert(
+          ShiftsLocalCompanion.insert(
+            id: shiftId,
+            storeId: 'store-1',
+            userId: 'user-1',
+            openedAt: DateTime(2026),
+            openingCash: 100000,
+          ),
+        );
+    await db
+        .into(db.outboxEntries)
+        .insert(
+          OutboxEntriesCompanion.insert(
+            id: 'outbox-shift-close-1',
+            entityType: 'shift_close',
+            payloadJson: jsonEncode({
+              'id': shiftId,
+              'closingCash': 120000,
+              'closedAt': DateTime.utc(2026, 1, 2).toIso8601String(),
+              'expectedCashVnd': 115000,
+              'varianceVnd': 5000,
+              'transferInShiftVnd': 0,
+            }),
+            createdAt: DateTime(2026),
+          ),
+        );
+
+    final response = MockResponse();
+    when(() => response.data).thenReturn({
+      'acceptedShiftCloseIds': [shiftId],
+      'closedShifts': [
+        {
+          'id': shiftId,
+          'expectedCashVnd': 115000,
+          'varianceVnd': 5000,
+          'transferInShiftVnd': 0,
+          'closingCash': 120000,
+          'closedAt': DateTime.utc(2026, 1, 2).toIso8601String(),
+          'note': 'server close',
+        },
+      ],
+    });
+    when(
+      () => dio.post<Map<String, dynamic>>(
+        '/sync/push',
+        data: any(named: 'data'),
+      ),
+    ).thenAnswer((_) async => response);
+
+    await worker.tick();
+
+    final shift = await (db.select(db.shiftsLocal)
+          ..where((s) => s.id.equals(shiftId)))
+        .getSingle();
+    expect(shift.expectedCashVnd, 115000);
+    expect(shift.varianceVnd, 5000);
+    expect(shift.closingCash, 120000);
+    expect(shift.note, 'server close');
+    expect(shift.closedAt?.toUtc(), DateTime.utc(2026, 1, 2));
+  });
+
   test('tick leaves outbox pending on DioException', () async {
     const saleId = 'sale-offline';
     await seedSaleOutbox(saleId: saleId);

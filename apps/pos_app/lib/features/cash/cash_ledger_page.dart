@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 
 import '../../data/local/database.dart';
+import '../../data/sync/pull_catalog.dart';
 import '../shifts/shift_repository.dart';
 import 'cash_voucher_service.dart';
 import 'record_cash_voucher_sheet.dart';
@@ -22,6 +23,7 @@ class CashLedgerPage extends StatefulWidget {
     required this.db,
     required this.cashVoucherService,
     required this.shiftRepository,
+    required this.pullCatalog,
     required this.storeId,
     required this.userId,
   });
@@ -29,6 +31,7 @@ class CashLedgerPage extends StatefulWidget {
   final AppDatabase db;
   final CashVoucherService cashVoucherService;
   final ShiftRepository shiftRepository;
+  final PullCatalog pullCatalog;
   final String storeId;
   final String userId;
 
@@ -53,7 +56,11 @@ class _CashLedgerPageState extends State<CashLedgerPage> {
         storeId: widget.storeId,
         userId: widget.userId,
       );
-      final categories = await widget.db.select(widget.db.cashCategoriesLocal).get();
+      var categories = await widget.db.select(widget.db.cashCategoriesLocal).get();
+      if (categories.isEmpty) {
+        await widget.pullCatalog.pullCatalog(widget.storeId);
+        categories = await widget.db.select(widget.db.cashCategoriesLocal).get();
+      }
       if (!mounted) return;
       setState(() {
         _shiftId = shift.id;

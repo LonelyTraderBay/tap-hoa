@@ -443,11 +443,66 @@ describe('Cash vouchers sync', () => {
 
     expect(push.body.acceptedShiftCloseIds).toContain(shiftId);
     expect(push.body.acceptedDebtPaymentIds).toContain(paymentId);
+    expect(push.body.closedShifts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: shiftId,
+          expectedCashVnd: 550000,
+          varianceVnd: 0,
+          closingCash,
+        }),
+      ]),
+    );
 
     const shift = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
     expect(shift.expectedCashVnd).toBe(550000);
     expect(shift.varianceVnd).toBe(0);
     expect(shift.closingCash).toBe(closingCash);
+  });
+
+  it('records voucher attributed to JWT user, not client payload', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 100000, clientId: shiftId })
+      .expect(201);
+
+    const voucherId = randomUUID();
+    const fakeUserId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-voucher',
+        sales: [],
+        cashVouchers: [
+          {
+            id: voucherId,
+            storeId,
+            shiftId,
+            categoryId: CATEGORY_OTHER_IN,
+            direction: 'in',
+            channel: 'cash',
+            amountVnd: 10000,
+            recordedById: fakeUserId,
+            clientCreatedAt: new Date().toISOString(),
+          },
+        ],
+      })
+      .expect(201);
+
+    const row = await prisma.cashVoucher.findUniqueOrThrow({
+      where: { id: voucherId },
+    });
+    expect(row.recordedById).toBe(login.user.id);
+    expect(row.recordedById).not.toBe(fakeUserId);
   });
 
   it('pull returns seeded categories and pushed vouchers', async () => {

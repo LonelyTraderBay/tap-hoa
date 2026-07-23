@@ -18,6 +18,16 @@ import {
 
 const PAYMENT_METHODS = new Set<string>(Object.values(PaymentMethod));
 
+export type ClosedShiftSnapshot = {
+  id: string;
+  expectedCashVnd: number;
+  varianceVnd: number;
+  transferInShiftVnd: number;
+  closingCash: number;
+  closedAt: string;
+  note: string | null;
+};
+
 @Injectable()
 export class SyncService {
   constructor(
@@ -153,12 +163,14 @@ export class SyncService {
     );
 
     const acceptedShiftCloseIds: string[] = [];
+    const closedShifts: ClosedShiftSnapshot[] = [];
     for (const shift of body.shiftCloses ?? []) {
-      const reason = await this.processShiftClose(user, shift);
-      if (reason) {
-        rejectedShifts.push({ id: shift.id, reason });
+      const result = await this.processShiftClose(user, shift);
+      if ('reason' in result) {
+        rejectedShifts.push({ id: shift.id, reason: result.reason });
       } else {
         acceptedShiftCloseIds.push(shift.id);
+        closedShifts.push(result.snapshot);
       }
     }
     const customerResult = await this.pushCustomerUpserts(
@@ -169,6 +181,7 @@ export class SyncService {
     return {
       acceptedShiftIds,
       acceptedShiftCloseIds,
+      closedShifts,
       rejectedShifts,
       ...salesResult,
       ...voucherResult,
@@ -242,34 +255,39 @@ export class SyncService {
       return { accepted: false, reason: 'category_direction_mismatch' };
     }
 
-    const shift = await this.prisma.shift.findUnique({
-      where: { id: voucher.shiftId },
-    });
-    if (
-      !shift ||
-      shift.closedAt != null ||
-      shift.storeId !== voucher.storeId
-    ) {
-      return { accepted: false, reason: 'shift_not_open' };
-    }
-
     try {
-      await this.prisma.cashVoucher.create({
-        data: {
-          id: voucher.id,
-          storeId: voucher.storeId,
-          shiftId: voucher.shiftId,
-          categoryId: voucher.categoryId,
-          direction: voucher.direction,
-          channel: voucher.channel,
-          amountVnd: voucher.amountVnd,
-          note: voucher.note?.trim() || null,
-          recordedById: voucher.recordedById ?? user.userId,
-          clientCreatedAt: new Date(voucher.clientCreatedAt),
-        },
+      await this.prisma.$transaction(async (tx) => {
+        const shift = await tx.shift.findUnique({
+          where: { id: voucher.shiftId },
+        });
+        if (
+          !shift ||
+          shift.closedAt != null ||
+          shift.storeId !== voucher.storeId
+        ) {
+          throw new Error('shift_not_open');
+        }
+
+        await tx.cashVoucher.create({
+          data: {
+            id: voucher.id,
+            storeId: voucher.storeId,
+            shiftId: voucher.shiftId,
+            categoryId: voucher.categoryId,
+            direction: voucher.direction,
+            channel: voucher.channel,
+            amountVnd: voucher.amountVnd,
+            note: voucher.note?.trim() || null,
+            recordedById: user.userId,
+            clientCreatedAt: new Date(voucher.clientCreatedAt),
+          },
+        });
       });
       return { accepted: true };
     } catch (error) {
+      if (error instanceof Error && error.message === 'shift_not_open') {
+        return { accepted: false, reason: 'shift_not_open' };
+      }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -415,24 +433,40 @@ export class SyncService {
     }
   }
 
-  private async processShiftClose(user: AuthUser, shift: PushShiftCloseDto) {
+  private async processShiftClose(
+    user: AuthUser,
+    shift: PushShiftCloseDto,
+  ): Promise<{ reason: string } | { snapshot: ClosedShiftSnapshot }> {
     if (
       !shift.id ||
       !Number.isSafeInteger(shift.closingCash) ||
       shift.closingCash < 0 ||
       Number.isNaN(Date.parse(shift.closedAt))
     ) {
-      return 'invalid_shift';
+      return { reason: 'invalid_shift' };
     }
     try {
-      await this.shiftsService.closeFromSync(user, shift.id, {
+      const closed = await this.shiftsService.closeFromSync(user, shift.id, {
         closingCash: shift.closingCash,
         note: shift.note ?? undefined,
         closedAt: shift.closedAt,
       });
-      return null;
+      if (!closed.closedAt || closed.closingCash == null) {
+        return { reason: 'shift_conflict' };
+      }
+      return {
+        snapshot: {
+          id: closed.id,
+          expectedCashVnd: closed.expectedCashVnd ?? 0,
+          varianceVnd: closed.varianceVnd ?? 0,
+          transferInShiftVnd: closed.transferInShiftVnd ?? 0,
+          closingCash: closed.closingCash,
+          closedAt: closed.closedAt.toISOString(),
+          note: closed.note,
+        },
+      };
     } catch {
-      return 'shift_conflict';
+      return { reason: 'shift_conflict' };
     }
   }
 
