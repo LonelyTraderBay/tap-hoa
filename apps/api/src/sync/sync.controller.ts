@@ -39,6 +39,6 @@ export class SyncController {
     if (!Array.isArray(body.sales)) {
       throw new BadRequestException('sales must be an array');
     }
-    return this.syncService.pushSales(req.user, body.deviceId, body.sales);
+    return this.syncService.push(req.user, body);
   }
 }

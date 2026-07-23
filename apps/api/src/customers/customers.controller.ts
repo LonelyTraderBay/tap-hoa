@@ -1,5 +1,15 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthUser } from '../auth/jwt.strategy';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 
@@ -9,15 +19,22 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Get()
-  list(@Query('withDebt') withDebt?: string) {
-    if (withDebt === 'true') {
-      return this.customersService.listWithDebt();
+  list(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+    @Query('withDebt') withDebt?: string,
+  ) {
+    if (!storeId) {
+      throw new BadRequestException('storeId is required');
     }
-    return this.customersService.listWithDebt();
+    return this.customersService.list(req.user, storeId, withDebt === 'true');
   }
 
   @Post()
-  create(@Body() dto: CreateCustomerDto) {
-    return this.customersService.create(dto);
+  create(
+    @Req() req: { user: AuthUser },
+    @Body() dto: CreateCustomerDto,
+  ) {
+    return this.customersService.create(req.user, dto);
   }
 }

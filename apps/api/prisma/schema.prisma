@@ -32,6 +32,7 @@ model Store {
   products  ProductStoreStock[]
   sales     Sale[]
   shifts    Shift[]
+  customers Customer[]
 }
 
 model User {
@@ -98,12 +99,15 @@ model Shift {
 
 model Customer {
   id         String   @id @default(uuid())
+  storeId    String
   name       String
   phone      String?
   balanceVnd Int      @default(0)
   updatedAt  DateTime @updatedAt
   createdAt  DateTime @default(now())
+  store      Store    @relation(fields: [storeId], references: [id])
   sales      Sale[]
+  @@index([storeId])
 }
 
 model Sale {

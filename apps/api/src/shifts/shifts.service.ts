@@ -8,15 +8,17 @@ import { Prisma, Role, Shift } from '@prisma/client';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 
-type OpenShiftDto = {
+export type OpenShiftDto = {
   storeId: string;
   openingCash: number;
   clientId: string;
+  openedAt?: string;
 };
 
-type CloseShiftDto = {
+export type CloseShiftDto = {
   closingCash: number;
   note?: string;
+  closedAt?: string;
 };
 
 @Injectable()
@@ -67,14 +69,13 @@ export class ShiftsService {
       throw new ConflictException('Shift already open');
     }
 
-    // Partial unique on (storeId, userId) WHERE closedAt IS NULL may be added later.
     try {
       return await this.prisma.shift.create({
         data: {
           id: dto.clientId,
           storeId: dto.storeId,
           userId: user.userId,
-          openedAt: new Date(),
+          openedAt: dto.openedAt ? new Date(dto.openedAt) : new Date(),
           openingCash: dto.openingCash,
         },
       });
@@ -96,6 +97,23 @@ export class ShiftsService {
     }
   }
 
+  async upsertFromSync(user: AuthUser, dto: OpenShiftDto) {
+    this.assertStoreAccess(user, dto.storeId);
+    const existing = await this.prisma.shift.findUnique({
+      where: { id: dto.clientId },
+    });
+    if (existing) {
+      if (
+        existing.userId !== user.userId ||
+        existing.storeId !== dto.storeId
+      ) {
+        throw new ForbiddenException('Shift ownership mismatch');
+      }
+      return existing;
+    }
+    return this.open(user, dto);
+  }
+
   async close(user: AuthUser, shiftId: string, dto: CloseShiftDto) {
     const shift = await this.prisma.shift.findUnique({ where: { id: shiftId } });
     if (!shift) {
@@ -111,10 +129,25 @@ export class ShiftsService {
     return this.prisma.shift.update({
       where: { id: shiftId },
       data: {
-        closedAt: new Date(),
+        closedAt: dto.closedAt ? new Date(dto.closedAt) : new Date(),
         closingCash: dto.closingCash,
         note: dto.note,
       },
     });
+  }
+
+  async closeFromSync(user: AuthUser, shiftId: string, dto: CloseShiftDto) {
+    const shift = await this.prisma.shift.findUnique({ where: { id: shiftId } });
+    if (!shift) {
+      throw new NotFoundException('Shift not found');
+    }
+    if (shift.userId !== user.userId) {
+      throw new ForbiddenException('Cannot close another user shift');
+    }
+    this.assertStoreAccess(user, shift.storeId);
+    if (shift.closedAt) {
+      return shift;
+    }
+    return this.close(user, shiftId, dto);
   }
 }

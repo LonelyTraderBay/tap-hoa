@@ -118,22 +118,26 @@ describe('Reports day', () => {
 
     const shift1Id = randomUUID();
     const shift2Id = randomUUID();
-    await request(app.getHttpServer())
-      .post('/shifts/open')
-      .set('Authorization', `Bearer ${login.accessToken}`)
-      .send({ storeId: ch1.id, openingCash: 500000, clientId: shift1Id })
-      .expect(201);
-    await request(app.getHttpServer())
-      .post('/shifts/open')
-      .set('Authorization', `Bearer ${login.accessToken}`)
-      .send({ storeId: ch2.id, openingCash: 500000, clientId: shift2Id })
-      .expect(201);
 
     await request(app.getHttpServer())
       .post('/sync/push')
       .set('Authorization', `Bearer ${login.accessToken}`)
       .send({
         deviceId: 'dev1',
+        shiftOpens: [
+          {
+            id: shift1Id,
+            storeId: ch1.id,
+            openingCash: 500000,
+            openedAt: `${reportDate}T00:00:00.000Z`,
+          },
+          {
+            id: shift2Id,
+            storeId: ch2.id,
+            openingCash: 500000,
+            openedAt: `${reportDate}T00:00:00.000Z`,
+          },
+        ],
         sales: [
           makeSaleDto(randomUUID(), {
             storeId: ch1.id,
@@ -185,17 +189,20 @@ describe('Reports day', () => {
 
     const reportDate = '2026-07-23';
     const shiftId = randomUUID();
-    await request(app.getHttpServer())
-      .post('/shifts/open')
-      .set('Authorization', `Bearer ${login.accessToken}`)
-      .send({ storeId: ch1.id, openingCash: 500000, clientId: shiftId })
-      .expect(201);
 
     await request(app.getHttpServer())
       .post('/sync/push')
       .set('Authorization', `Bearer ${login.accessToken}`)
       .send({
         deviceId: 'dev-ict',
+        shiftOpens: [
+          {
+            id: shiftId,
+            storeId: ch1.id,
+            openingCash: 500000,
+            openedAt: '2026-07-22T17:00:00.000Z',
+          },
+        ],
         sales: [
           makeSaleDto(randomUUID(), {
             storeId: ch1.id,

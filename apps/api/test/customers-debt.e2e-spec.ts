@@ -138,7 +138,12 @@ describe('Customers debt sync', () => {
     await request(app.getHttpServer())
       .post('/customers')
       .set('Authorization', `Bearer ${login.accessToken}`)
-      .send({ id: customerId, name: 'Anh Ba', phone: '0900111222' })
+      .send({
+        id: customerId,
+        storeId,
+        name: 'Anh Ba',
+        phone: '0900111222',
+      })
       .expect(201);
 
     const shiftId = randomUUID();
@@ -261,5 +266,43 @@ describe('Customers debt sync', () => {
       .set('Authorization', `Bearer ${login.accessToken}`)
       .send({ closingCash: 100000 })
       .expect(201);
+  });
+
+  it('GET /customers only returns customers for the requested store', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(200);
+    const [firstStore, secondStore] = stores.body as { id: string }[];
+
+    await request(app.getHttpServer())
+      .post('/customers')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        id: randomUUID(),
+        storeId: firstStore.id,
+        name: 'Store one customer',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/customers')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        id: randomUUID(),
+        storeId: secondStore.id,
+        name: 'Store two customer',
+      })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .get('/customers')
+      .query({ storeId: firstStore.id })
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(200);
+
+    expect(res.body.map((customer: { name: string }) => customer.name)).toEqual([
+      'Store one customer',
+    ]);
   });
 });

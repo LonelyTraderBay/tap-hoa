@@ -15,7 +15,10 @@ export class AuthService {
       where: { phone },
       include: { stores: true },
     });
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    if (
+      !user?.active ||
+      !(await bcrypt.compare(password, user.passwordHash))
+    ) {
       throw new UnauthorizedException('Invalid credentials');
     }
     const storeIds = user.stores.map((s) => s.storeId);

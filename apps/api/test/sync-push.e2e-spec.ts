@@ -1,5 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -25,6 +27,7 @@ function makeSaleDto(
     productId: string;
     qty?: string;
     totalVnd?: number;
+    clientCreatedAt?: string;
   },
 ) {
   const qty = opts.qty ?? '2';
@@ -42,7 +45,7 @@ function makeSaleDto(
     discountVnd: 0,
     totalVnd,
     customerId: null,
-    clientCreatedAt: new Date().toISOString(),
+    clientCreatedAt: opts.clientCreatedAt ?? new Date().toISOString(),
     lines: [
       {
         productId: opts.productId,
@@ -150,7 +153,121 @@ describe('Sync push', () => {
       .expect(201);
   });
 
-  it('POST /sync/push rejects sale when stock insufficient', async () => {
+  it('POST /sync/push opens an outbox shift before accepting its sale', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+
+    const shiftId = randomUUID();
+    const saleId = randomUUID();
+    const openedAt = new Date().toISOString();
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-shift-outbox',
+        shiftOpens: [
+          {
+            id: shiftId,
+            storeId,
+            userId: login.user.id,
+            openingCash: 100000,
+            openedAt,
+          },
+        ],
+        sales: [
+          makeSaleDto(saleId, {
+            storeId,
+            shiftId,
+            soldById: 'untrusted-client-user',
+            productId: product.id,
+            clientCreatedAt: openedAt,
+          }),
+        ],
+      })
+      .expect(201);
+
+    expect(res.body.acceptedShiftIds).toEqual([shiftId]);
+    expect(res.body.acceptedIds).toEqual([saleId]);
+    const sale = await prisma.sale.findUnique({ where: { id: saleId } });
+    expect(sale?.soldById).toBe(login.user.id);
+  });
+
+  it('POST /sync/push rejects invalid quantities and client money mismatches', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 0, clientId: shiftId })
+      .expect(201);
+
+    const invalidQty = makeSaleDto(randomUUID(), {
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      productId: product.id,
+      qty: '0',
+      totalVnd: 0,
+    });
+    const badLine = makeSaleDto(randomUUID(), {
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      productId: product.id,
+    });
+    badLine.lines[0].lineTotal = 1;
+    const badTotal = makeSaleDto(randomUUID(), {
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      productId: product.id,
+    });
+    badTotal.discountVnd = 1000;
+    const negativeMoney = makeSaleDto(randomUUID(), {
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      productId: product.id,
+    });
+    negativeMoney.discountVnd = -1;
+
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-invalid-money',
+        sales: [invalidQty, badLine, badTotal, negativeMoney],
+      })
+      .expect(201);
+
+    expect(res.body.rejected).toEqual([
+      { id: invalidQty.id, reason: 'invalid_quantity' },
+      { id: badLine.id, reason: 'line_total_mismatch' },
+      { id: badTotal.id, reason: 'sale_total_mismatch' },
+      { id: negativeMoney.id, reason: 'invalid_money' },
+    ]);
+  });
+
+  it('POST /sync/push accepts concurrent offline sales and allows negative stock', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())
       .get('/stores')
@@ -177,19 +294,82 @@ describe('Sync push', () => {
       .send({ storeId, openingCash: 100000, clientId: shiftId })
       .expect(201);
 
+    const saleIds = [randomUUID(), randomUUID()];
+    const responses = await Promise.all(
+      saleIds.map((saleId, index) =>
+        request(app.getHttpServer())
+          .post('/sync/push')
+          .set('Authorization', `Bearer ${login.accessToken}`)
+          .send({
+            deviceId: `dev-offline-${index}`,
+            sales: [
+              makeSaleDto(saleId, {
+                storeId,
+                shiftId,
+                soldById: login.user.id,
+                productId: product.id,
+                qty: '2',
+              }),
+            ],
+          })
+          .expect(201),
+      ),
+    );
+
+    expect(responses.flatMap((response) => response.body.acceptedIds).sort()).toEqual(
+      [...saleIds].sort(),
+    );
+    const stock = await prisma.productStoreStock.findUnique({
+      where: {
+        productId_storeId: { productId: product.id, storeId },
+      },
+    });
+    expect(stock?.qty.toString()).toBe('-3');
+  });
+
+  it('POST /sync/push rejects a shift owned by another user', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    const otherUser = await prisma.user.create({
+      data: {
+        phone: `09${Date.now()}`,
+        name: 'Other cashier',
+        passwordHash: await bcrypt.hash('123456', 4),
+        role: Role.cashier,
+      },
+    });
+    if (!product) {
+      throw new Error('Seed product not found');
+    }
+    const shiftId = randomUUID();
+    await prisma.shift.create({
+      data: {
+        id: shiftId,
+        storeId,
+        userId: otherUser.id,
+        openedAt: new Date(),
+        openingCash: 0,
+      },
+    });
     const saleId = randomUUID();
+
     const res = await request(app.getHttpServer())
       .post('/sync/push')
       .set('Authorization', `Bearer ${login.accessToken}`)
       .send({
-        deviceId: 'dev1',
+        deviceId: 'dev-wrong-shift-user',
         sales: [
           makeSaleDto(saleId, {
             storeId,
             shiftId,
             soldById: login.user.id,
             productId: product.id,
-            qty: '2',
           }),
         ],
       })
@@ -197,13 +377,7 @@ describe('Sync push', () => {
 
     expect(res.body.acceptedIds).toEqual([]);
     expect(res.body.rejected).toEqual([
-      { id: saleId, reason: 'insufficient_stock' },
+      { id: saleId, reason: 'shift_forbidden' },
     ]);
-
-    await request(app.getHttpServer())
-      .post(`/shifts/${shiftId}/close`)
-      .set('Authorization', `Bearer ${login.accessToken}`)
-      .send({ closingCash: 100000 })
-      .expect(201);
   });
 });

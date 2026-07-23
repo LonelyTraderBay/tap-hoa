@@ -28,7 +28,24 @@ export type PushSaleDto = {
   lines: PushSaleLineDto[];
 };
 
+export type PushShiftOpenDto = {
+  id: string;
+  storeId: string;
+  userId?: string;
+  openingCash: number;
+  openedAt: string;
+};
+
+export type PushShiftCloseDto = {
+  id: string;
+  closingCash: number;
+  note?: string | null;
+  closedAt: string;
+};
+
 export type PushSyncDto = {
   deviceId: string;
+  shiftOpens?: PushShiftOpenDto[];
+  shiftCloses?: PushShiftCloseDto[];
   sales: PushSaleDto[];
 };
