@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 
 import 'auth_repository.dart';
+import '../shifts/open_shift_page.dart';
+import '../shifts/shift_repository.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.repository});
+  const LoginPage({
+    super.key,
+    required this.repository,
+    required this.shiftRepository,
+  });
 
   final AuthRepository repository;
+  final ShiftRepository shiftRepository;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -35,7 +42,14 @@ class _LoginPageState extends State<LoginPage> {
         _passwordController.text,
       );
       if (mounted) {
-        setState(() => _message = 'Xin chào ${user.name}');
+        await Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (_) => OpenShiftPage(
+              repository: widget.shiftRepository,
+              user: user,
+            ),
+          ),
+        );
       }
     } catch (_) {
       if (mounted) {
