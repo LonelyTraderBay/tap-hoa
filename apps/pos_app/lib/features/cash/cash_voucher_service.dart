@@ -49,6 +49,9 @@ class CashVoucherService {
             ..where((r) => r.id.equals(categoryId)))
           .getSingleOrNull();
       if (category == null) throw StateError('category not found');
+      if (category.direction != direction) {
+        throw StateError('category direction mismatch');
+      }
 
       await _db.into(_db.cashVouchersLocal).insert(
         CashVouchersLocalCompanion.insert(

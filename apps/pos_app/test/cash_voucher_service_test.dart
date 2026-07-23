@@ -110,4 +110,26 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test('recordVoucher fails when category direction mismatches', () async {
+    await seedSession(db);
+    await seedCategory(db);
+    await openShift(shiftRepository);
+
+    expect(
+      () => service.recordVoucher(
+        direction: 'out',
+        categoryId: 'cat-1',
+        channel: 'cash',
+        amountVnd: 1000,
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          'category direction mismatch',
+        ),
+      ),
+    );
+  });
 }
