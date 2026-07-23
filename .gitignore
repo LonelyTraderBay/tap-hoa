@@ -4,5 +4,6 @@ node_modules/
 .env
 *.log
 apps/api/dist/
+apps/api/supabase/
 apps/pos_app/build/
 apps/pos_app/.dart_tool/
