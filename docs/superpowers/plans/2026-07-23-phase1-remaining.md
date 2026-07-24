@@ -37,14 +37,15 @@
 
 ## POS hardware & UX
 
-- [ ] Thermal receipt printer drivers (Windows)
+- [ ] Thermal receipt printer drivers (Windows) — ESC/POS deferred
+- [x] PDF receipt via OS print dialog
 - [ ] Return/exchange same-day with role gate
 - [ ] Combo/bundle products
 - [ ] Push notifications (sync errors, low stock)
 
 ## Reports (Phase 1 extensions)
 
-- [ ] Top SKU / best sellers for the day
+- [x] Top SKU / best sellers for the day
 - [ ] Stock-on-hand report per store
 - [ ] Export CSV for day revenue
 
@@ -62,7 +63,7 @@
 2. ~~**Cash in/out + shift reconciliation**~~ — done (`feat/cash-vouchers-shift-reconciliation`)
 3. ~~**Inter-store transfer + stocktake**~~ — done (`feat/inventory-stock-ops`)
 4. ~~**Product CRUD + barcode labels**~~ — done (`feat/product-crud-barcode-labels`)
-5. **Thermal print + top SKU report** — counter polish
+5. ~~**Thermal print + top SKU report**~~ — done (`feat/thermal-receipt-top-sku`; PDF receipt via OS print; ESC/POS drivers deferred)
 
 ## Dependencies on MVP (done)
 
