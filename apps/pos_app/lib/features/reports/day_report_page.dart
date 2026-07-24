@@ -22,6 +22,7 @@ class DayReportPage extends StatefulWidget {
 class _DayReportPageState extends State<DayReportPage> {
   DateTime _selectedDate = ictToday();
   DayReport? _report;
+  TopSkuReport? _topSkus;
   bool _isLoading = true;
   String? _message;
 
@@ -38,13 +39,20 @@ class _DayReportPageState extends State<DayReportPage> {
     });
     try {
       final storeId = widget.role == 'owner' ? null : widget.storeId;
-      final report = await widget.repository.fetchDayReport(
-        date: _selectedDate,
-        storeId: storeId,
-      );
+      final results = await Future.wait([
+        widget.repository.fetchDayReport(
+          date: _selectedDate,
+          storeId: storeId,
+        ),
+        widget.repository.fetchTopSkus(
+          date: _selectedDate,
+          storeId: storeId,
+        ),
+      ]);
       if (!mounted) return;
       setState(() {
-        _report = report;
+        _report = results[0] as DayReport;
+        _topSkus = results[1] as TopSkuReport;
         _isLoading = false;
       });
     } catch (_) {
@@ -80,7 +88,9 @@ class _DayReportPageState extends State<DayReportPage> {
   @override
   Widget build(BuildContext context) {
     final report = _report;
+    final topSkus = _topSkus;
     final theme = Theme.of(context);
+    final isOffline = report?.isOffline == true || topSkus?.isOffline == true;
 
     return Scaffold(
       appBar: AppBar(
@@ -97,14 +107,14 @@ class _DayReportPageState extends State<DayReportPage> {
           ? const Center(child: CircularProgressIndicator())
           : _message != null
           ? Center(child: Text(_message!))
-          : report == null
+          : report == null || topSkus == null
           ? const Center(child: Text('Không có dữ liệu'))
           : RefreshIndicator(
               onRefresh: _loadReport,
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (report.isOffline)
+                  if (isOffline)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(
@@ -135,6 +145,62 @@ class _DayReportPageState extends State<DayReportPage> {
                     style: theme.textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 24),
+                  Text(
+                    'Top hàng bán chạy',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (topSkus.items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Chưa có bán trong ngày',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    )
+                  else
+                    ...topSkus.items.asMap().entries.map((entry) {
+                      final rank = entry.key + 1;
+                      final item = entry.value;
+                      final grossLabel = item.estimatedGrossVnd?.toString() ?? '—';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 28,
+                              child: Text(
+                                '#$rank',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    'SL: ${item.qty} · DT: ${item.revenueVnd} VND · Lãi: $grossLabel',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 16),
                   ...report.byStore.map((store) {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
