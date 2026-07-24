@@ -12,6 +12,7 @@ import 'features/customers/customer_repository.dart';
 import 'features/customers/debt_payment_service.dart';
 import 'features/pos/checkout_service.dart';
 import 'features/products/product_repository.dart';
+import 'features/products/product_service.dart';
 import 'features/reports/day_report_repository.dart';
 import 'features/shifts/shift_repository.dart';
 import 'features/sync_status/sync_status_banner.dart';
@@ -31,6 +32,7 @@ void main() {
     db: database,
   );
   final productRepository = ProductRepository(database);
+  final productService = ProductService(database);
   final customerRepository = CustomerRepository(
     db: database,
     dio: apiClient.dio,
@@ -58,6 +60,7 @@ void main() {
         shiftRepository: shiftRepository,
         dayReportRepository: dayReportRepository,
         productRepository: productRepository,
+        productService: productService,
         customerRepository: customerRepository,
         debtPaymentService: debtPaymentService,
         cashVoucherService: cashVoucherService,
@@ -77,6 +80,7 @@ class PosApp extends StatelessWidget {
     required this.shiftRepository,
     required this.dayReportRepository,
     required this.productRepository,
+    required this.productService,
     required this.customerRepository,
     required this.debtPaymentService,
     required this.cashVoucherService,
@@ -90,6 +94,7 @@ class PosApp extends StatelessWidget {
   final ShiftRepository shiftRepository;
   final DayReportRepository dayReportRepository;
   final ProductRepository productRepository;
+  final ProductService productService;
   final CustomerRepository customerRepository;
   final DebtPaymentService debtPaymentService;
   final CashVoucherService cashVoucherService;
@@ -115,6 +120,7 @@ class PosApp extends StatelessWidget {
         shiftRepository: shiftRepository,
         dayReportRepository: dayReportRepository,
         productRepository: productRepository,
+        productService: productService,
         customerRepository: customerRepository,
         debtPaymentService: debtPaymentService,
         cashVoucherService: cashVoucherService,

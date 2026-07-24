@@ -12,6 +12,7 @@ import '../customers/customer_repository.dart';
 import '../customers/debt_payment_service.dart';
 import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
+import '../products/product_service.dart';
 import 'shift_repository.dart';
 
 class OpenShiftPage extends StatefulWidget {
@@ -21,6 +22,7 @@ class OpenShiftPage extends StatefulWidget {
     required this.user,
     required this.dayReportRepository,
     required this.productRepository,
+    required this.productService,
     required this.customerRepository,
     required this.debtPaymentService,
     required this.cashVoucherService,
@@ -34,6 +36,7 @@ class OpenShiftPage extends StatefulWidget {
   final AuthUser user;
   final DayReportRepository dayReportRepository;
   final ProductRepository productRepository;
+  final ProductService productService;
   final CustomerRepository customerRepository;
   final DebtPaymentService debtPaymentService;
   final CashVoucherService cashVoucherService;
@@ -112,6 +115,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
         MaterialPageRoute<void>(
           builder: (_) => PosPage(
             productRepository: widget.productRepository,
+            productService: widget.productService,
             checkoutService: widget.checkoutService,
             customerRepository: widget.customerRepository,
             debtPaymentService: widget.debtPaymentService,

@@ -41,6 +41,33 @@ enum CashChannel {
   transfer
 }
 
+enum StockDocType {
+  sale
+  transfer
+  stocktake
+  purchase
+  wastage
+}
+
+enum TransferStatus {
+  draft
+  approved
+  rejected
+  received
+}
+
+enum StocktakeLineReason {
+  increase
+  decrease
+  match
+}
+
+enum WastageReason {
+  spoilage
+  damage
+  other
+}
+
 model Store {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -55,6 +82,12 @@ model Store {
   customers Customer[]
   debtLedger DebtLedgerEntry[]
   cashVouchers CashVoucher[]
+  stockTransfersFrom StockTransfer[] @relation("TransferFrom")
+  stockTransfersTo   StockTransfer[] @relation("TransferTo")
+  stocktakes         Stocktake[]
+  purchaseReceipts   PurchaseReceipt[]
+  wastageVouchers    WastageVoucher[]
+  stockMovements     StockMovement[]
 }
 
 model User {
@@ -71,6 +104,13 @@ model User {
   sales        Sale[]   @relation("SoldBy")
   debtLedger   DebtLedgerEntry[]
   cashVouchers CashVoucher[]
+  transfersCreated  StockTransfer[] @relation("TransferCreatedBy")
+  transfersApproved StockTransfer[] @relation("TransferApprovedBy")
+  transfersReceived StockTransfer[] @relation("TransferReceivedBy")
+  stocktakes        Stocktake[]
+  purchaseReceipts  PurchaseReceipt[]
+  wastageVouchers   WastageVoucher[]
+  stockMovements    StockMovement[]
 }
 
 model UserStore {
@@ -94,6 +134,11 @@ model Product {
   updatedAt    DateTime @updatedAt
   createdAt    DateTime @default(now())
   stocks       ProductStoreStock[]
+  transferLines StockTransferLine[]
+  stocktakeLines StocktakeLine[]
+  purchaseLines  PurchaseReceiptLine[]
+  wastageLines   WastageVoucherLine[]
+  stockMovements StockMovement[]
 }
 
 model ProductStoreStock {
@@ -231,4 +276,139 @@ model CashVoucher {
   recordedBy      User          @relation(fields: [recordedById], references: [id])
   @@index([storeId, clientCreatedAt])
   @@index([shiftId, clientCreatedAt])
+}
+
+model StockTransfer {
+  id              String         @id @default(uuid())
+  fromStoreId     String
+  toStoreId       String
+  status          TransferStatus @default(draft)
+  note            String?
+  createdById     String
+  approvedById    String?
+  receivedById    String?
+  clientCreatedAt DateTime
+  approvedAt      DateTime?
+  receivedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  fromStore       Store          @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStore         Store          @relation("TransferTo", fields: [toStoreId], references: [id])
+  createdBy       User           @relation("TransferCreatedBy", fields: [createdById], references: [id])
+  approvedBy      User?          @relation("TransferApprovedBy", fields: [approvedById], references: [id])
+  receivedBy      User?          @relation("TransferReceivedBy", fields: [receivedById], references: [id])
+  lines           StockTransferLine[]
+  @@index([fromStoreId, updatedAt])
+  @@index([toStoreId, updatedAt])
+}
+
+model StockTransferLine {
+  id         String        @id @default(uuid())
+  transferId String
+  productId  String
+  qty        Decimal       @db.Decimal(18, 3)
+  transfer   StockTransfer @relation(fields: [transferId], references: [id])
+  product    Product       @relation(fields: [productId], references: [id])
+  @@index([transferId])
+}
+
+model Stocktake {
+  id              String   @id @default(uuid())
+  storeId         String
+  note            String?
+  recordedById    String
+  clientCreatedAt DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  store           Store    @relation(fields: [storeId], references: [id])
+  recordedBy      User     @relation(fields: [recordedById], references: [id])
+  lines           StocktakeLine[]
+  @@index([storeId, clientCreatedAt])
+}
+
+model StocktakeLine {
+  id          String              @id @default(uuid())
+  stocktakeId String
+  productId   String
+  systemQty   Decimal             @db.Decimal(18, 3)
+  countedQty  Decimal             @db.Decimal(18, 3)
+  varianceQty Decimal             @db.Decimal(18, 3)
+  reason      StocktakeLineReason
+  reasonNote  String?
+  stocktake   Stocktake           @relation(fields: [stocktakeId], references: [id])
+  product     Product             @relation(fields: [productId], references: [id])
+  @@index([stocktakeId])
+}
+
+model PurchaseReceipt {
+  id              String   @id @default(uuid())
+  storeId         String
+  supplierName    String
+  supplierPhone   String?
+  note            String?
+  recordedById    String
+  clientCreatedAt DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  store           Store    @relation(fields: [storeId], references: [id])
+  recordedBy      User     @relation(fields: [recordedById], references: [id])
+  lines           PurchaseReceiptLine[]
+  @@index([storeId, clientCreatedAt])
+}
+
+model PurchaseReceiptLine {
+  id         String          @id @default(uuid())
+  receiptId  String
+  productId  String
+  qty        Decimal         @db.Decimal(18, 3)
+  unitCostVnd Int?
+  receipt    PurchaseReceipt @relation(fields: [receiptId], references: [id])
+  product    Product         @relation(fields: [productId], references: [id])
+  @@index([receiptId])
+}
+
+model WastageVoucher {
+  id              String        @id @default(uuid())
+  storeId         String
+  reasonCode      WastageReason
+  note            String?
+  recordedById    String
+  clientCreatedAt DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  store           Store         @relation(fields: [storeId], references: [id])
+  recordedBy      User          @relation(fields: [recordedById], references: [id])
+  lines           WastageVoucherLine[]
+  @@index([storeId, clientCreatedAt])
+}
+
+model WastageVoucherLine {
+  id        String         @id @default(uuid())
+  wastageId String
+  productId String
+  qty       Decimal        @db.Decimal(18, 3)
+  wastage   WastageVoucher @relation(fields: [wastageId], references: [id])
+  product   Product        @relation(fields: [productId], references: [id])
+  @@index([wastageId])
+}
+
+model StockMovement {
+  id              String       @id @default(uuid())
+  storeId         String
+  productId       String
+  qtyDelta        Decimal      @db.Decimal(18, 3)
+  balanceAfter    Decimal      @db.Decimal(18, 3)
+  docType         StockDocType
+  docId           String
+  docLineId       String?
+  recordedById    String
+  clientCreatedAt DateTime
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  store           Store        @relation(fields: [storeId], references: [id])
+  product         Product      @relation(fields: [productId], references: [id])
+  recordedBy      User         @relation(fields: [recordedById], references: [id])
+  @@index([storeId, clientCreatedAt])
+  @@index([productId, clientCreatedAt])
+  @@index([docId])
 }

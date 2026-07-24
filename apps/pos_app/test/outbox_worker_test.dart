@@ -243,6 +243,47 @@ void main() {
     expect(shift.closedAt?.toUtc(), DateTime.utc(2026, 1, 2));
   });
 
+  test('tick marks rejected product upserts as error', () async {
+    const productId = 'product-reject';
+    await db
+        .into(db.outboxEntries)
+        .insert(
+          OutboxEntriesCompanion.insert(
+            id: 'outbox-$productId',
+            entityType: 'product_upsert',
+            payloadJson: jsonEncode({
+              'id': productId,
+              'storeId': 'store-1',
+              'sku': 'SKU-1',
+              'name': 'Test product',
+            }),
+            createdAt: DateTime(2026),
+          ),
+        );
+
+    final response = MockResponse();
+    when(() => response.data).thenReturn({
+      'acceptedProductUpsertIds': [],
+      'rejectedProductUpserts': [
+        {'id': productId, 'reason': 'sku_conflict'},
+      ],
+    });
+    when(
+      () => dio.post<Map<String, dynamic>>(
+        '/sync/push',
+        data: any(named: 'data'),
+      ),
+    ).thenAnswer((_) async => response);
+
+    await worker.tick();
+
+    final outbox = await (db.select(
+      db.outboxEntries,
+    )..where((entry) => entry.id.equals('outbox-$productId'))).getSingle();
+    expect(outbox.status, 'error');
+    expect(outbox.lastError, 'sku_conflict');
+  });
+
   test('tick leaves outbox pending on DioException', () async {
     const saleId = 'sale-offline';
     await seedSaleOutbox(saleId: saleId);

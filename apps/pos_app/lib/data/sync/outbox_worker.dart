@@ -47,10 +47,12 @@ class PushSyncResult {
     required this.acceptedDebtPaymentIds,
     required this.acceptedCashVoucherIds,
     required this.acceptedCustomerUpsertIds,
+    required this.acceptedProductUpsertIds,
     required this.rejected,
     required this.rejectedShifts,
     required this.rejectedDebtPayments,
     required this.rejectedCashVouchers,
+    required this.rejectedProductUpserts,
   });
 
   final List<String> acceptedIds;
@@ -60,10 +62,12 @@ class PushSyncResult {
   final List<String> acceptedDebtPaymentIds;
   final List<String> acceptedCashVoucherIds;
   final List<String> acceptedCustomerUpsertIds;
+  final List<String> acceptedProductUpsertIds;
   final List<RejectedSale> rejected;
   final List<RejectedSale> rejectedShifts;
   final List<RejectedSale> rejectedDebtPayments;
   final List<RejectedSale> rejectedCashVouchers;
+  final List<RejectedSale> rejectedProductUpserts;
 
   factory PushSyncResult.fromJson(Map<String, dynamic> json) {
     final rejected = (json['rejected'] as List<dynamic>? ?? [])
@@ -95,6 +99,10 @@ class PushSyncResult {
               .toList(),
       acceptedCustomerUpsertIds:
           (json['acceptedCustomerUpsertIds'] as List<dynamic>? ?? [])
+              .map((id) => id as String)
+              .toList(),
+      acceptedProductUpsertIds:
+          (json['acceptedProductUpsertIds'] as List<dynamic>? ?? [])
               .map((id) => id as String)
               .toList(),
       rejected: [
@@ -131,6 +139,15 @@ class PushSyncResult {
             reason: item['reason'] as String,
           ),
       ],
+      rejectedProductUpserts: [
+        for (final item
+            in (json['rejectedProductUpserts'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>())
+          RejectedSale(
+            id: item['id'] as String,
+            reason: item['reason'] as String,
+          ),
+      ],
     );
   }
 }
@@ -159,6 +176,7 @@ class OutboxWorker {
     final debtPayments = <Map<String, dynamic>>[];
     final cashVouchers = <Map<String, dynamic>>[];
     final customerUpserts = <Map<String, dynamic>>[];
+    final productUpserts = <Map<String, dynamic>>[];
     for (final entry in pending) {
       final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
       switch (entry.entityType) {
@@ -174,6 +192,8 @@ class OutboxWorker {
           cashVouchers.add(payload);
         case 'customer_upsert':
           customerUpserts.add(payload);
+        case 'product_upsert':
+          productUpserts.add(payload);
       }
     }
     if (shiftOpens.isEmpty &&
@@ -181,7 +201,8 @@ class OutboxWorker {
         shiftCloses.isEmpty &&
         debtPayments.isEmpty &&
         cashVouchers.isEmpty &&
-        customerUpserts.isEmpty) {
+        customerUpserts.isEmpty &&
+        productUpserts.isEmpty) {
       return;
     }
 
@@ -197,6 +218,7 @@ class OutboxWorker {
           'debtPayments': debtPayments,
           'shiftCloses': shiftCloses,
           'customerUpserts': customerUpserts,
+          'productUpserts': productUpserts,
         },
       );
       final data = response.data;
@@ -223,6 +245,10 @@ class OutboxWorker {
         'customer_upsert',
         result.acceptedCustomerUpsertIds,
       );
+      await _db.markOutboxEntitiesDone(
+        'product_upsert',
+        result.acceptedProductUpsertIds,
+      );
       for (final rejected in result.rejected) {
         await _db.markOutboxError(
           rejected.id,
@@ -245,6 +271,13 @@ class OutboxWorker {
           rejected.id,
           rejected.reason,
           entityType: 'cash_voucher',
+        );
+      }
+      for (final rejected in result.rejectedProductUpserts) {
+        await _db.markOutboxError(
+          rejected.id,
+          rejected.reason,
+          entityType: 'product_upsert',
         );
       }
     } on DioException {

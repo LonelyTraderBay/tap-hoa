@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../data/sync/pull_catalog.dart';
+import 'barcode_label.dart';
+import 'product_form_sheet.dart';
 import 'product_repository.dart';
+import 'product_service.dart';
 
 class ProductListPage extends StatefulWidget {
   const ProductListPage({
@@ -9,11 +12,15 @@ class ProductListPage extends StatefulWidget {
     required this.repository,
     required this.pullCatalog,
     required this.storeId,
+    required this.productService,
+    required this.canEditCatalog,
   });
 
   final ProductRepository repository;
   final PullCatalog pullCatalog;
   final String storeId;
+  final ProductService productService;
+  final bool canEditCatalog;
 
   @override
   State<ProductListPage> createState() => _ProductListPageState();
@@ -48,6 +55,30 @@ class _ProductListPageState extends State<ProductListPage> {
     }
   }
 
+  Future<void> _printLabel(ProductWithStock item) async {
+    await promptAndPrintProductLabel(
+      context,
+      title: item.name,
+      basePriceVnd: item.basePriceVnd,
+      barcode: item.barcode ?? '',
+      sku: item.sku,
+    );
+  }
+
+  Future<void> _openForm({ProductWithStock? existing}) async {
+    final saved = await ProductFormSheet.show(
+      context,
+      productService: widget.productService,
+      repository: widget.repository,
+      storeId: widget.storeId,
+      existing: existing,
+    );
+    if (!mounted) return;
+    if (saved) {
+      setState(() => _message = existing == null ? 'Đã thêm hàng hóa' : 'Đã cập nhật');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -65,6 +96,13 @@ class _ProductListPageState extends State<ProductListPage> {
           ),
         ],
       ),
+      floatingActionButton: widget.canEditCatalog
+          ? FloatingActionButton.extended(
+              onPressed: () => _openForm(),
+              icon: const Icon(Icons.add),
+              label: const Text('Thêm'),
+            )
+          : null,
       body: Column(
         children: [
           if (_message != null)
@@ -92,7 +130,20 @@ class _ProductListPageState extends State<ProductListPage> {
                     return ListTile(
                       title: Text(item.name),
                       subtitle: Text('${item.sku} · ${item.unit}'),
-                      trailing: Text('Tồn: ${item.qty}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'In tem',
+                            icon: const Icon(Icons.print_outlined),
+                            onPressed: () => _printLabel(item),
+                          ),
+                          Text('Tồn: ${item.qty}'),
+                        ],
+                      ),
+                      onTap: widget.canEditCatalog
+                          ? () => _openForm(existing: item)
+                          : null,
                     );
                   },
                 );
