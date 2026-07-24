@@ -38,6 +38,16 @@ class PullCatalog {
         .cast<Map<String, dynamic>>();
     final cashVouchers = (data['cashVouchers'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
+    final stockTransfers = (data['stockTransfers'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final stocktakes = (data['stocktakes'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final purchaseReceipts = (data['purchaseReceipts'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final wastageVouchers = (data['wastageVouchers'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final stockMovements = (data['stockMovements'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
     final serverTime = data['serverTime'] as String?;
 
     await _db.upsertProductsAndStocks(products: products, stocks: stocks);
@@ -51,6 +61,13 @@ class PullCatalog {
     for (final voucher in cashVouchers) {
       await _db.upsertCashVoucher(voucher);
     }
+    await _db.upsertInventoryFromPull(
+      stockTransfers: stockTransfers,
+      stocktakes: stocktakes,
+      purchaseReceipts: purchaseReceipts,
+      wastageVouchers: wastageVouchers,
+      stockMovements: stockMovements,
+    );
     if (serverTime != null) {
       await _db.setLastPullAt(storeId, DateTime.parse(serverTime));
     }

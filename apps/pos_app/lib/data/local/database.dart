@@ -24,13 +24,22 @@ part 'database.g.dart';
     DebtLedgerLocal,
     CashCategoriesLocal,
     CashVouchersLocal,
+    StockTransfersLocal,
+    StockTransferLinesLocal,
+    StocktakesLocal,
+    StocktakeLinesLocal,
+    PurchaseReceiptsLocal,
+    PurchaseReceiptLinesLocal,
+    WastageVouchersLocal,
+    WastageVoucherLinesLocal,
+    StockMovementsLocal,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -51,6 +60,17 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(shiftsLocal, shiftsLocal.expectedCashVnd);
         await migrator.addColumn(shiftsLocal, shiftsLocal.varianceVnd);
         await migrator.addColumn(shiftsLocal, shiftsLocal.transferInShiftVnd);
+      }
+      if (from < 5) {
+        await migrator.createTable(stockTransfersLocal);
+        await migrator.createTable(stockTransferLinesLocal);
+        await migrator.createTable(stocktakesLocal);
+        await migrator.createTable(stocktakeLinesLocal);
+        await migrator.createTable(purchaseReceiptsLocal);
+        await migrator.createTable(purchaseReceiptLinesLocal);
+        await migrator.createTable(wastageVouchersLocal);
+        await migrator.createTable(wastageVoucherLinesLocal);
+        await migrator.createTable(stockMovementsLocal);
       }
     },
   );
@@ -114,6 +134,148 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: DateTime.parse(voucher['updatedAt'] as String),
       ),
     );
+  }
+
+  Future<void> upsertInventoryFromPull({
+    required List<Map<String, dynamic>> stockTransfers,
+    required List<Map<String, dynamic>> stocktakes,
+    required List<Map<String, dynamic>> purchaseReceipts,
+    required List<Map<String, dynamic>> wastageVouchers,
+    required List<Map<String, dynamic>> stockMovements,
+  }) async {
+    await transaction(() async {
+      for (final t in stockTransfers) {
+        await into(stockTransfersLocal).insertOnConflictUpdate(
+          StockTransfersLocalCompanion.insert(
+            id: t['id'] as String,
+            fromStoreId: t['fromStoreId'] as String,
+            toStoreId: t['toStoreId'] as String,
+            status: t['status'] as String,
+            note: Value(t['note'] as String?),
+            createdById: t['createdById'] as String,
+            approvedById: Value(t['approvedById'] as String?),
+            receivedById: Value(t['receivedById'] as String?),
+            clientCreatedAt: DateTime.parse(t['clientCreatedAt'] as String),
+            approvedAt: Value(
+              t['approvedAt'] != null
+                  ? DateTime.parse(t['approvedAt'] as String)
+                  : null,
+            ),
+            receivedAt: Value(
+              t['receivedAt'] != null
+                  ? DateTime.parse(t['receivedAt'] as String)
+                  : null,
+            ),
+            updatedAt: DateTime.parse(t['updatedAt'] as String),
+          ),
+        );
+        for (final line
+            in (t['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+          await into(stockTransferLinesLocal).insertOnConflictUpdate(
+            StockTransferLinesLocalCompanion.insert(
+              id: line['id'] as String,
+              transferId: t['id'] as String,
+              productId: line['productId'] as String,
+              qty: line['qty'] as String,
+            ),
+          );
+        }
+      }
+      for (final s in stocktakes) {
+        await into(stocktakesLocal).insertOnConflictUpdate(
+          StocktakesLocalCompanion.insert(
+            id: s['id'] as String,
+            storeId: s['storeId'] as String,
+            note: Value(s['note'] as String?),
+            recordedById: s['recordedById'] as String,
+            clientCreatedAt: DateTime.parse(s['clientCreatedAt'] as String),
+            updatedAt: DateTime.parse(s['updatedAt'] as String),
+          ),
+        );
+        for (final line
+            in (s['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+          await into(stocktakeLinesLocal).insertOnConflictUpdate(
+            StocktakeLinesLocalCompanion.insert(
+              id: line['id'] as String,
+              stocktakeId: s['id'] as String,
+              productId: line['productId'] as String,
+              systemQty: line['systemQty'] as String,
+              countedQty: line['countedQty'] as String,
+              varianceQty: line['varianceQty'] as String,
+              reason: line['reason'] as String,
+              reasonNote: Value(line['reasonNote'] as String?),
+            ),
+          );
+        }
+      }
+      for (final r in purchaseReceipts) {
+        await into(purchaseReceiptsLocal).insertOnConflictUpdate(
+          PurchaseReceiptsLocalCompanion.insert(
+            id: r['id'] as String,
+            storeId: r['storeId'] as String,
+            supplierName: r['supplierName'] as String,
+            supplierPhone: Value(r['supplierPhone'] as String?),
+            note: Value(r['note'] as String?),
+            recordedById: r['recordedById'] as String,
+            clientCreatedAt: DateTime.parse(r['clientCreatedAt'] as String),
+            updatedAt: DateTime.parse(r['updatedAt'] as String),
+          ),
+        );
+        for (final line
+            in (r['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+          await into(purchaseReceiptLinesLocal).insertOnConflictUpdate(
+            PurchaseReceiptLinesLocalCompanion.insert(
+              id: line['id'] as String,
+              receiptId: r['id'] as String,
+              productId: line['productId'] as String,
+              qty: line['qty'] as String,
+              unitCostVnd: Value(line['unitCostVnd'] as int?),
+            ),
+          );
+        }
+      }
+      for (final w in wastageVouchers) {
+        await into(wastageVouchersLocal).insertOnConflictUpdate(
+          WastageVouchersLocalCompanion.insert(
+            id: w['id'] as String,
+            storeId: w['storeId'] as String,
+            reasonCode: w['reasonCode'] as String,
+            note: Value(w['note'] as String?),
+            recordedById: w['recordedById'] as String,
+            clientCreatedAt: DateTime.parse(w['clientCreatedAt'] as String),
+            updatedAt: DateTime.parse(w['updatedAt'] as String),
+          ),
+        );
+        for (final line
+            in (w['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+          await into(wastageVoucherLinesLocal).insertOnConflictUpdate(
+            WastageVoucherLinesLocalCompanion.insert(
+              id: line['id'] as String,
+              wastageId: w['id'] as String,
+              productId: line['productId'] as String,
+              qty: line['qty'] as String,
+            ),
+          );
+        }
+      }
+      for (final m in stockMovements) {
+        await into(stockMovementsLocal).insertOnConflictUpdate(
+          StockMovementsLocalCompanion.insert(
+            id: m['id'] as String,
+            storeId: m['storeId'] as String,
+            productId: m['productId'] as String,
+            qtyDelta: m['qtyDelta'] as String,
+            balanceAfter: m['balanceAfter'] as String,
+            docType: m['docType'] as String,
+            docId: m['docId'] as String,
+            docLineId: Value(m['docLineId'] as String?),
+            recordedById: m['recordedById'] as String,
+            clientCreatedAt: DateTime.parse(m['clientCreatedAt'] as String),
+            updatedAt: DateTime.parse(m['updatedAt'] as String),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> upsertCustomersAndDebtLedger({

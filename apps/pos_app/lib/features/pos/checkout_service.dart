@@ -120,9 +120,10 @@ class CheckoutService {
       );
 
       for (final line in draft.lines) {
+        final lineId = _uuid.v4();
         await _db.into(_db.saleLinesLocal).insert(
           SaleLinesLocalCompanion.insert(
-            id: _uuid.v4(),
+            id: lineId,
             saleId: saleId,
             productId: line.productId,
             qty: line.qty,
@@ -160,6 +161,22 @@ class CheckoutService {
                 updatedAt: Value(DateTime.now()),
               ),
             );
+
+        await _db.into(_db.stockMovementsLocal).insert(
+          StockMovementsLocalCompanion.insert(
+            id: _uuid.v4(),
+            storeId: storeId,
+            productId: line.productId,
+            qtyDelta: _formatQty(-soldQty),
+            balanceAfter: _formatQty(newQty),
+            docType: 'sale',
+            docId: saleId,
+            docLineId: Value(lineId),
+            recordedById: userId,
+            clientCreatedAt: clientCreatedAt,
+            updatedAt: clientCreatedAt,
+          ),
+        );
       }
 
       CustomersLocalData? debtCustomer;

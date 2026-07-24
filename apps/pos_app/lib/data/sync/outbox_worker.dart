@@ -38,6 +38,23 @@ class ClosedShiftSnapshot {
   }
 }
 
+List<String> _stringIds(Map<String, dynamic> json, String key) {
+  return (json[key] as List<dynamic>? ?? [])
+      .map((id) => id as String)
+      .toList();
+}
+
+List<RejectedSale> _rejectedItems(Map<String, dynamic> json, String key) {
+  return [
+    for (final item
+        in (json[key] as List<dynamic>? ?? []).cast<Map<String, dynamic>>())
+      RejectedSale(
+        id: item['id'] as String,
+        reason: item['reason'] as String,
+      ),
+  ];
+}
+
 class PushSyncResult {
   const PushSyncResult({
     required this.acceptedIds,
@@ -48,11 +65,25 @@ class PushSyncResult {
     required this.acceptedCashVoucherIds,
     required this.acceptedCustomerUpsertIds,
     required this.acceptedProductUpsertIds,
+    required this.acceptedStockTransferCreateIds,
+    required this.acceptedStockTransferApproveIds,
+    required this.acceptedStockTransferRejectIds,
+    required this.acceptedStockTransferReceiveIds,
+    required this.acceptedStocktakeIds,
+    required this.acceptedPurchaseReceiptIds,
+    required this.acceptedWastageIds,
     required this.rejected,
     required this.rejectedShifts,
     required this.rejectedDebtPayments,
     required this.rejectedCashVouchers,
     required this.rejectedProductUpserts,
+    required this.rejectedStockTransferCreates,
+    required this.rejectedStockTransferApproves,
+    required this.rejectedStockTransferRejects,
+    required this.rejectedStockTransferReceives,
+    required this.rejectedStocktakes,
+    required this.rejectedPurchaseReceipts,
+    required this.rejectedWastages,
   });
 
   final List<String> acceptedIds;
@@ -63,91 +94,84 @@ class PushSyncResult {
   final List<String> acceptedCashVoucherIds;
   final List<String> acceptedCustomerUpsertIds;
   final List<String> acceptedProductUpsertIds;
+  final List<String> acceptedStockTransferCreateIds;
+  final List<String> acceptedStockTransferApproveIds;
+  final List<String> acceptedStockTransferRejectIds;
+  final List<String> acceptedStockTransferReceiveIds;
+  final List<String> acceptedStocktakeIds;
+  final List<String> acceptedPurchaseReceiptIds;
+  final List<String> acceptedWastageIds;
   final List<RejectedSale> rejected;
   final List<RejectedSale> rejectedShifts;
   final List<RejectedSale> rejectedDebtPayments;
   final List<RejectedSale> rejectedCashVouchers;
   final List<RejectedSale> rejectedProductUpserts;
+  final List<RejectedSale> rejectedStockTransferCreates;
+  final List<RejectedSale> rejectedStockTransferApproves;
+  final List<RejectedSale> rejectedStockTransferRejects;
+  final List<RejectedSale> rejectedStockTransferReceives;
+  final List<RejectedSale> rejectedStocktakes;
+  final List<RejectedSale> rejectedPurchaseReceipts;
+  final List<RejectedSale> rejectedWastages;
 
   factory PushSyncResult.fromJson(Map<String, dynamic> json) {
-    final rejected = (json['rejected'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>();
     return PushSyncResult(
-      acceptedIds: (json['acceptedIds'] as List<dynamic>? ?? [])
-          .map((id) => id as String)
-          .toList(),
-      acceptedShiftIds: (json['acceptedShiftIds'] as List<dynamic>? ?? [])
-          .map((id) => id as String)
-          .toList(),
-      acceptedShiftCloseIds:
-          (json['acceptedShiftCloseIds'] as List<dynamic>? ?? [])
-              .map((id) => id as String)
-              .toList(),
+      acceptedIds: _stringIds(json, 'acceptedIds'),
+      acceptedShiftIds: _stringIds(json, 'acceptedShiftIds'),
+      acceptedShiftCloseIds: _stringIds(json, 'acceptedShiftCloseIds'),
       closedShifts: [
         for (final item
             in (json['closedShifts'] as List<dynamic>? ?? [])
                 .cast<Map<String, dynamic>>())
           ClosedShiftSnapshot.fromJson(item),
       ],
-      acceptedDebtPaymentIds:
-          (json['acceptedDebtPaymentIds'] as List<dynamic>? ?? [])
-              .map((id) => id as String)
-              .toList(),
-      acceptedCashVoucherIds:
-          (json['acceptedCashVoucherIds'] as List<dynamic>? ?? [])
-              .map((id) => id as String)
-              .toList(),
-      acceptedCustomerUpsertIds:
-          (json['acceptedCustomerUpsertIds'] as List<dynamic>? ?? [])
-              .map((id) => id as String)
-              .toList(),
-      acceptedProductUpsertIds:
-          (json['acceptedProductUpsertIds'] as List<dynamic>? ?? [])
-              .map((id) => id as String)
-              .toList(),
-      rejected: [
-        for (final item in rejected)
-          RejectedSale(
-            id: item['id'] as String,
-            reason: item['reason'] as String,
-          ),
-      ],
-      rejectedShifts: [
-        for (final item
-            in (json['rejectedShifts'] as List<dynamic>? ?? [])
-                .cast<Map<String, dynamic>>())
-          RejectedSale(
-            id: item['id'] as String,
-            reason: item['reason'] as String,
-          ),
-      ],
-      rejectedDebtPayments: [
-        for (final item
-            in (json['rejectedDebtPayments'] as List<dynamic>? ?? [])
-                .cast<Map<String, dynamic>>())
-          RejectedSale(
-            id: item['id'] as String,
-            reason: item['reason'] as String,
-          ),
-      ],
-      rejectedCashVouchers: [
-        for (final item
-            in (json['rejectedCashVouchers'] as List<dynamic>? ?? [])
-                .cast<Map<String, dynamic>>())
-          RejectedSale(
-            id: item['id'] as String,
-            reason: item['reason'] as String,
-          ),
-      ],
-      rejectedProductUpserts: [
-        for (final item
-            in (json['rejectedProductUpserts'] as List<dynamic>? ?? [])
-                .cast<Map<String, dynamic>>())
-          RejectedSale(
-            id: item['id'] as String,
-            reason: item['reason'] as String,
-          ),
-      ],
+      acceptedDebtPaymentIds: _stringIds(json, 'acceptedDebtPaymentIds'),
+      acceptedCashVoucherIds: _stringIds(json, 'acceptedCashVoucherIds'),
+      acceptedCustomerUpsertIds: _stringIds(json, 'acceptedCustomerUpsertIds'),
+      acceptedProductUpsertIds: _stringIds(json, 'acceptedProductUpsertIds'),
+      acceptedStockTransferCreateIds: _stringIds(
+        json,
+        'acceptedStockTransferCreateIds',
+      ),
+      acceptedStockTransferApproveIds: _stringIds(
+        json,
+        'acceptedStockTransferApproveIds',
+      ),
+      acceptedStockTransferRejectIds: _stringIds(
+        json,
+        'acceptedStockTransferRejectIds',
+      ),
+      acceptedStockTransferReceiveIds: _stringIds(
+        json,
+        'acceptedStockTransferReceiveIds',
+      ),
+      acceptedStocktakeIds: _stringIds(json, 'acceptedStocktakeIds'),
+      acceptedPurchaseReceiptIds: _stringIds(json, 'acceptedPurchaseReceiptIds'),
+      acceptedWastageIds: _stringIds(json, 'acceptedWastageIds'),
+      rejected: _rejectedItems(json, 'rejected'),
+      rejectedShifts: _rejectedItems(json, 'rejectedShifts'),
+      rejectedDebtPayments: _rejectedItems(json, 'rejectedDebtPayments'),
+      rejectedCashVouchers: _rejectedItems(json, 'rejectedCashVouchers'),
+      rejectedProductUpserts: _rejectedItems(json, 'rejectedProductUpserts'),
+      rejectedStockTransferCreates: _rejectedItems(
+        json,
+        'rejectedStockTransferCreates',
+      ),
+      rejectedStockTransferApproves: _rejectedItems(
+        json,
+        'rejectedStockTransferApproves',
+      ),
+      rejectedStockTransferRejects: _rejectedItems(
+        json,
+        'rejectedStockTransferRejects',
+      ),
+      rejectedStockTransferReceives: _rejectedItems(
+        json,
+        'rejectedStockTransferReceives',
+      ),
+      rejectedStocktakes: _rejectedItems(json, 'rejectedStocktakes'),
+      rejectedPurchaseReceipts: _rejectedItems(json, 'rejectedPurchaseReceipts'),
+      rejectedWastages: _rejectedItems(json, 'rejectedWastages'),
     );
   }
 }
@@ -177,6 +201,14 @@ class OutboxWorker {
     final cashVouchers = <Map<String, dynamic>>[];
     final customerUpserts = <Map<String, dynamic>>[];
     final productUpserts = <Map<String, dynamic>>[];
+    final stockTransferCreates = <Map<String, dynamic>>[];
+    final stockTransferApproves = <Map<String, dynamic>>[];
+    final stockTransferRejects = <Map<String, dynamic>>[];
+    final stockTransferReceives = <Map<String, dynamic>>[];
+    final stocktakes = <Map<String, dynamic>>[];
+    final purchaseReceipts = <Map<String, dynamic>>[];
+    final wastages = <Map<String, dynamic>>[];
+
     for (final entry in pending) {
       final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
       switch (entry.entityType) {
@@ -194,6 +226,20 @@ class OutboxWorker {
           customerUpserts.add(payload);
         case 'product_upsert':
           productUpserts.add(payload);
+        case 'stock_transfer_create':
+          stockTransferCreates.add(payload);
+        case 'stock_transfer_approve':
+          stockTransferApproves.add(payload);
+        case 'stock_transfer_reject':
+          stockTransferRejects.add(payload);
+        case 'stock_transfer_receive':
+          stockTransferReceives.add(payload);
+        case 'stocktake':
+          stocktakes.add(payload);
+        case 'purchase_receipt':
+          purchaseReceipts.add(payload);
+        case 'wastage':
+          wastages.add(payload);
       }
     }
     if (shiftOpens.isEmpty &&
@@ -202,7 +248,14 @@ class OutboxWorker {
         debtPayments.isEmpty &&
         cashVouchers.isEmpty &&
         customerUpserts.isEmpty &&
-        productUpserts.isEmpty) {
+        productUpserts.isEmpty &&
+        stockTransferCreates.isEmpty &&
+        stockTransferApproves.isEmpty &&
+        stockTransferRejects.isEmpty &&
+        stockTransferReceives.isEmpty &&
+        stocktakes.isEmpty &&
+        purchaseReceipts.isEmpty &&
+        wastages.isEmpty) {
       return;
     }
 
@@ -219,6 +272,13 @@ class OutboxWorker {
           'shiftCloses': shiftCloses,
           'customerUpserts': customerUpserts,
           'productUpserts': productUpserts,
+          'stockTransferCreates': stockTransferCreates,
+          'stockTransferApproves': stockTransferApproves,
+          'stockTransferRejects': stockTransferRejects,
+          'stockTransferReceives': stockTransferReceives,
+          'stocktakes': stocktakes,
+          'purchaseReceipts': purchaseReceipts,
+          'wastages': wastages,
         },
       );
       final data = response.data;
@@ -249,6 +309,42 @@ class OutboxWorker {
         'product_upsert',
         result.acceptedProductUpsertIds,
       );
+      await _db.markOutboxEntitiesDone(
+        'stock_transfer_create',
+        result.acceptedStockTransferCreateIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'stock_transfer_approve',
+        result.acceptedStockTransferApproveIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'stock_transfer_reject',
+        result.acceptedStockTransferRejectIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'stock_transfer_receive',
+        result.acceptedStockTransferReceiveIds,
+      );
+      await _db.markOutboxEntitiesDone('stocktake', result.acceptedStocktakeIds);
+      await _db.markOutboxEntitiesDone(
+        'purchase_receipt',
+        result.acceptedPurchaseReceiptIds,
+      );
+      await _db.markOutboxEntitiesDone('wastage', result.acceptedWastageIds);
+
+      Future<void> markRejected(
+        List<RejectedSale> items, {
+        required String entityType,
+      }) async {
+        for (final rejected in items) {
+          await _db.markOutboxError(
+            rejected.id,
+            rejected.reason,
+            entityType: entityType,
+          );
+        }
+      }
+
       for (final rejected in result.rejected) {
         await _db.markOutboxError(
           rejected.id,
@@ -259,27 +355,40 @@ class OutboxWorker {
       for (final rejected in result.rejectedShifts) {
         await _db.markOutboxError(rejected.id, rejected.reason);
       }
-      for (final rejected in result.rejectedDebtPayments) {
-        await _db.markOutboxError(
-          rejected.id,
-          rejected.reason,
-          entityType: 'debt_payment',
-        );
-      }
-      for (final rejected in result.rejectedCashVouchers) {
-        await _db.markOutboxError(
-          rejected.id,
-          rejected.reason,
-          entityType: 'cash_voucher',
-        );
-      }
-      for (final rejected in result.rejectedProductUpserts) {
-        await _db.markOutboxError(
-          rejected.id,
-          rejected.reason,
-          entityType: 'product_upsert',
-        );
-      }
+      await markRejected(
+        result.rejectedDebtPayments,
+        entityType: 'debt_payment',
+      );
+      await markRejected(
+        result.rejectedCashVouchers,
+        entityType: 'cash_voucher',
+      );
+      await markRejected(
+        result.rejectedProductUpserts,
+        entityType: 'product_upsert',
+      );
+      await markRejected(
+        result.rejectedStockTransferCreates,
+        entityType: 'stock_transfer_create',
+      );
+      await markRejected(
+        result.rejectedStockTransferApproves,
+        entityType: 'stock_transfer_approve',
+      );
+      await markRejected(
+        result.rejectedStockTransferRejects,
+        entityType: 'stock_transfer_reject',
+      );
+      await markRejected(
+        result.rejectedStockTransferReceives,
+        entityType: 'stock_transfer_receive',
+      );
+      await markRejected(result.rejectedStocktakes, entityType: 'stocktake');
+      await markRejected(
+        result.rejectedPurchaseReceipts,
+        entityType: 'purchase_receipt',
+      );
+      await markRejected(result.rejectedWastages, entityType: 'wastage');
     } on DioException {
       // stay pending; do not throw to UI
     }
