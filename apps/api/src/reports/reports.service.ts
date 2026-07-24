@@ -3,7 +3,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import { Role, Prisma } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -195,25 +195,24 @@ export class ReportsService {
     }
 
     const productIds = [...byProduct.keys()];
-    const products = await this.prisma.$queryRaw<
-      { id: string; sku: string; name: string; costVnd: number | null }[]
-    >(
-      Prisma.sql`SELECT id, sku, name, "costVnd" FROM "Product" WHERE id IN (${Prisma.join(productIds)})`,
-    );
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, sku: true, name: true, costVnd: true },
+    });
     const productById = new Map(products.map((product) => [product.id, product]));
 
     const items: TopSkuItem[] = [...byProduct.values()]
       .map((agg) => {
         const product = productById.get(agg.productId);
-        const costVnd = product?.costVnd ?? null;
         return {
           productId: agg.productId,
           sku: product?.sku ?? '',
           name: product?.name ?? '',
           qty: agg.qty,
           revenueVnd: agg.revenueVnd,
-          estimatedGrossVnd:
-            costVnd == null ? null : agg.revenueVnd - agg.qty * costVnd,
+          estimatedGrossVnd: product
+            ? agg.revenueVnd - agg.qty * product.costVnd
+            : null,
         };
       })
       .sort((a, b) => {

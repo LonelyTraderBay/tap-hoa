@@ -287,9 +287,6 @@ describe('Reports top-skus', () => {
     app = moduleRef.createNestApplication();
     prisma = moduleRef.get(PrismaService);
     await app.init();
-    await prisma.$executeRawUnsafe(
-      'ALTER TABLE "Product" ALTER COLUMN "costVnd" DROP NOT NULL',
-    );
   });
 
   beforeEach(async () => {
@@ -330,13 +327,9 @@ describe('Reports top-skus', () => {
         name: 'Top Product B',
         unit: 'chai',
         basePriceVnd: 8000,
-        costVnd: 0,
+        costVnd: 2000,
       },
     });
-    await prisma.$executeRawUnsafe(
-      'UPDATE "Product" SET "costVnd" = NULL WHERE id = $1',
-      productB.id,
-    );
     for (const product of [productA, productB]) {
       await prisma.productStoreStock.create({
         data: {
@@ -438,7 +431,7 @@ describe('Reports top-skus', () => {
     expect(report.body.items[0].productId).toBe(productB.id);
     expect(report.body.items[0].qty).toBe(5);
     expect(report.body.items[0].revenueVnd).toBe(40000);
-    expect(report.body.items[0].estimatedGrossVnd).toBeNull();
+    expect(report.body.items[0].estimatedGrossVnd).toBe(30000);
     expect(report.body.items[1].productId).toBe(productA.id);
     expect(report.body.items[1].qty).toBe(3);
     expect(report.body.items[1].revenueVnd).toBe(30000);
