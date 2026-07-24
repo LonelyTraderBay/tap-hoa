@@ -15,6 +15,8 @@ import '../reports/day_report_page.dart';
 import '../reports/day_report_repository.dart';
 import '../inventory/inventory_hub_page.dart';
 import '../inventory/inventory_service.dart';
+import '../sync/outbox_conflict_service.dart';
+import '../sync/outbox_conflicts_page.dart';
 import '../products/product_list_page.dart';
 import '../products/product_repository.dart';
 import '../products/product_service.dart';
@@ -119,6 +121,20 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
+  void _openOutboxConflicts() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OutboxConflictsPage(
+          service: OutboxConflictService(
+            db: widget.database,
+            worker: widget.outboxWorker,
+          ),
+          db: widget.database,
+        ),
+      ),
+    );
+  }
+
   Future<void> _sync() async {
     setState(() {
       _isSyncing = true;
@@ -163,6 +179,23 @@ class _PosPageState extends State<PosPage> {
                   )
                 : const Icon(Icons.cloud_upload_outlined),
             tooltip: 'Đồng bộ',
+          ),
+          StreamBuilder<int>(
+            stream: widget.database.watchOutboxErrorCount(),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              if (count <= 0) {
+                return const SizedBox.shrink();
+              }
+              return IconButton(
+                onPressed: _openOutboxConflicts,
+                tooltip: 'Đồng bộ lỗi',
+                icon: Badge(
+                  label: Text('$count'),
+                  child: const Icon(Icons.sync_problem),
+                ),
+              );
+            },
           ),
           IconButton(
             onPressed: () {
@@ -234,6 +267,10 @@ class _PosPageState extends State<PosPage> {
             },
             icon: const Icon(Icons.people_outline),
             tooltip: 'Khách nợ',
+          ),
+          TextButton(
+            onPressed: _openOutboxConflicts,
+            child: const Text('Đồng bộ lỗi'),
           ),
           IconButton(
             onPressed: () {
