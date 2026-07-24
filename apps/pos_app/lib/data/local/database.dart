@@ -361,6 +361,34 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  Future<void> requeueOutbox(String outboxId) async {
+    await (update(outboxEntries)..where((row) => row.id.equals(outboxId))).write(
+      const OutboxEntriesCompanion(
+        status: Value('pending'),
+        lastError: Value(null),
+      ),
+    );
+  }
+
+  Future<List<OutboxEntry>> listOutboxErrors() {
+    return (select(outboxEntries)
+          ..where((row) => row.status.equals('error'))
+          ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
+        .get();
+  }
+
+  Stream<int> watchOutboxErrorCount() {
+    return (select(outboxEntries)..where((row) => row.status.equals('error')))
+        .watch()
+        .map((rows) => rows.length);
+  }
+
+  Future<void> updateOutboxPayload(String outboxId, String payloadJson) {
+    return (update(outboxEntries)..where((row) => row.id.equals(outboxId))).write(
+      OutboxEntriesCompanion(payloadJson: Value(payloadJson)),
+    );
+  }
+
   Future<void> markOutboxDone(List<String> saleIds) async {
     await markOutboxEntitiesDone('sale', saleIds);
   }
