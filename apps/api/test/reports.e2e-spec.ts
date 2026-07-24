@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'crypto';
+import { Role } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -436,5 +437,212 @@ describe('Reports top-skus', () => {
     expect(report.body.items[1].qty).toBe(3);
     expect(report.body.items[1].revenueVnd).toBe(30000);
     expect(report.body.items[1].estimatedGrossVnd).toBe(15000);
+  });
+});
+
+describe('Reports stock-on-hand', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    prisma = moduleRef.get(PrismaService);
+    await app.init();
+  });
+
+  beforeEach(async () => {
+    await prisma.productStoreStock.deleteMany({
+      where: { product: { sku: { in: ['SOH-A', 'SOH-B', 'SOH-INACTIVE'] } } },
+    });
+    await prisma.product.deleteMany({
+      where: { sku: { in: ['SOH-A', 'SOH-B', 'SOH-INACTIVE'] } },
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  async function seedStockOnHandProducts(storeId: string) {
+    const productBelowMin = await prisma.product.create({
+      data: {
+        sku: 'SOH-A',
+        name: 'Sản phẩm An',
+        unit: 'chai',
+        basePriceVnd: 10000,
+        costVnd: 7000,
+      },
+    });
+    const productAboveMin = await prisma.product.create({
+      data: {
+        sku: 'SOH-B',
+        name: 'Sản phẩm Bình',
+        unit: 'thùng',
+        basePriceVnd: 12000,
+        costVnd: 4000,
+      },
+    });
+    const inactiveProduct = await prisma.product.create({
+      data: {
+        sku: 'SOH-INACTIVE',
+        name: 'Sản phẩm Ngưng',
+        unit: 'chai',
+        basePriceVnd: 5000,
+        costVnd: 3000,
+        active: false,
+      },
+    });
+
+    await prisma.productStoreStock.create({
+      data: {
+        productId: productBelowMin.id,
+        storeId,
+        qty: 3,
+        minQty: 10,
+      },
+    });
+    await prisma.productStoreStock.create({
+      data: {
+        productId: productAboveMin.id,
+        storeId,
+        qty: 50,
+        minQty: 10,
+      },
+    });
+    await prisma.productStoreStock.create({
+      data: {
+        productId: inactiveProduct.id,
+        storeId,
+        qty: 100,
+        minQty: 0,
+      },
+    });
+
+    return { productBelowMin, productAboveMin, inactiveProduct };
+  }
+
+  it('GET /reports/stock-on-hand returns values, belowMin, and sort order', async () => {
+    const login = await loginAsOwner(app);
+    const storesRes = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const ch1 = storesRes.body.find(
+      (store: { code: string }) => store.code === 'CH1',
+    );
+    if (!ch1) {
+      throw new Error('Seed store CH1 not found');
+    }
+
+    const { productBelowMin, productAboveMin } =
+      await seedStockOnHandProducts(ch1.id);
+
+    const report = await request(app.getHttpServer())
+      .get(`/reports/stock-on-hand?storeId=${ch1.id}`)
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(200);
+
+    expect(report.body.storeId).toBe(ch1.id);
+
+    const itemA = report.body.items.find(
+      (item: { sku: string }) => item.sku === 'SOH-A',
+    );
+    const itemB = report.body.items.find(
+      (item: { sku: string }) => item.sku === 'SOH-B',
+    );
+    expect(itemA).toBeDefined();
+    expect(itemB).toBeDefined();
+    expect(
+      report.body.items.find(
+        (item: { sku: string }) => item.sku === 'SOH-INACTIVE',
+      ),
+    ).toBeUndefined();
+
+    const indexA = report.body.items.findIndex(
+      (item: { sku: string }) => item.sku === 'SOH-A',
+    );
+    const indexB = report.body.items.findIndex(
+      (item: { sku: string }) => item.sku === 'SOH-B',
+    );
+    expect(indexA).toBeLessThan(indexB);
+
+    expect(itemA.productId).toBe(productBelowMin.id);
+    expect(itemA.sku).toBe('SOH-A');
+    expect(itemA.name).toBe('Sản phẩm An');
+    expect(itemA.unit).toBe('chai');
+    expect(itemA.qty).toBe(3);
+    expect(itemA.minQty).toBe(10);
+    expect(itemA.costVnd).toBe(7000);
+    expect(itemA.estimatedValueVnd).toBe(21000);
+    expect(itemA.belowMin).toBe(true);
+
+    expect(itemB.productId).toBe(productAboveMin.id);
+    expect(itemB.sku).toBe('SOH-B');
+    expect(itemB.name).toBe('Sản phẩm Bình');
+    expect(itemB.unit).toBe('thùng');
+    expect(itemB.qty).toBe(50);
+    expect(itemB.minQty).toBe(10);
+    expect(itemB.costVnd).toBe(4000);
+    expect(itemB.estimatedValueVnd).toBe(200000);
+    expect(itemB.belowMin).toBe(false);
+
+    const computedTotal = report.body.items.reduce(
+      (sum: number, item: { estimatedValueVnd: number }) =>
+        sum + item.estimatedValueVnd,
+      0,
+    );
+    expect(report.body.totalEstimatedValueVnd).toBe(computedTotal);
+  });
+
+  it('GET /reports/stock-on-hand requires storeId', async () => {
+    const login = await loginAsOwner(app);
+
+    await request(app.getHttpServer())
+      .get('/reports/stock-on-hand')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(400);
+  });
+
+  it('GET /reports/stock-on-hand rejects forbidden store for cashier', async () => {
+    const login = await loginAsOwner(app);
+    const storesRes = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const ch1 = storesRes.body.find(
+      (store: { code: string }) => store.code === 'CH1',
+    );
+    const ch2 = storesRes.body.find(
+      (store: { code: string }) => store.code === 'CH2',
+    );
+    if (!ch1 || !ch2) {
+      throw new Error('Seed stores CH1/CH2 not found');
+    }
+
+    const passwordHash = await import('bcrypt').then((m) =>
+      m.hash('123456', 10),
+    );
+    await prisma.user.upsert({
+      where: { phone: '0900000099' },
+      update: {},
+      create: {
+        phone: '0900000099',
+        name: 'Cashier SOH',
+        passwordHash,
+        role: Role.cashier,
+        stores: { create: [{ storeId: ch1.id }] },
+      },
+    });
+
+    const cashierRes = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ phone: '0900000099', password: '123456' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/reports/stock-on-hand?storeId=${ch2.id}`)
+      .set('Authorization', `Bearer ${cashierRes.body.accessToken}`)
+      .expect(403);
   });
 });

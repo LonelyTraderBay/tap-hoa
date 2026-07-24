@@ -35,6 +35,24 @@ export type TopSkusResponse = {
   items: TopSkuItem[];
 };
 
+export type StockOnHandItem = {
+  productId: string;
+  sku: string;
+  name: string;
+  unit: string;
+  qty: number;
+  minQty: number;
+  costVnd: number;
+  estimatedValueVnd: number;
+  belowMin: boolean;
+};
+
+export type StockOnHandResponse = {
+  storeId: string;
+  items: StockOnHandItem[];
+  totalEstimatedValueVnd: number;
+};
+
 const ICT_OFFSET_HOURS = 7;
 
 @Injectable()
@@ -224,5 +242,53 @@ export class ReportsService {
       .slice(0, effectiveLimit);
 
     return { date, items };
+  }
+
+  async stockOnHand(
+    user: AuthUser,
+    storeId: string,
+  ): Promise<StockOnHandResponse> {
+    this.assertStoreAccess(user, storeId);
+    const rows = await this.prisma.productStoreStock.findMany({
+      where: { storeId, product: { active: true } },
+      include: {
+        product: {
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            unit: true,
+            costVnd: true,
+          },
+        },
+      },
+    });
+    const items = rows.map((row) => {
+      const qty = Number(row.qty);
+      const minQty = Number(row.minQty);
+      const estimatedValueVnd = Math.round(qty * row.product.costVnd);
+      return {
+        productId: row.productId,
+        sku: row.product.sku,
+        name: row.product.name,
+        unit: row.product.unit,
+        qty,
+        minQty,
+        costVnd: row.product.costVnd,
+        estimatedValueVnd,
+        belowMin: qty < minQty,
+      };
+    });
+    items.sort((a, b) => {
+      if (a.belowMin !== b.belowMin) {
+        return a.belowMin ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name, 'vi');
+    });
+    const totalEstimatedValueVnd = items.reduce(
+      (sum, item) => sum + item.estimatedValueVnd,
+      0,
+    );
+    return { storeId, items, totalEstimatedValueVnd };
   }
 }

@@ -43,4 +43,15 @@ export class ReportsController {
     }
     return this.reportsService.topSkus(req.user, date, storeId, limit);
   }
+
+  @Get('stock-on-hand')
+  stockOnHand(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+  ) {
+    if (!storeId) {
+      throw new BadRequestException('storeId is required');
+    }
+    return this.reportsService.stockOnHand(req.user, storeId);
+  }
 }
