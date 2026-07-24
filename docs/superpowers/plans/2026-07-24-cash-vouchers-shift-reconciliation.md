@@ -359,7 +359,7 @@ Before update in `close` / reuse from sync:
 `processCashVoucher`:
 - validate id, store access, amount > 0, direction/channel enums, parse dates
 - load category; if missing → `invalid_voucher`; if `category.direction !== dto.direction` → `category_direction_mismatch`
-- load shift; if missing or `closedAt != null` or `shift.storeId !== dto.storeId` → `shift_not_open`
+- load shift; if missing or `closedAt != null` → `shift_not_open`; if `shift.storeId !== dto.storeId` → `store_forbidden`
 - if exists by id → accept (idempotent return)
 - else create row with `recordedById: dto.recordedById ?? user.userId`
 

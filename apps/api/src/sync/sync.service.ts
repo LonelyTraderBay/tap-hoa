@@ -260,12 +260,11 @@ export class SyncService {
         const shift = await tx.shift.findUnique({
           where: { id: voucher.shiftId },
         });
-        if (
-          !shift ||
-          shift.closedAt != null ||
-          shift.storeId !== voucher.storeId
-        ) {
+        if (!shift || shift.closedAt != null) {
           throw new Error('shift_not_open');
+        }
+        if (shift.storeId !== voucher.storeId) {
+          throw new Error('store_forbidden');
         }
 
         await tx.cashVoucher.create({
@@ -287,6 +286,9 @@ export class SyncService {
     } catch (error) {
       if (error instanceof Error && error.message === 'shift_not_open') {
         return { accepted: false, reason: 'shift_not_open' };
+      }
+      if (error instanceof Error && error.message === 'store_forbidden') {
+        return { accepted: false, reason: 'store_forbidden' };
       }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

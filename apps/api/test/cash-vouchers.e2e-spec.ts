@@ -194,6 +194,52 @@ describe('Cash vouchers sync', () => {
       });
   });
 
+  it('rejects voucher when shift belongs to a different store', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    expect(stores.body.length).toBeGreaterThanOrEqual(2);
+    const storeA = stores.body[0].id as string;
+    const storeB = stores.body[1].id as string;
+
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId: storeA, openingCash: 100000, clientId: shiftId })
+      .expect(201);
+
+    const voucherId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-voucher',
+        sales: [],
+        cashVouchers: [
+          {
+            id: voucherId,
+            storeId: storeB,
+            shiftId,
+            categoryId: CATEGORY_OTHER_IN,
+            direction: 'in',
+            channel: 'cash',
+            amountVnd: 5000,
+            clientCreatedAt: new Date().toISOString(),
+          },
+        ],
+      })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.rejectedCashVouchers).toEqual(
+          expect.arrayContaining([
+            { id: voucherId, reason: 'store_forbidden' },
+          ]),
+        );
+      });
+  });
+
   it('close shift computes expected, variance, and transfer snapshot', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())
