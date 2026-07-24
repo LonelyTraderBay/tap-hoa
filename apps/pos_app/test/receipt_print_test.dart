@@ -1,9 +1,28 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pos_app/features/pos/receipt_print.dart';
+import 'package:pos_app/shared/pdf_fonts.dart';
 
 void main() {
-  test('buildReceiptPdf returns non-empty pdf', () async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    resetPdfFontsForTesting();
+  });
+
+  test('pdf font assets load and parse as TTF', () async {
+    final regular = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
+    final bold = await rootBundle.load('assets/fonts/NotoSans-Bold.ttf');
+    expect(regular.lengthInBytes, greaterThan(1000));
+    expect(bold.lengthInBytes, greaterThan(1000));
+
+    await ensurePdfFontsLoaded();
+    expect(pdfFontRegular, isNotNull);
+    expect(pdfFontBold, isNotNull);
+  });
+
+  test('buildReceiptPdf returns non-empty pdf with Vietnamese text', () async {
     final bytes = await buildReceiptPdf(
       storeName: 'Tạp hóa Minh Anh',
       saleId: 'abc12345-6789-0000-0000-000000000001',
@@ -29,6 +48,8 @@ void main() {
       customerName: 'Anh Tuấn',
     );
     expect(bytes.length, greaterThan(100));
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    // Glyph rendering for Vietnamese diacritics requires visual PDF inspection.
   });
 
   test('formatReceiptVnd uses dot thousands separator', () {

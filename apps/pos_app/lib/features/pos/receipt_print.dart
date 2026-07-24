@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../shared/pdf_fonts.dart';
 import '../reports/ict_date.dart';
 
 const _receiptWidthMm = 58.0;
@@ -69,24 +70,30 @@ Future<Uint8List> buildReceiptPdf({
   required int debtVnd,
   String? customerName,
 }) async {
+  await ensurePdfFontsLoaded();
+
   final doc = pw.Document();
   final pageFormat = PdfPageFormat(
     _receiptWidthMm * PdfPageFormat.mm,
     double.infinity,
     marginAll: 4 * PdfPageFormat.mm,
   );
-  const textStyle = pw.TextStyle(fontSize: 8);
-  final boldStyle = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
+  final textStyle = pw.TextStyle(fontSize: 8, font: pdfFontRegular);
+  final boldStyle = pw.TextStyle(fontSize: 8, font: pdfFontBold);
 
   doc.addPage(
     pw.Page(
       pageFormat: pageFormat,
+      theme: pw.ThemeData.withFont(
+        base: pdfFontRegular,
+        bold: pdfFontBold,
+      ),
       build: (context) {
         final children = <pw.Widget>[
           pw.Text(
             storeName.trim(),
             textAlign: pw.TextAlign.center,
-            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+            style: pw.TextStyle(fontSize: 10, font: pdfFontBold),
           ),
           pw.SizedBox(height: 4),
           pw.Text(formatIctDateTime(soldAt), style: textStyle),
