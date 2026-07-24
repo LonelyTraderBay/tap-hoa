@@ -214,3 +214,6 @@ Giai đoạn 2 **sinh bút toán từ chứng từ Giai đoạn 1**, không nh�
 ## 9. Bước tiếp theo
 
 Implementation plan Giai đoạn 1 MVP: `docs/superpowers/plans/2026-07-23-phase1-foundation-pos.md`
+
+**Giai đoạn 1 hardened 2026-07-24** — gate PASS (`docs/superpowers/plans/2026-07-24-phase1-hardening.md`).  
+Giai đoạn 2 bắt đầu Epic 1 giá vốn (WAC): `docs/superpowers/specs/2026-07-24-phase2-cogs-wac-design.md`.

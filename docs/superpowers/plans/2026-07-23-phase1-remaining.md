@@ -78,6 +78,8 @@
 
 ## Not in Phase 1 (Phase 2)
 
-- Full accounting ledger, COGS, supplier AP
+See roadmap: `docs/superpowers/plans/2026-07-24-phase2-roadmap.md`
+
+- Full accounting ledger, COGS (Epic 1 WAC done), supplier AP
 - E-invoice integration (Viettel, MISA, EasyInvoice, …)
 - Tax reporting, period close / khóa sổ

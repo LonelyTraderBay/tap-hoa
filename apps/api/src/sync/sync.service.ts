@@ -134,6 +134,7 @@ export class SyncService {
         storeId: stock.storeId,
         qty: stock.qty.toString(),
         minQty: stock.minQty.toString(),
+        avgCostVnd: stock.avgCostVnd,
         updatedAt: stock.updatedAt.toISOString(),
       })),
       store: store
@@ -853,13 +854,67 @@ export class SyncService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        const saleLines = sale.lines.map((line) => ({
-          id: randomUUID(),
-          productId: line.productId,
-          qty: new Prisma.Decimal(line.qty),
-          unitPrice: line.unitPrice,
-          lineTotal: line.lineTotal,
-        }));
+        const saleLines: {
+          id: string;
+          productId: string;
+          qty: Prisma.Decimal;
+          unitPrice: number;
+          lineTotal: number;
+          unitCostVnd: number;
+        }[] = [];
+
+        for (const line of sale.lines) {
+          const product = await tx.product.findUnique({
+            where: { id: line.productId },
+            include: { comboComponents: true },
+          });
+          let unitCostVnd = 0;
+          if (product?.kind === 'combo') {
+            if (product.comboComponents.length === 0) {
+              throw new Error('invalid_combo');
+            }
+            for (const c of product.comboComponents) {
+              const componentStock = await tx.productStoreStock.findUnique({
+                where: {
+                  productId_storeId: {
+                    productId: c.componentProductId,
+                    storeId: sale.storeId,
+                  },
+                },
+              });
+              const componentProduct = await tx.product.findUnique({
+                where: { id: c.componentProductId },
+              });
+              const avg =
+                (componentStock?.avgCostVnd ?? 0) > 0
+                  ? componentStock!.avgCostVnd
+                  : (componentProduct?.costVnd ?? 0);
+              unitCostVnd += Math.round(avg * Number(c.qtyBase));
+            }
+          } else {
+            const stock = await tx.productStoreStock.findUnique({
+              where: {
+                productId_storeId: {
+                  productId: line.productId,
+                  storeId: sale.storeId,
+                },
+              },
+            });
+            unitCostVnd =
+              (stock?.avgCostVnd ?? 0) > 0
+                ? stock!.avgCostVnd
+                : (product?.costVnd ?? 0);
+          }
+
+          saleLines.push({
+            id: randomUUID(),
+            productId: line.productId,
+            qty: new Prisma.Decimal(line.qty),
+            unitPrice: line.unitPrice,
+            lineTotal: line.lineTotal,
+            unitCostVnd,
+          });
+        }
 
         for (const line of saleLines) {
           const product = await tx.product.findUnique({
@@ -921,6 +976,7 @@ export class SyncService {
                 qty: line.qty,
                 unitPrice: line.unitPrice,
                 lineTotal: line.lineTotal,
+                unitCostVnd: line.unitCostVnd,
               })),
             },
           },

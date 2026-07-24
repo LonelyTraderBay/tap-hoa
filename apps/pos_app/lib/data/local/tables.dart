@@ -46,6 +46,7 @@ class ProductStocks extends Table {
   TextColumn get storeId => text()();
   TextColumn get qty => text()();
   TextColumn get minQty => text()();
+  IntColumn get avgCostVnd => integer().withDefault(const Constant(0))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -92,6 +93,7 @@ class SaleLinesLocal extends Table {
   TextColumn get qty => text()();
   IntColumn get unitPrice => integer()();
   IntColumn get lineTotal => integer()();
+  IntColumn get unitCostVnd => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

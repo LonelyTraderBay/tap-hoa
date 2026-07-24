@@ -1538,6 +1538,18 @@ class $ProductStocksTable extends ProductStocks
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _avgCostVndMeta = const VerificationMeta(
+    'avgCostVnd',
+  );
+  @override
+  late final GeneratedColumn<int> avgCostVnd = GeneratedColumn<int>(
+    'avg_cost_vnd',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -1555,6 +1567,7 @@ class $ProductStocksTable extends ProductStocks
     storeId,
     qty,
     minQty,
+    avgCostVnd,
     updatedAt,
   ];
   @override
@@ -1601,6 +1614,15 @@ class $ProductStocksTable extends ProductStocks
     } else if (isInserting) {
       context.missing(_minQtyMeta);
     }
+    if (data.containsKey('avg_cost_vnd')) {
+      context.handle(
+        _avgCostVndMeta,
+        avgCostVnd.isAcceptableOrUnknown(
+          data['avg_cost_vnd']!,
+          _avgCostVndMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -1634,6 +1656,10 @@ class $ProductStocksTable extends ProductStocks
         DriftSqlType.string,
         data['${effectivePrefix}min_qty'],
       )!,
+      avgCostVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}avg_cost_vnd'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -1652,12 +1678,14 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
   final String storeId;
   final String qty;
   final String minQty;
+  final int avgCostVnd;
   final DateTime updatedAt;
   const ProductStock({
     required this.productId,
     required this.storeId,
     required this.qty,
     required this.minQty,
+    required this.avgCostVnd,
     required this.updatedAt,
   });
   @override
@@ -1667,6 +1695,7 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
     map['store_id'] = Variable<String>(storeId);
     map['qty'] = Variable<String>(qty);
     map['min_qty'] = Variable<String>(minQty);
+    map['avg_cost_vnd'] = Variable<int>(avgCostVnd);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -1677,6 +1706,7 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
       storeId: Value(storeId),
       qty: Value(qty),
       minQty: Value(minQty),
+      avgCostVnd: Value(avgCostVnd),
       updatedAt: Value(updatedAt),
     );
   }
@@ -1691,6 +1721,7 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
       storeId: serializer.fromJson<String>(json['storeId']),
       qty: serializer.fromJson<String>(json['qty']),
       minQty: serializer.fromJson<String>(json['minQty']),
+      avgCostVnd: serializer.fromJson<int>(json['avgCostVnd']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -1702,6 +1733,7 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
       'storeId': serializer.toJson<String>(storeId),
       'qty': serializer.toJson<String>(qty),
       'minQty': serializer.toJson<String>(minQty),
+      'avgCostVnd': serializer.toJson<int>(avgCostVnd),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -1711,12 +1743,14 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
     String? storeId,
     String? qty,
     String? minQty,
+    int? avgCostVnd,
     DateTime? updatedAt,
   }) => ProductStock(
     productId: productId ?? this.productId,
     storeId: storeId ?? this.storeId,
     qty: qty ?? this.qty,
     minQty: minQty ?? this.minQty,
+    avgCostVnd: avgCostVnd ?? this.avgCostVnd,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   ProductStock copyWithCompanion(ProductStocksCompanion data) {
@@ -1725,6 +1759,9 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
       storeId: data.storeId.present ? data.storeId.value : this.storeId,
       qty: data.qty.present ? data.qty.value : this.qty,
       minQty: data.minQty.present ? data.minQty.value : this.minQty,
+      avgCostVnd: data.avgCostVnd.present
+          ? data.avgCostVnd.value
+          : this.avgCostVnd,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -1736,13 +1773,15 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
           ..write('storeId: $storeId, ')
           ..write('qty: $qty, ')
           ..write('minQty: $minQty, ')
+          ..write('avgCostVnd: $avgCostVnd, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(productId, storeId, qty, minQty, updatedAt);
+  int get hashCode =>
+      Object.hash(productId, storeId, qty, minQty, avgCostVnd, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1751,6 +1790,7 @@ class ProductStock extends DataClass implements Insertable<ProductStock> {
           other.storeId == this.storeId &&
           other.qty == this.qty &&
           other.minQty == this.minQty &&
+          other.avgCostVnd == this.avgCostVnd &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -1759,6 +1799,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
   final Value<String> storeId;
   final Value<String> qty;
   final Value<String> minQty;
+  final Value<int> avgCostVnd;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ProductStocksCompanion({
@@ -1766,6 +1807,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
     this.storeId = const Value.absent(),
     this.qty = const Value.absent(),
     this.minQty = const Value.absent(),
+    this.avgCostVnd = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1774,6 +1816,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
     required String storeId,
     required String qty,
     required String minQty,
+    this.avgCostVnd = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : productId = Value(productId),
@@ -1786,6 +1829,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
     Expression<String>? storeId,
     Expression<String>? qty,
     Expression<String>? minQty,
+    Expression<int>? avgCostVnd,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -1794,6 +1838,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
       if (storeId != null) 'store_id': storeId,
       if (qty != null) 'qty': qty,
       if (minQty != null) 'min_qty': minQty,
+      if (avgCostVnd != null) 'avg_cost_vnd': avgCostVnd,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1804,6 +1849,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
     Value<String>? storeId,
     Value<String>? qty,
     Value<String>? minQty,
+    Value<int>? avgCostVnd,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -1812,6 +1858,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
       storeId: storeId ?? this.storeId,
       qty: qty ?? this.qty,
       minQty: minQty ?? this.minQty,
+      avgCostVnd: avgCostVnd ?? this.avgCostVnd,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1832,6 +1879,9 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
     if (minQty.present) {
       map['min_qty'] = Variable<String>(minQty.value);
     }
+    if (avgCostVnd.present) {
+      map['avg_cost_vnd'] = Variable<int>(avgCostVnd.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -1848,6 +1898,7 @@ class ProductStocksCompanion extends UpdateCompanion<ProductStock> {
           ..write('storeId: $storeId, ')
           ..write('qty: $qty, ')
           ..write('minQty: $minQty, ')
+          ..write('avgCostVnd: $avgCostVnd, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3017,6 +3068,17 @@ class $SaleLinesLocalTable extends SaleLinesLocal
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _unitCostVndMeta = const VerificationMeta(
+    'unitCostVnd',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostVnd = GeneratedColumn<int>(
+    'unit_cost_vnd',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3025,6 +3087,7 @@ class $SaleLinesLocalTable extends SaleLinesLocal
     qty,
     unitPrice,
     lineTotal,
+    unitCostVnd,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3083,6 +3146,15 @@ class $SaleLinesLocalTable extends SaleLinesLocal
     } else if (isInserting) {
       context.missing(_lineTotalMeta);
     }
+    if (data.containsKey('unit_cost_vnd')) {
+      context.handle(
+        _unitCostVndMeta,
+        unitCostVnd.isAcceptableOrUnknown(
+          data['unit_cost_vnd']!,
+          _unitCostVndMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3116,6 +3188,10 @@ class $SaleLinesLocalTable extends SaleLinesLocal
         DriftSqlType.int,
         data['${effectivePrefix}line_total'],
       )!,
+      unitCostVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_vnd'],
+      ),
     );
   }
 
@@ -3133,6 +3209,7 @@ class SaleLinesLocalData extends DataClass
   final String qty;
   final int unitPrice;
   final int lineTotal;
+  final int? unitCostVnd;
   const SaleLinesLocalData({
     required this.id,
     required this.saleId,
@@ -3140,6 +3217,7 @@ class SaleLinesLocalData extends DataClass
     required this.qty,
     required this.unitPrice,
     required this.lineTotal,
+    this.unitCostVnd,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3150,6 +3228,9 @@ class SaleLinesLocalData extends DataClass
     map['qty'] = Variable<String>(qty);
     map['unit_price'] = Variable<int>(unitPrice);
     map['line_total'] = Variable<int>(lineTotal);
+    if (!nullToAbsent || unitCostVnd != null) {
+      map['unit_cost_vnd'] = Variable<int>(unitCostVnd);
+    }
     return map;
   }
 
@@ -3161,6 +3242,9 @@ class SaleLinesLocalData extends DataClass
       qty: Value(qty),
       unitPrice: Value(unitPrice),
       lineTotal: Value(lineTotal),
+      unitCostVnd: unitCostVnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitCostVnd),
     );
   }
 
@@ -3176,6 +3260,7 @@ class SaleLinesLocalData extends DataClass
       qty: serializer.fromJson<String>(json['qty']),
       unitPrice: serializer.fromJson<int>(json['unitPrice']),
       lineTotal: serializer.fromJson<int>(json['lineTotal']),
+      unitCostVnd: serializer.fromJson<int?>(json['unitCostVnd']),
     );
   }
   @override
@@ -3188,6 +3273,7 @@ class SaleLinesLocalData extends DataClass
       'qty': serializer.toJson<String>(qty),
       'unitPrice': serializer.toJson<int>(unitPrice),
       'lineTotal': serializer.toJson<int>(lineTotal),
+      'unitCostVnd': serializer.toJson<int?>(unitCostVnd),
     };
   }
 
@@ -3198,6 +3284,7 @@ class SaleLinesLocalData extends DataClass
     String? qty,
     int? unitPrice,
     int? lineTotal,
+    Value<int?> unitCostVnd = const Value.absent(),
   }) => SaleLinesLocalData(
     id: id ?? this.id,
     saleId: saleId ?? this.saleId,
@@ -3205,6 +3292,7 @@ class SaleLinesLocalData extends DataClass
     qty: qty ?? this.qty,
     unitPrice: unitPrice ?? this.unitPrice,
     lineTotal: lineTotal ?? this.lineTotal,
+    unitCostVnd: unitCostVnd.present ? unitCostVnd.value : this.unitCostVnd,
   );
   SaleLinesLocalData copyWithCompanion(SaleLinesLocalCompanion data) {
     return SaleLinesLocalData(
@@ -3214,6 +3302,9 @@ class SaleLinesLocalData extends DataClass
       qty: data.qty.present ? data.qty.value : this.qty,
       unitPrice: data.unitPrice.present ? data.unitPrice.value : this.unitPrice,
       lineTotal: data.lineTotal.present ? data.lineTotal.value : this.lineTotal,
+      unitCostVnd: data.unitCostVnd.present
+          ? data.unitCostVnd.value
+          : this.unitCostVnd,
     );
   }
 
@@ -3225,14 +3316,22 @@ class SaleLinesLocalData extends DataClass
           ..write('productId: $productId, ')
           ..write('qty: $qty, ')
           ..write('unitPrice: $unitPrice, ')
-          ..write('lineTotal: $lineTotal')
+          ..write('lineTotal: $lineTotal, ')
+          ..write('unitCostVnd: $unitCostVnd')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, saleId, productId, qty, unitPrice, lineTotal);
+  int get hashCode => Object.hash(
+    id,
+    saleId,
+    productId,
+    qty,
+    unitPrice,
+    lineTotal,
+    unitCostVnd,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3242,7 +3341,8 @@ class SaleLinesLocalData extends DataClass
           other.productId == this.productId &&
           other.qty == this.qty &&
           other.unitPrice == this.unitPrice &&
-          other.lineTotal == this.lineTotal);
+          other.lineTotal == this.lineTotal &&
+          other.unitCostVnd == this.unitCostVnd);
 }
 
 class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
@@ -3252,6 +3352,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
   final Value<String> qty;
   final Value<int> unitPrice;
   final Value<int> lineTotal;
+  final Value<int?> unitCostVnd;
   final Value<int> rowid;
   const SaleLinesLocalCompanion({
     this.id = const Value.absent(),
@@ -3260,6 +3361,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     this.qty = const Value.absent(),
     this.unitPrice = const Value.absent(),
     this.lineTotal = const Value.absent(),
+    this.unitCostVnd = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SaleLinesLocalCompanion.insert({
@@ -3269,6 +3371,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     required String qty,
     required int unitPrice,
     required int lineTotal,
+    this.unitCostVnd = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        saleId = Value(saleId),
@@ -3283,6 +3386,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     Expression<String>? qty,
     Expression<int>? unitPrice,
     Expression<int>? lineTotal,
+    Expression<int>? unitCostVnd,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3292,6 +3396,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
       if (qty != null) 'qty': qty,
       if (unitPrice != null) 'unit_price': unitPrice,
       if (lineTotal != null) 'line_total': lineTotal,
+      if (unitCostVnd != null) 'unit_cost_vnd': unitCostVnd,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3303,6 +3408,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     Value<String>? qty,
     Value<int>? unitPrice,
     Value<int>? lineTotal,
+    Value<int?>? unitCostVnd,
     Value<int>? rowid,
   }) {
     return SaleLinesLocalCompanion(
@@ -3312,6 +3418,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
       qty: qty ?? this.qty,
       unitPrice: unitPrice ?? this.unitPrice,
       lineTotal: lineTotal ?? this.lineTotal,
+      unitCostVnd: unitCostVnd ?? this.unitCostVnd,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3337,6 +3444,9 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     if (lineTotal.present) {
       map['line_total'] = Variable<int>(lineTotal.value);
     }
+    if (unitCostVnd.present) {
+      map['unit_cost_vnd'] = Variable<int>(unitCostVnd.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3352,6 +3462,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
           ..write('qty: $qty, ')
           ..write('unitPrice: $unitPrice, ')
           ..write('lineTotal: $lineTotal, ')
+          ..write('unitCostVnd: $unitCostVnd, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -13334,6 +13445,7 @@ typedef $$ProductStocksTableCreateCompanionBuilder =
       required String storeId,
       required String qty,
       required String minQty,
+      Value<int> avgCostVnd,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -13343,6 +13455,7 @@ typedef $$ProductStocksTableUpdateCompanionBuilder =
       Value<String> storeId,
       Value<String> qty,
       Value<String> minQty,
+      Value<int> avgCostVnd,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -13373,6 +13486,11 @@ class $$ProductStocksTableFilterComposer
 
   ColumnFilters<String> get minQty => $composableBuilder(
     column: $table.minQty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get avgCostVnd => $composableBuilder(
+    column: $table.avgCostVnd,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13411,6 +13529,11 @@ class $$ProductStocksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get avgCostVnd => $composableBuilder(
+    column: $table.avgCostVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -13437,6 +13560,11 @@ class $$ProductStocksTableAnnotationComposer
 
   GeneratedColumn<String> get minQty =>
       $composableBuilder(column: $table.minQty, builder: (column) => column);
+
+  GeneratedColumn<int> get avgCostVnd => $composableBuilder(
+    column: $table.avgCostVnd,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -13477,6 +13605,7 @@ class $$ProductStocksTableTableManager
                 Value<String> storeId = const Value.absent(),
                 Value<String> qty = const Value.absent(),
                 Value<String> minQty = const Value.absent(),
+                Value<int> avgCostVnd = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProductStocksCompanion(
@@ -13484,6 +13613,7 @@ class $$ProductStocksTableTableManager
                 storeId: storeId,
                 qty: qty,
                 minQty: minQty,
+                avgCostVnd: avgCostVnd,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -13493,6 +13623,7 @@ class $$ProductStocksTableTableManager
                 required String storeId,
                 required String qty,
                 required String minQty,
+                Value<int> avgCostVnd = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => ProductStocksCompanion.insert(
@@ -13500,6 +13631,7 @@ class $$ProductStocksTableTableManager
                 storeId: storeId,
                 qty: qty,
                 minQty: minQty,
+                avgCostVnd: avgCostVnd,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -14085,6 +14217,7 @@ typedef $$SaleLinesLocalTableCreateCompanionBuilder =
       required String qty,
       required int unitPrice,
       required int lineTotal,
+      Value<int?> unitCostVnd,
       Value<int> rowid,
     });
 typedef $$SaleLinesLocalTableUpdateCompanionBuilder =
@@ -14095,6 +14228,7 @@ typedef $$SaleLinesLocalTableUpdateCompanionBuilder =
       Value<String> qty,
       Value<int> unitPrice,
       Value<int> lineTotal,
+      Value<int?> unitCostVnd,
       Value<int> rowid,
     });
 
@@ -14134,6 +14268,11 @@ class $$SaleLinesLocalTableFilterComposer
 
   ColumnFilters<int> get lineTotal => $composableBuilder(
     column: $table.lineTotal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostVnd => $composableBuilder(
+    column: $table.unitCostVnd,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -14176,6 +14315,11 @@ class $$SaleLinesLocalTableOrderingComposer
     column: $table.lineTotal,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get unitCostVnd => $composableBuilder(
+    column: $table.unitCostVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SaleLinesLocalTableAnnotationComposer
@@ -14204,6 +14348,11 @@ class $$SaleLinesLocalTableAnnotationComposer
 
   GeneratedColumn<int> get lineTotal =>
       $composableBuilder(column: $table.lineTotal, builder: (column) => column);
+
+  GeneratedColumn<int> get unitCostVnd => $composableBuilder(
+    column: $table.unitCostVnd,
+    builder: (column) => column,
+  );
 }
 
 class $$SaleLinesLocalTableTableManager
@@ -14249,6 +14398,7 @@ class $$SaleLinesLocalTableTableManager
                 Value<String> qty = const Value.absent(),
                 Value<int> unitPrice = const Value.absent(),
                 Value<int> lineTotal = const Value.absent(),
+                Value<int?> unitCostVnd = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SaleLinesLocalCompanion(
                 id: id,
@@ -14257,6 +14407,7 @@ class $$SaleLinesLocalTableTableManager
                 qty: qty,
                 unitPrice: unitPrice,
                 lineTotal: lineTotal,
+                unitCostVnd: unitCostVnd,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -14267,6 +14418,7 @@ class $$SaleLinesLocalTableTableManager
                 required String qty,
                 required int unitPrice,
                 required int lineTotal,
+                Value<int?> unitCostVnd = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SaleLinesLocalCompanion.insert(
                 id: id,
@@ -14275,6 +14427,7 @@ class $$SaleLinesLocalTableTableManager
                 qty: qty,
                 unitPrice: unitPrice,
                 lineTotal: lineTotal,
+                unitCostVnd: unitCostVnd,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

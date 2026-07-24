@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/local/database.dart';
+import 'weighted_average_cost.dart';
 
 class InventoryLineInput {
   const InventoryLineInput({
@@ -186,6 +187,31 @@ class InventoryService {
           clientCreatedAt: now,
         );
         if (line.unitCostVnd != null) {
+          final stockBefore = await (_db.select(_db.productStocks)
+                ..where(
+                  (t) =>
+                      t.productId.equals(line.productId) &
+                      t.storeId.equals(session.storeId),
+                ))
+              .getSingleOrNull();
+          // qty already includes receipt; recover old qty for WAC
+          final newQty =
+              Decimal.tryParse(stockBefore?.qty ?? '0') ?? Decimal.zero;
+          final oldQty = newQty - line.qty;
+          final oldAvg = stockBefore?.avgCostVnd ?? 0;
+          final nextAvg = weightedAverageCost(
+            oldQty: oldQty,
+            oldAvgVnd: oldAvg,
+            receiptQty: line.qty,
+            unitCostVnd: line.unitCostVnd!,
+          );
+          await (_db.update(_db.productStocks)
+                ..where(
+                  (t) =>
+                      t.productId.equals(line.productId) &
+                      t.storeId.equals(session.storeId),
+                ))
+              .write(ProductStocksCompanion(avgCostVnd: Value(nextAvg)));
           await (_db.update(_db.products)
                 ..where((p) => p.id.equals(line.productId)))
               .write(
