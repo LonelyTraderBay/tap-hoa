@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
 
 import '../local/database.dart';
 
@@ -28,6 +29,10 @@ class PullCatalog {
 
     final products = (data['products'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
+    final productGroups = (data['productGroups'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    final comboComponents = (data['comboComponents'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
     final stocks = (data['stocks'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
     final customers = (data['customers'] as List<dynamic>? ?? [])
@@ -48,9 +53,27 @@ class PullCatalog {
         .cast<Map<String, dynamic>>();
     final stockMovements = (data['stockMovements'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
+    final store = data['store'] as Map<String, dynamic>?;
     final serverTime = data['serverTime'] as String?;
 
-    await _db.upsertProductsAndStocks(products: products, stocks: stocks);
+    await _db.upsertProductsAndStocks(
+      products: products,
+      stocks: stocks,
+      productGroups: productGroups,
+      comboComponents: comboComponents,
+    );
+    if (store != null) {
+      await _db.into(_db.storesLocal).insertOnConflictUpdate(
+        StoresLocalCompanion.insert(
+          id: store['id'] as String,
+          code: store['code'] as String,
+          name: store['name'] as String,
+          active: Value(store['active'] as bool? ?? true),
+          debtOverdueDays: Value(store['debtOverdueDays'] as int? ?? 30),
+          updatedAt: DateTime.parse(store['updatedAt'] as String),
+        ),
+      );
+    }
     await _db.upsertCustomersAndDebtLedger(
       customers: customers,
       debtLedger: debtLedger,
@@ -70,6 +93,17 @@ class PullCatalog {
     );
     if (serverTime != null) {
       await _db.setLastPullAt(storeId, DateTime.parse(serverTime));
+    }
+  }
+
+  /// Convenience: pull then run low-stock checks via [onAfterPull].
+  Future<void> pullCatalogAndNotify(
+    String storeId, {
+    Future<void> Function(String storeId)? onAfterPull,
+  }) async {
+    await pullCatalog(storeId);
+    if (onAfterPull != null) {
+      await onAfterPull(storeId);
     }
   }
 }

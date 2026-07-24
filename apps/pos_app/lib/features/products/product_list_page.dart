@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/sync/pull_catalog.dart';
 import 'barcode_label.dart';
 import 'product_form_sheet.dart';
+import 'product_group_page.dart';
 import 'product_repository.dart';
 import 'product_service.dart';
 
@@ -13,6 +14,7 @@ class ProductListPage extends StatefulWidget {
     required this.pullCatalog,
     required this.storeId,
     required this.productService,
+    required this.groupService,
     required this.canEditCatalog,
   });
 
@@ -20,6 +22,7 @@ class ProductListPage extends StatefulWidget {
   final PullCatalog pullCatalog;
   final String storeId;
   final ProductService productService;
+  final ProductGroupService groupService;
   final bool canEditCatalog;
 
   @override
@@ -85,6 +88,20 @@ class _ProductListPageState extends State<ProductListPage> {
       appBar: AppBar(
         title: const Text('Hàng hóa'),
         actions: [
+          if (widget.canEditCatalog)
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProductGroupPage(
+                      repository: widget.repository,
+                      groupService: widget.groupService,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Nhóm hàng'),
+            ),
           IconButton(
             onPressed: _isPulling ? null : _pull,
             icon: _isPulling

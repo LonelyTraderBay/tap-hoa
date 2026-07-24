@@ -6,11 +6,36 @@ class Products extends Table {
   TextColumn get barcode => text().nullable()();
   TextColumn get name => text()();
   TextColumn get unit => text()();
+  TextColumn get sellUnit => text().nullable()();
+  TextColumn get packSize => text().nullable()();
+  TextColumn get kind => text().withDefault(const Constant('normal'))();
+  TextColumn get groupId => text().nullable()();
   BoolColumn get isWeighted => boolean().withDefault(const Constant(false))();
   IntColumn get basePriceVnd => integer()();
   IntColumn get costVnd => integer().withDefault(const Constant(0))();
   BoolColumn get active => boolean().withDefault(const Constant(true))();
   DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class ProductGroups extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  BoolColumn get active => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class ProductComboComponents extends Table {
+  TextColumn get id => text()();
+  TextColumn get comboProductId => text()();
+  TextColumn get componentProductId => text()();
+  TextColumn get qtyBase => text()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -94,6 +119,7 @@ class StoresLocal extends Table {
   TextColumn get code => text().unique()();
   TextColumn get name => text()();
   BoolColumn get active => boolean().withDefault(const Constant(true))();
+  IntColumn get debtOverdueDays => integer().withDefault(const Constant(30))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -282,6 +308,36 @@ class StockMovementsLocal extends Table {
   TextColumn get recordedById => text()();
   DateTimeColumn get clientCreatedAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class SaleReturnsLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get originalSaleId => text()();
+  TextColumn get shiftId => text().nullable()();
+  TextColumn get recordedById => text()();
+  IntColumn get cashRefundVnd => integer().withDefault(const Constant(0))();
+  IntColumn get transferRefundVnd => integer().withDefault(const Constant(0))();
+  IntColumn get debtCreditVnd => integer().withDefault(const Constant(0))();
+  IntColumn get totalRefundVnd => integer()();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class SaleReturnLinesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get returnId => text()();
+  TextColumn get productId => text()();
+  TextColumn get qty => text()();
+  IntColumn get unitPrice => integer()();
+  IntColumn get lineRefundVnd => integer()();
 
   @override
   Set<Column> get primaryKey => {id};

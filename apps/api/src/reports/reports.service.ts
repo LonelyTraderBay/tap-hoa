@@ -55,6 +55,8 @@ export type StockOnHandResponse = {
 
 const ICT_OFFSET_HOURS = 7;
 
+import { computeDebtAging } from './debt-aging';
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -290,5 +292,47 @@ export class ReportsService {
       0,
     );
     return { storeId, items, totalEstimatedValueVnd };
+  }
+
+  async debtAging(user: AuthUser, storeId: string) {
+    this.assertStoreAccess(user, storeId);
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+    });
+    if (!store) {
+      throw new BadRequestException('store not found');
+    }
+    const customers = await this.prisma.customer.findMany({
+      where: { storeId, balanceVnd: { gt: 0 } },
+      orderBy: { name: 'asc' },
+    });
+    const ledger = await this.prisma.debtLedgerEntry.findMany({
+      where: { storeId },
+      orderBy: { clientCreatedAt: 'asc' },
+    });
+    const asOf = new Date();
+    return {
+      storeId,
+      debtOverdueDays: store.debtOverdueDays,
+      customers: customers.map((c) => {
+        const entries = ledger
+          .filter((e) => e.customerId === c.id)
+          .map((e) => ({
+            type: e.type,
+            amountVnd: e.amountVnd,
+            clientCreatedAt: e.clientCreatedAt,
+          }));
+        const aging = computeDebtAging(entries, store.debtOverdueDays, asOf);
+        return {
+          customerId: c.id,
+          name: c.name,
+          phone: c.phone,
+          balanceVnd: c.balanceVnd,
+          oldestUnpaidAt: aging.oldestUnpaidAt?.toISOString() ?? null,
+          daysOutstanding: aging.daysOutstanding,
+          overdue: aging.overdue,
+        };
+      }),
+    };
   }
 }

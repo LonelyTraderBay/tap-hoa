@@ -113,7 +113,14 @@ Manual smoke test after API + POS are running:
 | Sync | `GET /sync/pull`, `POST /sync/push` |
 | Customers | `POST /customers`, `GET /customers?withDebt=true` |
 | Reports | `GET /reports/day?date=YYYY-MM-DD&storeId=` |
+| Devices | `POST /devices/push-token`, `POST /devices/low-stock-alert` |
+| Stores | `PATCH /stores/:id/debt-overdue-days` |
+
+### Optional FCM
+
+- API: set `FIREBASE_SERVICE_ACCOUNT` to a service-account JSON file path. Without it, push registration still works; sends are logged/skipped.
+- POS: replace `apps/pos_app/lib/firebase_options.dart` via `flutterfire configure`. Without real options, the app runs and skips FCM.
 
 ## Out of scope (this MVP)
 
-See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for deferred Phase 1 work (inventory transfers, cash in/out, debt payment history, thermal print, etc.).
+See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist (polish complete as of 2026-07-24).

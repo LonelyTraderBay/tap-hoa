@@ -65,6 +65,8 @@ class PushSyncResult {
     required this.acceptedCashVoucherIds,
     required this.acceptedCustomerUpsertIds,
     required this.acceptedProductUpsertIds,
+    required this.acceptedProductGroupUpsertIds,
+    required this.acceptedSaleReturnIds,
     required this.acceptedStockTransferCreateIds,
     required this.acceptedStockTransferApproveIds,
     required this.acceptedStockTransferRejectIds,
@@ -77,6 +79,8 @@ class PushSyncResult {
     required this.rejectedDebtPayments,
     required this.rejectedCashVouchers,
     required this.rejectedProductUpserts,
+    required this.rejectedProductGroupUpserts,
+    required this.rejectedSaleReturns,
     required this.rejectedStockTransferCreates,
     required this.rejectedStockTransferApproves,
     required this.rejectedStockTransferRejects,
@@ -94,6 +98,8 @@ class PushSyncResult {
   final List<String> acceptedCashVoucherIds;
   final List<String> acceptedCustomerUpsertIds;
   final List<String> acceptedProductUpsertIds;
+  final List<String> acceptedProductGroupUpsertIds;
+  final List<String> acceptedSaleReturnIds;
   final List<String> acceptedStockTransferCreateIds;
   final List<String> acceptedStockTransferApproveIds;
   final List<String> acceptedStockTransferRejectIds;
@@ -106,6 +112,8 @@ class PushSyncResult {
   final List<RejectedSale> rejectedDebtPayments;
   final List<RejectedSale> rejectedCashVouchers;
   final List<RejectedSale> rejectedProductUpserts;
+  final List<RejectedSale> rejectedProductGroupUpserts;
+  final List<RejectedSale> rejectedSaleReturns;
   final List<RejectedSale> rejectedStockTransferCreates;
   final List<RejectedSale> rejectedStockTransferApproves;
   final List<RejectedSale> rejectedStockTransferRejects;
@@ -129,6 +137,11 @@ class PushSyncResult {
       acceptedCashVoucherIds: _stringIds(json, 'acceptedCashVoucherIds'),
       acceptedCustomerUpsertIds: _stringIds(json, 'acceptedCustomerUpsertIds'),
       acceptedProductUpsertIds: _stringIds(json, 'acceptedProductUpsertIds'),
+      acceptedProductGroupUpsertIds: _stringIds(
+        json,
+        'acceptedProductGroupUpsertIds',
+      ),
+      acceptedSaleReturnIds: _stringIds(json, 'acceptedSaleReturnIds'),
       acceptedStockTransferCreateIds: _stringIds(
         json,
         'acceptedStockTransferCreateIds',
@@ -153,6 +166,11 @@ class PushSyncResult {
       rejectedDebtPayments: _rejectedItems(json, 'rejectedDebtPayments'),
       rejectedCashVouchers: _rejectedItems(json, 'rejectedCashVouchers'),
       rejectedProductUpserts: _rejectedItems(json, 'rejectedProductUpserts'),
+      rejectedProductGroupUpserts: _rejectedItems(
+        json,
+        'rejectedProductGroupUpserts',
+      ),
+      rejectedSaleReturns: _rejectedItems(json, 'rejectedSaleReturns'),
       rejectedStockTransferCreates: _rejectedItems(
         json,
         'rejectedStockTransferCreates',
@@ -201,6 +219,8 @@ class OutboxWorker {
     final cashVouchers = <Map<String, dynamic>>[];
     final customerUpserts = <Map<String, dynamic>>[];
     final productUpserts = <Map<String, dynamic>>[];
+    final productGroupUpserts = <Map<String, dynamic>>[];
+    final saleReturns = <Map<String, dynamic>>[];
     final stockTransferCreates = <Map<String, dynamic>>[];
     final stockTransferApproves = <Map<String, dynamic>>[];
     final stockTransferRejects = <Map<String, dynamic>>[];
@@ -226,6 +246,10 @@ class OutboxWorker {
           customerUpserts.add(payload);
         case 'product_upsert':
           productUpserts.add(payload);
+        case 'product_group_upsert':
+          productGroupUpserts.add(payload);
+        case 'sale_return':
+          saleReturns.add(payload);
         case 'stock_transfer_create':
           stockTransferCreates.add(payload);
         case 'stock_transfer_approve':
@@ -249,6 +273,8 @@ class OutboxWorker {
         cashVouchers.isEmpty &&
         customerUpserts.isEmpty &&
         productUpserts.isEmpty &&
+        productGroupUpserts.isEmpty &&
+        saleReturns.isEmpty &&
         stockTransferCreates.isEmpty &&
         stockTransferApproves.isEmpty &&
         stockTransferRejects.isEmpty &&
@@ -272,6 +298,8 @@ class OutboxWorker {
           'shiftCloses': shiftCloses,
           'customerUpserts': customerUpserts,
           'productUpserts': productUpserts,
+          'productGroupUpserts': productGroupUpserts,
+          'saleReturns': saleReturns,
           'stockTransferCreates': stockTransferCreates,
           'stockTransferApproves': stockTransferApproves,
           'stockTransferRejects': stockTransferRejects,
@@ -308,6 +336,14 @@ class OutboxWorker {
       await _db.markOutboxEntitiesDone(
         'product_upsert',
         result.acceptedProductUpsertIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'product_group_upsert',
+        result.acceptedProductGroupUpsertIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'sale_return',
+        result.acceptedSaleReturnIds,
       );
       await _db.markOutboxEntitiesDone(
         'stock_transfer_create',
@@ -366,6 +402,14 @@ class OutboxWorker {
       await markRejected(
         result.rejectedProductUpserts,
         entityType: 'product_upsert',
+      );
+      await markRejected(
+        result.rejectedProductGroupUpserts,
+        entityType: 'product_group_upsert',
+      );
+      await markRejected(
+        result.rejectedSaleReturns,
+        entityType: 'sale_return',
       );
       await markRejected(
         result.rejectedStockTransferCreates,

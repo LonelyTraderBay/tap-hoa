@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { DevicesModule } from './devices/devices.module';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
@@ -19,6 +20,7 @@ import { SyncModule } from './sync/sync.module';
     CustomersModule,
     SyncModule,
     ReportsModule,
+    DevicesModule,
   ],
   controllers: [HealthController],
 })

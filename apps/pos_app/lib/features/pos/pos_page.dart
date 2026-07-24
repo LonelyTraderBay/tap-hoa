@@ -18,13 +18,18 @@ import '../inventory/inventory_hub_page.dart';
 import '../inventory/inventory_service.dart';
 import '../sync/outbox_conflict_service.dart';
 import '../sync/outbox_conflicts_page.dart';
+import '../sync/sync_diagnostics_page.dart';
 import '../products/product_list_page.dart';
 import '../products/product_repository.dart';
 import '../products/product_service.dart';
+import '../push/push_service.dart';
 import '../shifts/shift_repository.dart';
 import 'cart.dart';
 import 'checkout_service.dart';
 import 'payment_sheet.dart';
+import 'receipt_print_settings_page.dart';
+import 'sale_return_service.dart';
+import 'sale_return_sheet.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({
@@ -74,6 +79,7 @@ class _PosPageState extends State<PosPage> {
   String _query = '';
   String? _message;
   bool _isSyncing = false;
+  String? _groupFilterId;
 
   @override
   void dispose() {
@@ -114,6 +120,7 @@ class _PosPageState extends State<PosPage> {
       checkoutService: widget.checkoutService,
       customerRepository: widget.customerRepository,
       storeName: widget.storeName,
+      database: widget.database,
       onCompleted: () {
         setState(() {
           _cart.lines.clear();
@@ -121,6 +128,32 @@ class _PosPageState extends State<PosPage> {
           _message = 'Đã bán thành công';
         });
       },
+    );
+  }
+
+  void _openSaleReturn() {
+    if (widget.role != 'owner' && widget.role != 'store_manager') {
+      setState(() => _message = 'Chỉ chủ/quản lý được đổi trả');
+      return;
+    }
+    showSaleReturnSheet(
+      context,
+      db: widget.database,
+      service: SaleReturnService(
+        db: widget.database,
+        shiftRepository: widget.shiftRepository,
+      ),
+      storeId: widget.storeId,
+      role: widget.role,
+      date: DateTime.now(),
+    );
+  }
+
+  void _openReceiptSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReceiptPrintSettingsPage(db: widget.database),
+      ),
     );
   }
 
@@ -146,6 +179,10 @@ class _PosPageState extends State<PosPage> {
     try {
       await widget.outboxWorker.tick();
       await widget.pullCatalog.pullCatalog(widget.storeId);
+      await PushService(
+        db: widget.database,
+        dio: widget.dayReportRepository.dio,
+      ).checkLowStock(widget.storeId);
       if (!mounted) return;
       setState(() => _message = 'Đã đồng bộ');
     } catch (_) {
@@ -209,6 +246,8 @@ class _PosPageState extends State<PosPage> {
                     stockOnHandRepository: widget.stockOnHandRepository,
                     storeId: widget.storeId,
                     role: widget.role,
+                    database: widget.database,
+                    shiftRepository: widget.shiftRepository,
                   ),
                 ),
               );
@@ -267,6 +306,10 @@ class _PosPageState extends State<PosPage> {
                   builder: (_) => DebtCustomerListPage(
                     repository: widget.customerRepository,
                     debtPaymentService: widget.debtPaymentService,
+                    database: widget.database,
+                    storeId: widget.storeId,
+                    dio: widget.dayReportRepository.dio,
+                    role: widget.role,
                   ),
                 ),
               );
@@ -277,6 +320,20 @@ class _PosPageState extends State<PosPage> {
           TextButton(
             onPressed: _openOutboxConflicts,
             child: const Text('Đồng bộ lỗi'),
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SyncDiagnosticsPage(
+                    dio: widget.dayReportRepository.dio,
+                    db: widget.database,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.devices_other_outlined),
+            tooltip: 'Diagnostics sync',
           ),
           IconButton(
             onPressed: () {
@@ -297,6 +354,17 @@ class _PosPageState extends State<PosPage> {
             tooltip: 'Kho',
           ),
           IconButton(
+            onPressed: _openReceiptSettings,
+            icon: const Icon(Icons.print_outlined),
+            tooltip: 'Cấu hình in',
+          ),
+          if (widget.role == 'owner' || widget.role == 'store_manager')
+            IconButton(
+              onPressed: _openSaleReturn,
+              icon: const Icon(Icons.assignment_return_outlined),
+              tooltip: 'Đổi trả',
+            ),
+          IconButton(
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -305,6 +373,7 @@ class _PosPageState extends State<PosPage> {
                     pullCatalog: widget.pullCatalog,
                     storeId: widget.storeId,
                     productService: widget.productService,
+                    groupService: ProductGroupService(widget.database),
                     canEditCatalog: widget.role == 'owner' ||
                         widget.role == 'store_manager',
                   ),
@@ -329,6 +398,41 @@ class _PosPageState extends State<PosPage> {
               onChanged: (value) => setState(() => _query = value.trim()),
             ),
           ),
+          SizedBox(
+            height: 40,
+            child: StreamBuilder<List<ProductGroupRow>>(
+              stream: widget.productRepository.watchGroups(),
+              builder: (context, snapshot) {
+                final groups = snapshot.data ?? [];
+                return ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: const Text('Tất cả'),
+                        selected: _groupFilterId == null,
+                        onSelected: (_) =>
+                            setState(() => _groupFilterId = null),
+                      ),
+                    ),
+                    ...groups.map(
+                      (g) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(g.name),
+                          selected: _groupFilterId == g.id,
+                          onSelected: (_) =>
+                              setState(() => _groupFilterId = g.id),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
           if (_message != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -337,7 +441,10 @@ class _PosPageState extends State<PosPage> {
           Expanded(
             flex: 2,
             child: StreamBuilder<List<ProductWithStock>>(
-              stream: widget.productRepository.watchByStore(widget.storeId),
+              stream: widget.productRepository.watchByStore(
+                widget.storeId,
+                groupId: _groupFilterId,
+              ),
               builder: (context, snapshot) {
                 final products = (snapshot.data ?? []).where(_matches).toList();
                 if (products.isEmpty) {
@@ -351,7 +458,7 @@ class _PosPageState extends State<PosPage> {
                     return ListTile(
                       title: Text(product.name),
                       subtitle: Text(
-                        '${product.sku} · ${product.basePriceVnd} VND · Tồn: ${product.qty}',
+                        '${product.sku} · ${product.displayUnit} · ${product.basePriceVnd} VND · Tồn: ${product.qty}',
                       ),
                       trailing: IconButton(
                         icon: const Icon(Icons.add_shopping_cart),

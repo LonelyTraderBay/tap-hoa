@@ -1,7 +1,7 @@
-# Phase 1 — Remaining items (deferred)
+# Phase 1 — Remaining items (complete)
 
-> Follow-up plan after the Phase 1 MVP vertical slice in `2026-07-23-phase1-foundation-pos.md`.  
-> These items are still **Phase 1** per the product spec but were intentionally deferred from the foundation + POS MVP.
+> Follow-up after the Phase 1 MVP vertical slice in `2026-07-23-phase1-foundation-pos.md`.  
+> Originally deferred from foundation MVP; **polish closed 2026-07-24** (`docs/superpowers/specs/2026-07-24-phase1-polish-design.md`).
 
 **Spec:** `docs/superpowers/specs/2026-07-23-tap-hoa-pos-ke-toan-design.md` (§4)
 
@@ -18,15 +18,15 @@
 ## Product catalog polish
 
 - [x] Full product CRUD UI (create/edit on client + sync push)
-- [ ] Product groups / categories
-- [ ] Unit conversion (thùng ↔ chai)
+- [x] Product groups / categories
+- [x] Unit conversion (thùng ↔ chai)
 - [x] Barcode label printing
 
-## Customer debt (beyond stub)
+## Customer debt
 
 - [x] Debt payment recording and history
 - [x] Credit limit enforcement at checkout
-- [ ] Debt aging / overdue views
+- [x] Debt aging / overdue views (+ `debtOverdueDays` settings UI)
 - [x] Customer search and detail screen polish
 
 ## Cash management
@@ -37,23 +37,23 @@
 
 ## POS hardware & UX
 
-- [ ] Thermal receipt printer drivers (Windows) — ESC/POS deferred
+- [x] Thermal receipt printer drivers (Windows) — ESC/POS raw Win32 + PDF fallback
 - [x] PDF receipt via OS print dialog
-- [ ] Return/exchange same-day with role gate
-- [ ] Combo/bundle products
-- [ ] Push notifications (sync errors, low stock)
+- [x] Return/exchange same-day with role gate
+- [x] Combo/bundle products
+- [x] Push notifications (sync errors, low stock) — FCM token register + optional firebase-admin send
 
 ## Reports (Phase 1 extensions)
 
 - [x] Top SKU / best sellers for the day
 - [x] Stock-on-hand report per store
-- [ ] Export CSV for day revenue
+- [x] Export CSV for day revenue (store code/name from `storesLocal`)
 
 ## Sync & ops
 
 - [x] Conflict resolution UI for rejected outbox entries
 - [x] Product/stock push from client (not only pull)
-- [ ] Multi-device cursor diagnostics for support
+- [x] Multi-device cursor diagnostics for support
 
 ---
 
@@ -63,9 +63,10 @@
 2. ~~**Cash in/out + shift reconciliation**~~ — done (`feat/cash-vouchers-shift-reconciliation`)
 3. ~~**Inter-store transfer + stocktake**~~ — done (`feat/inventory-stock-ops`)
 4. ~~**Product CRUD + barcode labels**~~ — done (`feat/product-crud-barcode-labels`)
-5. ~~**Thermal print + top SKU report**~~ — done (`feat/thermal-receipt-top-sku`; PDF receipt via OS print; ESC/POS drivers deferred)
+5. ~~**Thermal print + top SKU report**~~ — done (PDF + Windows ESC/POS raw; see polish design)
 6. ~~**Conflict resolution UI (outbox reject)**~~ — done (`feat/conflict-outbox-ui`)
 7. ~~**Stock-on-hand report per store**~~ — done (`feat/stock-on-hand-report`)
+8. ~~**Phase 1 polish**~~ — combo picker, group CRUD, return refund channels, debt overdue UI, FCM e2e (`docs/superpowers/specs/2026-07-24-phase1-polish-design.md`)
 
 ## Dependencies on MVP (done)
 
@@ -73,7 +74,7 @@
 - Local Drift DB + outbox sync (push sales, pull catalog/stock)
 - Offline checkout with stock decrement
 - Day sales report (store + owner consolidated)
-- Customer debt stub on checkout + balance sync
+- Customer debt on checkout + balance sync (payments / aging / overdue settings in polish)
 
 ## Not in Phase 1 (Phase 2)
 

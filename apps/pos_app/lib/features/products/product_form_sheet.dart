@@ -50,6 +50,8 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
   final _barcodeController = TextEditingController();
   final _nameController = TextEditingController();
   final _unitController = TextEditingController();
+  final _sellUnitController = TextEditingController();
+  final _packSizeController = TextEditingController();
   final _basePriceController = TextEditingController();
   final _costController = TextEditingController();
   final _initialQtyController = TextEditingController(text: '0');
@@ -60,13 +62,25 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
   bool _isLoading = false;
   bool _isSubmitting = false;
   String? _error;
+  String? _groupId;
+  String _kind = 'normal';
+  List<ProductGroupRow> _groups = [];
+  List<({String componentProductId, String qtyBase, String name})> _components =
+      [];
 
   @override
   void initState() {
     super.initState();
+    _loadGroups();
     if (widget.existing != null) {
       _loadExisting();
     }
+  }
+
+  Future<void> _loadGroups() async {
+    final groups = await widget.repository.watchGroups().first;
+    if (!mounted) return;
+    setState(() => _groups = groups);
   }
 
   Future<void> _loadExisting() async {
@@ -87,11 +101,16 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     _barcodeController.text = data.barcode ?? '';
     _nameController.text = data.name;
     _unitController.text = data.unit;
+    _sellUnitController.text = data.sellUnit ?? '';
+    _packSizeController.text = data.packSize ?? '';
     _basePriceController.text = data.basePriceVnd.toString();
     _costController.text = data.costVnd.toString();
     setState(() {
       _isWeighted = data.isWeighted;
       _active = data.active;
+      _groupId = data.groupId;
+      _kind = data.kind;
+      _components = data.components;
       _isLoading = false;
     });
   }
@@ -102,6 +121,8 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     _barcodeController.dispose();
     _nameController.dispose();
     _unitController.dispose();
+    _sellUnitController.dispose();
+    _packSizeController.dispose();
     _basePriceController.dispose();
     _costController.dispose();
     _initialQtyController.dispose();
@@ -154,6 +175,11 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     final initialQty = _initialQtyController.text.trim();
     final minQty = _minQtyController.text.trim();
 
+    if (_kind == 'combo' && _components.isEmpty) {
+      setState(() => _error = 'Combo cần ít nhất 1 thành phần');
+      return;
+    }
+
     if (widget.isCreate) {
       if (initialQty.isEmpty || minQty.isEmpty) {
         setState(() => _error = 'Nhập tồn ban đầu và tồn tối thiểu');
@@ -174,12 +200,27 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
           barcode: barcode.isEmpty ? null : barcode,
           name: name,
           unit: unit,
+          sellUnit: _sellUnitController.text.trim().isEmpty
+              ? null
+              : _sellUnitController.text.trim(),
+          packSize: _packSizeController.text.trim().isEmpty
+              ? null
+              : _packSizeController.text.trim(),
+          kind: _kind,
+          groupId: _groupId,
           isWeighted: _isWeighted,
           basePriceVnd: basePrice,
           costVnd: cost,
           active: _active,
           initialQty: initialQty,
           minQty: minQty,
+          components: [
+            for (final c in _components)
+              ComboComponentInput(
+                componentProductId: c.componentProductId,
+                qtyBase: c.qtyBase,
+              ),
+          ],
         );
       } else {
         await widget.productService.update(
@@ -189,14 +230,36 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
           barcode: barcode.isEmpty ? null : barcode,
           name: name,
           unit: unit,
+          sellUnit: _sellUnitController.text.trim().isEmpty
+              ? null
+              : _sellUnitController.text.trim(),
+          packSize: _packSizeController.text.trim().isEmpty
+              ? null
+              : _packSizeController.text.trim(),
+          kind: _kind,
+          groupId: _groupId,
           isWeighted: _isWeighted,
           basePriceVnd: basePrice,
           costVnd: cost,
           active: _active,
+          components: [
+            for (final c in _components)
+              ComboComponentInput(
+                componentProductId: c.componentProductId,
+                qtyBase: c.qtyBase,
+              ),
+          ],
         );
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message == 'invalid_combo'
+            ? 'Combo cần ít nhất 1 thành phần'
+            : 'Lưu thất bại';
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'Lưu thất bại');
@@ -205,6 +268,79 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  Future<void> _addComponent() async {
+    final products = await widget.repository.watchByStore(widget.storeId).first;
+    final selfId = widget.existing?.id;
+    final available = products
+        .where(
+          (p) =>
+              p.id != selfId &&
+              p.kind != 'combo' &&
+              !_components.any((c) => c.componentProductId == p.id),
+        )
+        .toList();
+    if (!mounted) return;
+    if (available.isEmpty) {
+      setState(() => _error = 'Không còn sản phẩm để thêm vào combo');
+      return;
+    }
+    final picked = await showDialog<ProductWithStock>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Chọn thành phần'),
+        children: [
+          for (final p in available)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(ctx).pop(p),
+              child: Text('${p.name} (${p.sku})'),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final qtyController = TextEditingController(text: '1');
+    final qty = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Số lượng ${picked.name}'),
+        content: TextField(
+          controller: qtyController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Qty (đơn vị gốc)'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(qtyController.text.trim()),
+            child: const Text('Thêm'),
+          ),
+        ],
+      ),
+    );
+    qtyController.dispose();
+    if (qty == null || qty.isEmpty || !mounted) return;
+    final parsed = double.tryParse(qty);
+    if (parsed == null || parsed <= 0) {
+      setState(() => _error = 'Số lượng thành phần không hợp lệ');
+      return;
+    }
+    setState(() {
+      _error = null;
+      _components = [
+        ..._components,
+        (
+          componentProductId: picked.id,
+          qtyBase: qty,
+          name: picked.name,
+        ),
+      ];
+    });
   }
 
   @override
@@ -248,8 +384,96 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _unitController,
-                    decoration: const InputDecoration(labelText: 'Đơn vị *'),
+                    decoration: const InputDecoration(
+                      labelText: 'Đơn vị cơ sở *',
+                    ),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _sellUnitController,
+                    decoration: const InputDecoration(
+                      labelText: 'Đơn vị bán (vd thùng)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _packSizeController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Hệ số quy đổi (vd 24)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    value: _groupId,
+                    decoration: const InputDecoration(labelText: 'Nhóm hàng'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('— Không nhóm —'),
+                      ),
+                      ..._groups.map(
+                        (g) => DropdownMenuItem<String?>(
+                          value: g.id,
+                          child: Text(g.name),
+                        ),
+                      ),
+                    ],
+                    onChanged: _isSubmitting
+                        ? null
+                        : (v) => setState(() => _groupId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _kind,
+                    decoration: const InputDecoration(labelText: 'Loại'),
+                    items: const [
+                      DropdownMenuItem(value: 'normal', child: Text('Thường')),
+                      DropdownMenuItem(value: 'combo', child: Text('Combo')),
+                    ],
+                    onChanged: _isSubmitting
+                        ? null
+                        : (v) => setState(() => _kind = v ?? 'normal'),
+                  ),
+                  if (_kind == 'combo') ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Thành phần combo',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    if (_components.isEmpty)
+                      Text(
+                        'Chưa có thành phần — bắt buộc ≥1 khi lưu',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    for (var i = 0; i < _components.length; i++)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(_components[i].name),
+                        subtitle: Text('Qty: ${_components[i].qtyBase}'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => setState(() {
+                                    _components = [
+                                      for (var j = 0;
+                                          j < _components.length;
+                                          j++)
+                                        if (j != i) _components[j],
+                                    ];
+                                  }),
+                        ),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: _isSubmitting ? null : _addComponent,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Thêm thành phần'),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,

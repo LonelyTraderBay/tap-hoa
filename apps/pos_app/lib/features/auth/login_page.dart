@@ -14,6 +14,7 @@ import '../reports/day_report_repository.dart';
 import '../reports/stock_on_hand_repository.dart';
 import '../shifts/open_shift_page.dart';
 import '../shifts/shift_repository.dart';
+import '../push/push_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -74,6 +75,10 @@ class _LoginPageState extends State<LoginPage> {
         _phoneController.text.trim(),
         _passwordController.text,
       );
+      await PushService(
+        db: widget.database,
+        dio: widget.dayReportRepository.dio,
+      ).registerAfterLogin();
       if (mounted) {
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(

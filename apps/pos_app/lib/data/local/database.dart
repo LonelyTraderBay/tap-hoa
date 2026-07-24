@@ -13,10 +13,14 @@ part 'database.g.dart';
 @DriftDatabase(
   tables: [
     Products,
+    ProductGroups,
+    ProductComboComponents,
     ProductStocks,
     OutboxEntries,
     SalesLocal,
     SaleLinesLocal,
+    SaleReturnsLocal,
+    SaleReturnLinesLocal,
     ShiftsLocal,
     StoresLocal,
     MetaLocal,
@@ -39,7 +43,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -71,6 +75,17 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(wastageVouchersLocal);
         await migrator.createTable(wastageVoucherLinesLocal);
         await migrator.createTable(stockMovementsLocal);
+      }
+      if (from < 6) {
+        await migrator.createTable(productGroups);
+        await migrator.createTable(productComboComponents);
+        await migrator.createTable(saleReturnsLocal);
+        await migrator.createTable(saleReturnLinesLocal);
+        await migrator.addColumn(products, products.sellUnit);
+        await migrator.addColumn(products, products.packSize);
+        await migrator.addColumn(products, products.kind);
+        await migrator.addColumn(products, products.groupId);
+        await migrator.addColumn(storesLocal, storesLocal.debtOverdueDays);
       }
     },
   );
@@ -320,8 +335,21 @@ class AppDatabase extends _$AppDatabase {
   Future<void> upsertProductsAndStocks({
     required List<Map<String, dynamic>> products,
     required List<Map<String, dynamic>> stocks,
+    List<Map<String, dynamic>> productGroups = const [],
+    List<Map<String, dynamic>> comboComponents = const [],
   }) async {
     await transaction(() async {
+      for (final group in productGroups) {
+        await into(this.productGroups).insertOnConflictUpdate(
+          ProductGroupsCompanion.insert(
+            id: group['id'] as String,
+            name: group['name'] as String,
+            sortOrder: Value(group['sortOrder'] as int? ?? 0),
+            active: Value(group['active'] as bool? ?? true),
+            updatedAt: DateTime.parse(group['updatedAt'] as String),
+          ),
+        );
+      }
       for (final product in products) {
         await into(this.products).insertOnConflictUpdate(
           ProductsCompanion.insert(
@@ -330,11 +358,25 @@ class AppDatabase extends _$AppDatabase {
             barcode: Value(product['barcode'] as String?),
             name: product['name'] as String,
             unit: product['unit'] as String,
+            sellUnit: Value(product['sellUnit'] as String?),
+            packSize: Value(product['packSize']?.toString()),
+            kind: Value(product['kind'] as String? ?? 'normal'),
+            groupId: Value(product['groupId'] as String?),
             isWeighted: Value(product['isWeighted'] as bool? ?? false),
             basePriceVnd: product['basePriceVnd'] as int,
             costVnd: Value(product['costVnd'] as int? ?? 0),
             active: Value(product['active'] as bool? ?? true),
             updatedAt: DateTime.parse(product['updatedAt'] as String),
+          ),
+        );
+      }
+      for (final component in comboComponents) {
+        await into(productComboComponents).insertOnConflictUpdate(
+          ProductComboComponentsCompanion.insert(
+            id: component['id'] as String,
+            comboProductId: component['comboProductId'] as String,
+            componentProductId: component['componentProductId'] as String,
+            qtyBase: component['qtyBase'].toString(),
           ),
         );
       }

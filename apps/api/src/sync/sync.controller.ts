@@ -41,4 +41,9 @@ export class SyncController {
     }
     return this.syncService.push(req.user, body);
   }
+
+  @Get('diagnostics')
+  diagnostics(@Req() req: { user: AuthUser }) {
+    return this.syncService.diagnostics(req.user);
+  }
 }

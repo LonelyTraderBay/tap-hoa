@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:printing/printing.dart';
 
 import '../../shared/pdf_fonts.dart';
 import '../reports/ict_date.dart';
+import 'receipt_windows_raw.dart';
 
 const _receiptWidthMm = 58.0;
 const _maxNameChars = 24;
@@ -166,26 +168,88 @@ Future<void> promptAndPrintReceipt(
   required int transferVnd,
   required int debtVnd,
   String? customerName,
+  String printMode = 'ask',
+  String? printerName,
 }) async {
-  final shouldPrint = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        title: const Text('In hóa đơn?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Không'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Có'),
-          ),
-        ],
-      );
-    },
-  );
+  final shouldPrint = printMode == 'escpos' || printMode == 'pdf'
+      ? true
+      : await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('In hóa đơn?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Không'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Có'),
+                ),
+              ],
+            );
+          },
+        );
   if (!context.mounted || shouldPrint != true) return;
+
+  if (printMode == 'escpos') {
+    try {
+      final bytes = buildReceiptEscPosBytes(
+        storeName: storeName,
+        saleId: saleId,
+        soldAt: soldAt,
+        lines: lines,
+        totalVnd: totalVnd,
+        cashVnd: cashVnd,
+        transferVnd: transferVnd,
+        debtVnd: debtVnd,
+        customerName: customerName,
+      );
+      final name = printerName?.trim() ?? '';
+      if (name.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Chưa chọn máy in ESC/POS — chuyển PDF'),
+            ),
+          );
+        }
+      } else {
+        final sent = await sendRawToWindowsPrinter(name, bytes);
+        if (sent) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã gửi in ESC/POS')),
+            );
+          }
+          return;
+        }
+        if (context.mounted) {
+          final usePdf = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('In ESC/POS thất bại'),
+              content: const Text('Gửi máy in thô thất bại. In PDF?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Không'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('PDF'),
+                ),
+              ],
+            ),
+          );
+          if (usePdf != true || !context.mounted) return;
+        }
+      }
+    } catch (_) {
+      // fall through to PDF
+    }
+  }
 
   try {
     await Printing.layoutPdf(
@@ -209,4 +273,44 @@ Future<void> promptAndPrintReceipt(
       );
     }
   }
+}
+
+/// Minimal ESC/POS byte builder (58mm text receipt).
+Uint8List buildReceiptEscPosBytes({
+  required String storeName,
+  required String saleId,
+  required DateTime soldAt,
+  required List<ReceiptLine> lines,
+  required int totalVnd,
+  required int cashVnd,
+  required int transferVnd,
+  required int debtVnd,
+  String? customerName,
+}) {
+  final buffer = BytesBuilder();
+  void writeln(String text) {
+    buffer.add(utf8.encode('$text\n'));
+  }
+
+  buffer.add([0x1B, 0x40]); // init
+  writeln(storeName);
+  writeln(formatIctDateTime(soldAt));
+  writeln('DH: ${shortenSaleId(saleId)}');
+  writeln('-' * 32);
+  for (final line in lines) {
+    writeln(truncateReceiptName(line.name));
+    writeln(
+      '  ${line.qtyLabel} x ${formatReceiptVnd(line.unitPriceVnd)} = ${formatReceiptVnd(line.lineTotalVnd)}',
+    );
+  }
+  writeln('-' * 32);
+  writeln('TONG: ${formatReceiptVnd(totalVnd)} VND');
+  if (cashVnd > 0) writeln('TM: ${formatReceiptVnd(cashVnd)}');
+  if (transferVnd > 0) writeln('CK: ${formatReceiptVnd(transferVnd)}');
+  if (debtVnd > 0) writeln('NO: ${formatReceiptVnd(debtVnd)}');
+  if (customerName != null && customerName.isNotEmpty) {
+    writeln('KH: $customerName');
+  }
+  buffer.add([0x1D, 0x56, 0x00]); // cut
+  return buffer.toBytes();
 }
