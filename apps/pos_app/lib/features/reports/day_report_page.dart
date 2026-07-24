@@ -1,9 +1,18 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+import 'day_report_csv.dart';
 import 'day_report_repository.dart';
 import 'ict_date.dart';
 import 'stock_on_hand_page.dart';
 import 'stock_on_hand_repository.dart';
+import '../pos/sale_return_service.dart';
+import '../pos/sale_return_sheet.dart';
+import '../../data/local/database.dart';
+import '../shifts/shift_repository.dart';
 
 class DayReportPage extends StatefulWidget {
   const DayReportPage({
@@ -12,12 +21,16 @@ class DayReportPage extends StatefulWidget {
     required this.stockOnHandRepository,
     required this.storeId,
     required this.role,
+    this.database,
+    this.shiftRepository,
   });
 
   final DayReportRepository repository;
   final StockOnHandRepository stockOnHandRepository;
   final String storeId;
   final String role;
+  final AppDatabase? database;
+  final ShiftRepository? shiftRepository;
 
   @override
   State<DayReportPage> createState() => _DayReportPageState();
@@ -101,6 +114,85 @@ class _DayReportPageState extends State<DayReportPage> {
     );
   }
 
+  Future<void> _exportCsv() async {
+    final report = _report;
+    if (report == null) return;
+    try {
+      final rows = <({
+        String storeCode,
+        String storeName,
+        int orderCount,
+        int revenueVnd,
+        int cashVnd,
+        int transferVnd,
+        int debtVnd,
+      })>[];
+      for (final store in report.byStore) {
+        var code = store.storeId;
+        var name = store.storeId;
+        final db = widget.database;
+        if (db != null) {
+          final local = await (db.select(db.storesLocal)
+                ..where((t) => t.id.equals(store.storeId)))
+              .getSingleOrNull();
+          if (local != null) {
+            code = local.code;
+            name = local.name;
+          }
+        }
+        rows.add((
+          storeCode: code,
+          storeName: name,
+          orderCount: store.orderCount,
+          revenueVnd: store.revenueVnd,
+          cashVnd: store.cashVnd,
+          transferVnd: store.transferVnd,
+          debtVnd: store.debtVnd,
+        ));
+      }
+      final csv = dayReportToCsv(
+        date: formatIctDate(_selectedDate),
+        rows: rows,
+      );
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        p.join(dir.path, 'day-report-${formatIctDate(_selectedDate)}.csv'),
+      );
+      await file.writeAsString(csv);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã xuất CSV: ${file.path}')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Xuất CSV thất bại')),
+      );
+    }
+  }
+
+  void _openReturn() {
+    final db = widget.database;
+    final shifts = widget.shiftRepository;
+    if (db == null || shifts == null) return;
+    final canReturn =
+        widget.role == 'owner' || widget.role == 'store_manager';
+    if (!canReturn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thu ngân không được đổi trả')),
+      );
+      return;
+    }
+    showSaleReturnSheet(
+      context,
+      db: db,
+      service: SaleReturnService(db: db, shiftRepository: shifts),
+      storeId: widget.storeId,
+      role: widget.role,
+      date: _selectedDate,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final report = _report;
@@ -112,6 +204,11 @@ class _DayReportPageState extends State<DayReportPage> {
       appBar: AppBar(
         title: const Text('Báo cáo ngày'),
         actions: [
+          IconButton(
+            onPressed: _isLoading || _report == null ? null : _exportCsv,
+            icon: const Icon(Icons.file_download_outlined),
+            tooltip: 'Xuất CSV',
+          ),
           IconButton(
             onPressed: _isLoading ? null : _pickDate,
             icon: const Icon(Icons.calendar_today_outlined),
@@ -249,6 +346,14 @@ class _DayReportPageState extends State<DayReportPage> {
                       child: const Text('Xem tồn hiện tại'),
                     ),
                   ),
+                  if (widget.database != null &&
+                      widget.shiftRepository != null)
+                    Center(
+                      child: TextButton(
+                        onPressed: _openReturn,
+                        child: const Text('Đổi trả trong ngày'),
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -13,15 +13,19 @@ import 'features/customers/debt_payment_service.dart';
 import 'features/pos/checkout_service.dart';
 import 'features/products/product_repository.dart';
 import 'features/products/product_service.dart';
+import 'features/push/push_service.dart';
 import 'features/reports/day_report_repository.dart';
 import 'features/reports/stock_on_hand_repository.dart';
 import 'features/shifts/shift_repository.dart';
 import 'features/sync_status/sync_status_banner.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Soft Firebase warm-up — failures are ignored until login.
   final database = AppDatabase();
-  const tokenStorage = SecureTokenStorage();
+  final tokenStorage = const SecureTokenStorage();
   final apiClient = ApiClient(tokenStorage: tokenStorage);
+  await PushService(db: database, dio: apiClient.dio).ensureFirebase();
   final repository = AuthRepository(
     dio: apiClient.dio,
     secureStorage: tokenStorage,

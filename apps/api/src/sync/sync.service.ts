@@ -3,6 +3,7 @@ import { PaymentMethod, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CustomersService } from '../customers/customers.service';
+import { DevicesService } from '../devices/devices.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { ShiftsService } from '../shifts/shifts.service';
@@ -10,13 +11,16 @@ import {
   PushCashVoucherDto,
   PushCustomerUpsertDto,
   PushDebtPaymentDto,
+  PushProductGroupUpsertDto,
   PushProductUpsertDto,
   PushSaleDto,
+  PushSaleReturnDto,
   PushShiftCloseDto,
   PushShiftOpenDto,
   PushSyncDto,
 } from './dto/push-sale.dto';
 import { StockOpsService } from './stock-ops.service';
+import { SaleReturnsService } from './sale-returns.service';
 
 const PAYMENT_METHODS = new Set<string>(Object.values(PaymentMethod));
 
@@ -38,6 +42,8 @@ export class SyncService {
     private readonly prisma: PrismaService,
     private readonly shiftsService: ShiftsService,
     private readonly stockOps: StockOpsService,
+    private readonly saleReturns: SaleReturnsService,
+    private readonly devicesService: DevicesService,
   ) {}
 
   private assertStoreAccess(user: AuthUser, storeId: string) {
@@ -61,6 +67,10 @@ export class SyncService {
       cashCategories,
       cashVouchers,
       inventory,
+      productGroups,
+      comboComponents,
+      store,
+      saleReturns,
     ] = await Promise.all([
       this.productsService.findUpdatedSince(since),
       this.productsService.findStocksForStoreSince(storeId, since),
@@ -79,6 +89,14 @@ export class SyncService {
         orderBy: { clientCreatedAt: 'asc' },
       }),
       this.stockOps.pullInventory(storeId, since),
+      this.productsService.findGroupsUpdatedSince(since),
+      this.productsService.findComboComponentsUpdated(since),
+      this.prisma.store.findUnique({ where: { id: storeId } }),
+      this.prisma.saleReturn.findMany({
+        where: { storeId, updatedAt: { gt: since } },
+        include: { lines: true },
+        orderBy: { clientCreatedAt: 'asc' },
+      }),
     ]);
 
     return {
@@ -88,11 +106,28 @@ export class SyncService {
         barcode: product.barcode,
         name: product.name,
         unit: product.unit,
+        sellUnit: product.sellUnit,
+        packSize: product.packSize?.toString() ?? null,
+        kind: product.kind,
+        groupId: product.groupId,
         isWeighted: product.isWeighted,
         basePriceVnd: product.basePriceVnd,
         costVnd: product.costVnd,
         active: product.active,
         updatedAt: product.updatedAt.toISOString(),
+      })),
+      productGroups: productGroups.map((g) => ({
+        id: g.id,
+        name: g.name,
+        sortOrder: g.sortOrder,
+        active: g.active,
+        updatedAt: g.updatedAt.toISOString(),
+      })),
+      comboComponents: comboComponents.map((c) => ({
+        id: c.id,
+        comboProductId: c.comboProductId,
+        componentProductId: c.componentProductId,
+        qtyBase: c.qtyBase.toString(),
       })),
       stocks: stocks.map((stock) => ({
         productId: stock.productId,
@@ -100,6 +135,37 @@ export class SyncService {
         qty: stock.qty.toString(),
         minQty: stock.minQty.toString(),
         updatedAt: stock.updatedAt.toISOString(),
+      })),
+      store: store
+        ? {
+            id: store.id,
+            code: store.code,
+            name: store.name,
+            active: store.active,
+            debtOverdueDays: store.debtOverdueDays,
+            updatedAt: store.updatedAt.toISOString(),
+          }
+        : null,
+      saleReturns: saleReturns.map((r) => ({
+        id: r.id,
+        storeId: r.storeId,
+        originalSaleId: r.originalSaleId,
+        shiftId: r.shiftId,
+        recordedById: r.recordedById,
+        cashRefundVnd: r.cashRefundVnd,
+        transferRefundVnd: r.transferRefundVnd,
+        debtCreditVnd: r.debtCreditVnd,
+        totalRefundVnd: r.totalRefundVnd,
+        note: r.note,
+        clientCreatedAt: r.clientCreatedAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+        lines: r.lines.map((l) => ({
+          id: l.id,
+          productId: l.productId,
+          qty: l.qty.toString(),
+          unitPrice: l.unitPrice,
+          lineRefundVnd: l.lineRefundVnd,
+        })),
       })),
       customers: customers.map((c) => ({
         id: c.id,
@@ -197,7 +263,31 @@ export class SyncService {
       body.productUpserts ?? [],
     );
 
-    return {
+    const groupResult = await this.pushProductGroupUpserts(
+      user,
+      body.productGroupUpserts ?? [],
+    );
+
+    const returnResult = await this.pushSaleReturns(
+      user,
+      body.saleReturns ?? [],
+    );
+
+    await this.prisma.syncCursor.upsert({
+      where: { deviceId: body.deviceId },
+      create: {
+        deviceId: body.deviceId,
+        userId: user.userId,
+        lastPullAt: new Date(0),
+        lastPushAt: new Date(),
+      },
+      update: {
+        userId: user.userId,
+        lastPushAt: new Date(),
+      },
+    });
+
+    const response = {
       acceptedShiftIds,
       acceptedShiftCloseIds,
       closedShifts,
@@ -208,7 +298,29 @@ export class SyncService {
       ...debtResult,
       ...customerResult,
       ...productResult,
+      ...groupResult,
+      ...returnResult,
     };
+
+    const rejectCount = this.countRejected(response);
+    if (rejectCount > 0) {
+      void this.devicesService.notifyUser(user.userId, {
+        title: 'Đồng bộ bị từ chối',
+        body: `${rejectCount} mục outbox bị server từ chối`,
+        data: { type: 'sync_reject', count: String(rejectCount) },
+      });
+    }
+
+    return response;
+  }
+
+  private countRejected(result: Record<string, unknown>): number {
+    let n = 0;
+    for (const [key, value] of Object.entries(result)) {
+      if (!key.startsWith('rejected') || !Array.isArray(value)) continue;
+      n += value.length;
+    }
+    return n;
   }
 
   private async pushInventory(user: AuthUser, body: PushSyncDto) {
@@ -546,6 +658,63 @@ export class SyncService {
     return { acceptedProductUpsertIds, rejectedProductUpserts };
   }
 
+  private async pushProductGroupUpserts(
+    user: AuthUser,
+    upserts: PushProductGroupUpsertDto[],
+  ) {
+    const acceptedProductGroupUpsertIds: string[] = [];
+    const rejectedProductGroupUpserts: { id: string; reason: string }[] = [];
+    for (const dto of upserts) {
+      const result = await this.productsService.upsertGroupFromSync(user, dto);
+      if (result.accepted) {
+        acceptedProductGroupUpsertIds.push(dto.id);
+      } else {
+        rejectedProductGroupUpserts.push({ id: dto.id, reason: result.reason });
+      }
+    }
+    return { acceptedProductGroupUpsertIds, rejectedProductGroupUpserts };
+  }
+
+  private async pushSaleReturns(user: AuthUser, returns: PushSaleReturnDto[]) {
+    const acceptedSaleReturnIds: string[] = [];
+    const rejectedSaleReturns: { id: string; reason: string }[] = [];
+    for (const dto of returns) {
+      const result = await this.saleReturns.processFromSync(user, dto);
+      if (result.accepted) {
+        acceptedSaleReturnIds.push(dto.id);
+      } else {
+        rejectedSaleReturns.push({ id: dto.id, reason: result.reason });
+      }
+    }
+    return { acceptedSaleReturnIds, rejectedSaleReturns };
+  }
+
+  async diagnostics(user: AuthUser) {
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('Diagnostics requires manager or owner');
+    }
+    const cursors = await this.prisma.syncCursor.findMany({
+      orderBy: { lastPullAt: 'desc' },
+    });
+    const userIds = [...new Set(cursors.map((c) => c.userId))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, phone: true },
+    });
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return {
+      devices: cursors.map((c) => ({
+        deviceId: c.deviceId,
+        userId: c.userId,
+        userName: byId.get(c.userId)?.name ?? c.userId,
+        storeId: c.storeId,
+        lastPullAt: c.lastPullAt.toISOString(),
+        lastPushAt: c.lastPushAt?.toISOString() ?? null,
+        userAgent: c.userAgent,
+      })),
+    };
+  }
+
   private async processShiftOpen(user: AuthUser, shift: PushShiftOpenDto) {
     if (
       !shift.id ||
@@ -693,16 +862,41 @@ export class SyncService {
         }));
 
         for (const line of saleLines) {
-          const updated = await tx.$queryRaw<{ productId: string }[]>`
-            UPDATE "ProductStoreStock"
-            SET "qty" = "qty" - CAST(${line.qty.toString()} AS DECIMAL),
-                "updatedAt" = CURRENT_TIMESTAMP
-            WHERE "productId" = ${line.productId}
-              AND "storeId" = ${sale.storeId}
-            RETURNING "productId"
-          `;
-          if (updated.length === 0) {
-            throw new Error('stock_not_found');
+          const product = await tx.product.findUnique({
+            where: { id: line.productId },
+            include: { comboComponents: true },
+          });
+          if (product?.kind === 'combo') {
+            if (product.comboComponents.length === 0) {
+              throw new Error('invalid_combo');
+            }
+            for (const c of product.comboComponents) {
+              const delta = line.qty.mul(c.qtyBase);
+              const updated = await tx.$queryRaw<{ productId: string }[]>`
+                UPDATE "ProductStoreStock"
+                SET "qty" = "qty" - CAST(${delta.toString()} AS DECIMAL),
+                    "updatedAt" = CURRENT_TIMESTAMP
+                WHERE "productId" = ${c.componentProductId}
+                  AND "storeId" = ${sale.storeId}
+                  AND "qty" - CAST(${delta.toString()} AS DECIMAL) >= 0
+                RETURNING "productId"
+              `;
+              if (updated.length === 0) {
+                throw new Error('insufficient_stock');
+              }
+            }
+          } else {
+            const updated = await tx.$queryRaw<{ productId: string }[]>`
+              UPDATE "ProductStoreStock"
+              SET "qty" = "qty" - CAST(${line.qty.toString()} AS DECIMAL),
+                  "updatedAt" = CURRENT_TIMESTAMP
+              WHERE "productId" = ${line.productId}
+                AND "storeId" = ${sale.storeId}
+              RETURNING "productId"
+            `;
+            if (updated.length === 0) {
+              throw new Error('stock_not_found');
+            }
           }
         }
 
@@ -782,6 +976,12 @@ export class SyncService {
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {
         return { accepted: false, reason: 'stock_not_found' };
+      }
+      if (error instanceof Error && error.message === 'insufficient_stock') {
+        return { accepted: false, reason: 'insufficient_stock' };
+      }
+      if (error instanceof Error && error.message === 'invalid_combo') {
+        return { accepted: false, reason: 'invalid_combo' };
       }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

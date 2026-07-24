@@ -90,12 +90,52 @@ export type PushProductUpsertDto = {
   barcode?: string | null;
   name: string;
   unit: string;
+  sellUnit?: string | null;
+  packSize?: string | null;
+  kind?: 'normal' | 'combo';
+  groupId?: string | null;
   isWeighted: boolean;
   basePriceVnd: number;
   costVnd?: number;
   active: boolean;
   storeId: string;
   seedStock?: PushProductSeedStockDto | null;
+  components?: PushComboComponentDto[] | null;
+};
+
+export type PushComboComponentDto = {
+  id?: string;
+  componentProductId: string;
+  qtyBase: string;
+};
+
+export type PushProductGroupUpsertDto = {
+  id: string;
+  name: string;
+  sortOrder?: number;
+  active?: boolean;
+};
+
+export type PushSaleReturnLineDto = {
+  id?: string;
+  productId: string;
+  qty: string;
+  unitPrice: number;
+  lineRefundVnd: number;
+};
+
+export type PushSaleReturnDto = {
+  id: string;
+  storeId: string;
+  originalSaleId: string;
+  shiftId?: string | null;
+  cashRefundVnd: number;
+  transferRefundVnd: number;
+  debtCreditVnd: number;
+  totalRefundVnd: number;
+  note?: string | null;
+  clientCreatedAt: string;
+  lines: PushSaleReturnLineDto[];
 };
 
 export type PushStockLineDto = {
@@ -178,4 +218,6 @@ export type PushSyncDto = {
   purchaseReceipts?: PushPurchaseReceiptDto[];
   wastages?: PushWastageDto[];
   productUpserts?: PushProductUpsertDto[];
+  productGroupUpserts?: PushProductGroupUpsertDto[];
+  saleReturns?: PushSaleReturnDto[];
 };

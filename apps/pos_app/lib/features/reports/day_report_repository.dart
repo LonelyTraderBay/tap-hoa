@@ -116,6 +116,8 @@ class DayReportRepository {
   final Dio _dio;
   final AppDatabase _db;
 
+  Dio get dio => _dio;
+
   bool _isOfflineNetworkError(DioException error) {
     return error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.connectionError ||

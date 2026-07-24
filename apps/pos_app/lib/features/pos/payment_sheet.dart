@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/local/database.dart';
 import '../customers/credit_limit.dart';
 import '../customers/customer_picker_sheet.dart';
 import '../customers/customer_repository.dart';
@@ -17,6 +18,7 @@ class PaymentSheet extends StatefulWidget {
     required this.customerRepository,
     required this.storeName,
     required this.onCompleted,
+    this.database,
   });
 
   final Cart cart;
@@ -24,6 +26,7 @@ class PaymentSheet extends StatefulWidget {
   final CustomerRepository customerRepository;
   final String storeName;
   final VoidCallback onCompleted;
+  final AppDatabase? database;
 
   static Future<void> show(
     BuildContext context, {
@@ -32,6 +35,7 @@ class PaymentSheet extends StatefulWidget {
     required CustomerRepository customerRepository,
     required String storeName,
     required VoidCallback onCompleted,
+    AppDatabase? database,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -42,6 +46,7 @@ class PaymentSheet extends StatefulWidget {
         customerRepository: customerRepository,
         storeName: storeName,
         onCompleted: onCompleted,
+        database: database,
       ),
     );
   }
@@ -149,6 +154,11 @@ class _PaymentSheetState extends State<PaymentSheet> {
           )
           .toList();
 
+      final printMode =
+          await widget.database?.metaValue('receiptPrintMode') ?? 'ask';
+      final printerName =
+          await widget.database?.metaValue('receiptPrinterName');
+      if (!mounted) return;
       await promptAndPrintReceipt(
         context,
         storeName: widget.storeName,
@@ -160,6 +170,8 @@ class _PaymentSheetState extends State<PaymentSheet> {
         transferVnd: transfer,
         debtVnd: debt,
         customerName: _selectedCustomer?.name,
+        printMode: printMode,
+        printerName: printerName,
       );
       if (!mounted) return;
       Navigator.of(context).pop();

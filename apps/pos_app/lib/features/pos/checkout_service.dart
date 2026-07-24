@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/local/database.dart';
 import '../customers/credit_limit.dart';
+import '../products/unit_conversion.dart';
 import '../shifts/shift_repository.dart';
 import 'cart.dart';
 
@@ -119,64 +120,71 @@ class CheckoutService {
         ),
       );
 
+      final outboxLines = <Map<String, dynamic>>[];
+
       for (final line in draft.lines) {
         final lineId = _uuid.v4();
+        final product = await (_db.select(_db.products)
+              ..where((t) => t.id.equals(line.productId)))
+            .getSingleOrNull();
+        if (product == null) {
+          throw InsufficientStockException(line.productId);
+        }
+
+        final sellQty = Decimal.parse(line.qty);
+        final pack = parsePackSize(product.packSize);
+        final baseQty = toBaseQty(sellQty, pack);
+
         await _db.into(_db.saleLinesLocal).insert(
           SaleLinesLocalCompanion.insert(
             id: lineId,
             saleId: saleId,
             productId: line.productId,
-            qty: line.qty,
+            qty: _formatQty(baseQty),
             unitPrice: line.unitPrice,
             lineTotal: line.lineTotal,
           ),
         );
 
-        final stockRow =
-            await (_db.select(_db.productStocks)..where(
-                  (stock) =>
-                      stock.productId.equals(line.productId) &
-                      stock.storeId.equals(storeId),
-                ))
-                .getSingleOrNull();
-        if (stockRow == null) {
-          throw InsufficientStockException(line.productId);
-        }
+        outboxLines.add({
+          'productId': line.productId,
+          'qty': _formatQty(baseQty),
+          'unitPrice': line.unitPrice,
+          'lineTotal': line.lineTotal,
+        });
 
-        final currentQty = Decimal.parse(stockRow.qty);
-        final soldQty = Decimal.parse(line.qty);
-        final newQty = currentQty - soldQty;
-        if (newQty < Decimal.zero && !allowNegativeStock) {
-          throw InsufficientStockException(line.productId);
-        }
-
-        await (_db.update(_db.productStocks)..where(
-              (stock) =>
-                  stock.productId.equals(line.productId) &
-                  stock.storeId.equals(storeId),
-            ))
-            .write(
-              ProductStocksCompanion(
-                qty: Value(_formatQty(newQty)),
-                updatedAt: Value(DateTime.now()),
-              ),
+        if (product.kind == 'combo') {
+          final components = await (_db.select(_db.productComboComponents)
+                ..where((t) => t.comboProductId.equals(product.id)))
+              .get();
+          if (components.isEmpty) {
+            throw InsufficientStockException(line.productId);
+          }
+          for (final c in components) {
+            final componentQty = baseQty * Decimal.parse(c.qtyBase);
+            await _decrementStock(
+              storeId: storeId,
+              productId: c.componentProductId,
+              soldQty: componentQty,
+              allowNegative: allowNegativeStock,
+              saleId: saleId,
+              lineId: lineId,
+              userId: userId,
+              clientCreatedAt: clientCreatedAt,
             );
-
-        await _db.into(_db.stockMovementsLocal).insert(
-          StockMovementsLocalCompanion.insert(
-            id: _uuid.v4(),
+          }
+        } else {
+          await _decrementStock(
             storeId: storeId,
             productId: line.productId,
-            qtyDelta: _formatQty(-soldQty),
-            balanceAfter: _formatQty(newQty),
-            docType: 'sale',
-            docId: saleId,
-            docLineId: Value(lineId),
-            recordedById: userId,
+            soldQty: baseQty,
+            allowNegative: allowNegativeStock,
+            saleId: saleId,
+            lineId: lineId,
+            userId: userId,
             clientCreatedAt: clientCreatedAt,
-            updatedAt: clientCreatedAt,
-          ),
-        );
+          );
+        }
       }
 
       CustomersLocalData? debtCustomer;
@@ -221,15 +229,7 @@ class CheckoutService {
                 'phone': debtCustomer.phone,
               },
             'clientCreatedAt': clientCreatedAt.toUtc().toIso8601String(),
-            'lines': [
-              for (final line in draft.lines)
-                {
-                  'productId': line.productId,
-                  'qty': line.qty,
-                  'unitPrice': line.unitPrice,
-                  'lineTotal': line.lineTotal,
-                },
-            ],
+            'lines': outboxLines,
           }),
           createdAt: clientCreatedAt,
         ),
@@ -265,5 +265,58 @@ class CheckoutService {
     });
 
     return saleId;
+  }
+
+  Future<void> _decrementStock({
+    required String storeId,
+    required String productId,
+    required Decimal soldQty,
+    required bool allowNegative,
+    required String saleId,
+    required String lineId,
+    required String userId,
+    required DateTime clientCreatedAt,
+  }) async {
+    final stockRow = await (_db.select(_db.productStocks)..where(
+          (stock) =>
+              stock.productId.equals(productId) & stock.storeId.equals(storeId),
+        ))
+        .getSingleOrNull();
+    if (stockRow == null) {
+      throw InsufficientStockException(productId);
+    }
+
+    final currentQty = Decimal.parse(stockRow.qty);
+    final newQty = currentQty - soldQty;
+    if (newQty < Decimal.zero && !allowNegative) {
+      throw InsufficientStockException(productId);
+    }
+
+    await (_db.update(_db.productStocks)..where(
+          (stock) =>
+              stock.productId.equals(productId) & stock.storeId.equals(storeId),
+        ))
+        .write(
+          ProductStocksCompanion(
+            qty: Value(_formatQty(newQty)),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+
+    await _db.into(_db.stockMovementsLocal).insert(
+      StockMovementsLocalCompanion.insert(
+        id: _uuid.v4(),
+        storeId: storeId,
+        productId: productId,
+        qtyDelta: _formatQty(-soldQty),
+        balanceAfter: _formatQty(newQty),
+        docType: 'sale',
+        docId: saleId,
+        docLineId: Value(lineId),
+        recordedById: userId,
+        clientCreatedAt: clientCreatedAt,
+        updatedAt: clientCreatedAt,
+      ),
+    );
   }
 }

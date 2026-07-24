@@ -109,18 +109,24 @@ class ShiftRepository {
     required String storeId,
     required String userId,
   }) async {
-    final shift =
-        await (_db.select(_db.shiftsLocal)..where(
-              (s) =>
-                  s.storeId.equals(storeId) &
-                  s.userId.equals(userId) &
-                  s.closedAt.isNull(),
-            ))
-            .getSingleOrNull();
+    final shift = await findOpenShift(storeId: storeId, userId: userId);
     if (shift == null) {
       throw const NoOpenShiftException();
     }
     return shift;
+  }
+
+  Future<ShiftsLocalData?> findOpenShift({
+    required String storeId,
+    required String userId,
+  }) {
+    return (_db.select(_db.shiftsLocal)..where(
+          (s) =>
+              s.storeId.equals(storeId) &
+              s.userId.equals(userId) &
+              s.closedAt.isNull(),
+        ))
+        .getSingleOrNull();
   }
 
   Future<ShiftCashBreakdown> breakdownForOpenShift({

@@ -54,4 +54,15 @@ export class ReportsController {
     }
     return this.reportsService.stockOnHand(req.user, storeId);
   }
+
+  @Get('debt-aging')
+  debtAging(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+  ) {
+    if (!storeId) {
+      throw new BadRequestException('storeId is required');
+    }
+    return this.reportsService.debtAging(req.user, storeId);
+  }
 }

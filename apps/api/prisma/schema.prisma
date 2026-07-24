@@ -24,6 +24,7 @@ enum PaymentMethod {
 enum DebtLedgerType {
   sale_debt
   payment
+  sale_return_credit
 }
 
 enum DebtPaymentChannel {
@@ -47,6 +48,7 @@ enum StockDocType {
   stocktake
   purchase
   wastage
+  sale_return
 }
 
 enum TransferStatus {
@@ -69,25 +71,27 @@ enum WastageReason {
 }
 
 model Store {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  name      String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users     UserStore[]
-  products  ProductStoreStock[]
-  sales     Sale[]
-  shifts    Shift[]
-  customers Customer[]
-  debtLedger DebtLedgerEntry[]
-  cashVouchers CashVoucher[]
+  id               String   @id @default(uuid())
+  code             String   @unique
+  name             String
+  active           Boolean  @default(true)
+  debtOverdueDays  Int      @default(30)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  users            UserStore[]
+  products         ProductStoreStock[]
+  sales            Sale[]
+  shifts           Shift[]
+  customers        Customer[]
+  debtLedger       DebtLedgerEntry[]
+  cashVouchers     CashVoucher[]
   stockTransfersFrom StockTransfer[] @relation("TransferFrom")
   stockTransfersTo   StockTransfer[] @relation("TransferTo")
   stocktakes         Stocktake[]
   purchaseReceipts   PurchaseReceipt[]
   wastageVouchers    WastageVoucher[]
   stockMovements     StockMovement[]
+  saleReturns        SaleReturn[]
 }
 
 model User {
@@ -111,6 +115,8 @@ model User {
   purchaseReceipts  PurchaseReceipt[]
   wastageVouchers   WastageVoucher[]
   stockMovements    StockMovement[]
+  saleReturns       SaleReturn[]
+  pushTokens        DevicePushToken[]
 }
 
 model UserStore {
@@ -121,24 +127,53 @@ model UserStore {
   @@id([userId, storeId])
 }
 
+model ProductGroup {
+  id        String    @id @default(uuid())
+  name      String
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
+  updatedAt DateTime  @updatedAt
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
 model Product {
   id           String   @id @default(uuid())
   sku          String   @unique
   barcode      String?
   name         String
   unit         String
+  sellUnit     String?
+  packSize     Decimal? @db.Decimal(18, 3)
+  kind         String   @default("normal") // normal | combo
+  groupId      String?
   isWeighted   Boolean  @default(false)
   basePriceVnd Int
   costVnd      Int      @default(0)
   active       Boolean  @default(true)
   updatedAt    DateTime @updatedAt
   createdAt    DateTime @default(now())
+  group        ProductGroup? @relation(fields: [groupId], references: [id])
   stocks       ProductStoreStock[]
   transferLines StockTransferLine[]
   stocktakeLines StocktakeLine[]
   purchaseLines  PurchaseReceiptLine[]
   wastageLines   WastageVoucherLine[]
   stockMovements StockMovement[]
+  comboComponents ProductComboComponent[] @relation("ComboProduct")
+  usedInCombos    ProductComboComponent[] @relation("ComponentProduct")
+}
+
+model ProductComboComponent {
+  id                 String  @id @default(uuid())
+  comboProductId     String
+  componentProductId String
+  qtyBase            Decimal @db.Decimal(18, 3)
+  comboProduct       Product @relation("ComboProduct", fields: [comboProductId], references: [id])
+  componentProduct   Product @relation("ComponentProduct", fields: [componentProductId], references: [id])
+
+  @@unique([comboProductId, componentProductId])
+  @@index([comboProductId])
 }
 
 model ProductStoreStock {
@@ -229,6 +264,7 @@ model Sale {
   customer       Customer?     @relation(fields: [customerId], references: [id])
   lines          SaleLine[]
   debtLedger     DebtLedgerEntry?
+  returns        SaleReturn[]
   @@index([storeId, clientCreatedAt])
 }
 
@@ -242,10 +278,58 @@ model SaleLine {
   sale        Sale    @relation(fields: [saleId], references: [id])
 }
 
+model SaleReturn {
+  id              String   @id @default(uuid())
+  storeId         String
+  originalSaleId  String
+  shiftId         String?
+  recordedById    String
+  cashRefundVnd   Int      @default(0)
+  transferRefundVnd Int    @default(0)
+  debtCreditVnd   Int      @default(0)
+  totalRefundVnd  Int
+  note            String?
+  clientCreatedAt DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  store           Store    @relation(fields: [storeId], references: [id])
+  originalSale    Sale     @relation(fields: [originalSaleId], references: [id])
+  recordedBy      User     @relation(fields: [recordedById], references: [id])
+  lines           SaleReturnLine[]
+  @@index([storeId, clientCreatedAt])
+  @@index([originalSaleId])
+}
+
+model SaleReturnLine {
+  id            String     @id @default(uuid())
+  returnId      String
+  productId     String
+  qty           Decimal    @db.Decimal(18, 3)
+  unitPrice     Int
+  lineRefundVnd Int
+  saleReturn    SaleReturn @relation(fields: [returnId], references: [id])
+}
+
 model SyncCursor {
   deviceId   String   @id
   userId     String
+  storeId    String?
   lastPullAt DateTime
+  lastPushAt DateTime?
+  userAgent  String?
+}
+
+model DevicePushToken {
+  id        String   @id @default(uuid())
+  deviceId  String
+  userId    String
+  token     String
+  platform  String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  @@unique([deviceId])
+  @@index([userId])
 }
 
 model CashCategory {
