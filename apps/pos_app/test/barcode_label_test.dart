@@ -1,8 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pos_app/features/products/barcode_label.dart';
+import 'package:pos_app/shared/pdf_fonts.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    resetPdfFontsForTesting();
+  });
+
   test('buildProductLabelPdf returns non-empty pdf', () async {
     final bytes = await buildProductLabelPdf(
       title: 'Sting do 330ml',

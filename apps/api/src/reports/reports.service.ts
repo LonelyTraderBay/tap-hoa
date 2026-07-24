@@ -21,6 +21,20 @@ export type DayReportResponse = {
   totalRevenueVnd: number;
 };
 
+export type TopSkuItem = {
+  productId: string;
+  sku: string;
+  name: string;
+  qty: number;
+  revenueVnd: number;
+  estimatedGrossVnd: number | null;
+};
+
+export type TopSkusResponse = {
+  date: string;
+  items: TopSkuItem[];
+};
+
 const ICT_OFFSET_HOURS = 7;
 
 @Injectable()
@@ -123,5 +137,92 @@ export class ReportsService {
     );
 
     return { byStore, totalRevenueVnd };
+  }
+
+  async topSkus(
+    user: AuthUser,
+    date: string,
+    storeId?: string,
+    limit?: number,
+  ): Promise<TopSkusResponse> {
+    const { start, end } = this.parseDateRange(date);
+    const storeIds = await this.resolveStoreIds(user, storeId);
+    const effectiveLimit = Math.min(Math.max(limit ?? 10, 1), 50);
+
+    if (storeIds.length === 0) {
+      return { date, items: [] };
+    }
+
+    const lines = await this.prisma.saleLine.findMany({
+      where: {
+        sale: {
+          storeId: { in: storeIds },
+          clientCreatedAt: { gte: start, lt: end },
+        },
+      },
+      select: {
+        productId: true,
+        qty: true,
+        lineTotal: true,
+      },
+    });
+
+    type Agg = {
+      productId: string;
+      qty: number;
+      revenueVnd: number;
+    };
+
+    const byProduct = new Map<string, Agg>();
+
+    for (const line of lines) {
+      const qtyNum = Number(line.qty);
+      let agg = byProduct.get(line.productId);
+      if (!agg) {
+        agg = {
+          productId: line.productId,
+          qty: 0,
+          revenueVnd: 0,
+        };
+        byProduct.set(line.productId, agg);
+      }
+      agg.qty += qtyNum;
+      agg.revenueVnd += line.lineTotal;
+    }
+
+    if (byProduct.size === 0) {
+      return { date, items: [] };
+    }
+
+    const productIds = [...byProduct.keys()];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, sku: true, name: true, costVnd: true },
+    });
+    const productById = new Map(products.map((product) => [product.id, product]));
+
+    const items: TopSkuItem[] = [...byProduct.values()]
+      .map((agg) => {
+        const product = productById.get(agg.productId);
+        return {
+          productId: agg.productId,
+          sku: product?.sku ?? '',
+          name: product?.name ?? '',
+          qty: agg.qty,
+          revenueVnd: agg.revenueVnd,
+          estimatedGrossVnd: product
+            ? agg.revenueVnd - agg.qty * product.costVnd
+            : null,
+        };
+      })
+      .sort((a, b) => {
+        if (b.qty !== a.qty) {
+          return b.qty - a.qty;
+        }
+        return b.revenueVnd - a.revenueVnd;
+      })
+      .slice(0, effectiveLimit);
+
+    return { date, items };
   }
 }

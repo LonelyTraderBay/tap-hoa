@@ -6,6 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../shared/pdf_fonts.dart';
+
 const _labelWidthMm = 50.0;
 const _labelHeightMm = 30.0;
 
@@ -56,6 +58,8 @@ Future<Uint8List> buildProductLabelPdf({
   required String code,
   required int copies,
 }) async {
+  await ensurePdfFontsLoaded();
+
   final doc = pw.Document();
   final trimmedCode = code.trim();
   final barcode = barcodeTypeForCode(trimmedCode);
@@ -71,6 +75,10 @@ Future<Uint8List> buildProductLabelPdf({
     doc.addPage(
       pw.Page(
         pageFormat: pageFormat,
+        theme: pw.ThemeData.withFont(
+          base: pdfFontRegular,
+          bold: pdfFontBold,
+        ),
         build: (context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
@@ -78,7 +86,7 @@ Future<Uint8List> buildProductLabelPdf({
             children: [
               pw.Text(
                 truncateLabelTitle(title),
-                style: const pw.TextStyle(fontSize: 8),
+                style: pw.TextStyle(fontSize: 8, font: pdfFontRegular),
                 maxLines: 2,
               ),
               if (barcode != null && trimmedCode.isNotEmpty)
@@ -89,7 +97,7 @@ Future<Uint8List> buildProductLabelPdf({
                       data: trimmedCode,
                       drawText: true,
                       height: 28,
-                      textStyle: const pw.TextStyle(fontSize: 7),
+                      textStyle: pw.TextStyle(fontSize: 7, font: pdfFontRegular),
                     ),
                   ),
                 )
@@ -97,15 +105,12 @@ Future<Uint8List> buildProductLabelPdf({
                 pw.Text(
                   trimmedCode,
                   textAlign: pw.TextAlign.center,
-                  style: const pw.TextStyle(fontSize: 10),
+                  style: pw.TextStyle(fontSize: 10, font: pdfFontRegular),
                 ),
               pw.Text(
                 priceLabel,
                 textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+                style: pw.TextStyle(fontSize: 10, font: pdfFontBold),
               ),
             ],
           );
