@@ -1,8 +1,8 @@
-# Phase 2 Epic 5 — Period Reports Plan (outline)
+# Phase 2 Epic 5 — Period Reports Plan
 
-**Suggested tasks:**
-1. API GET /reports/trial-balance?from&to; /reports/pnl
-2. VAT summary optional from sale lines + purchase VAT fields (add if needed)
-3. Export service (xlsx/pdf)
-4. Flutter period report page (owner)
-5. e2e totals match ledger for locked month fixture
+- [x] API GET /reports/period/trial-balance, /pnl, /vat, export.csv
+- [x] Cash fund summary GET /reports/cash-fund
+- [x] Flutter KQKD tab on ledger page
+- [x] e2e totals match ledger for sample period
+
+**Gate:** khớp sổ Epic 2 trên kỳ mẫu — PASS (`period-reports.e2e-spec.ts`).

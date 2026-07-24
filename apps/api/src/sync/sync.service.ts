@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CustomersService } from '../customers/customers.service';
 import { DevicesService } from '../devices/devices.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { ShiftsService } from '../shifts/shifts.service';
@@ -44,6 +45,7 @@ export class SyncService {
     private readonly stockOps: StockOpsService,
     private readonly saleReturns: SaleReturnsService,
     private readonly devicesService: DevicesService,
+    private readonly ledger: LedgerService,
   ) {}
 
   private assertStoreAccess(user: AuthUser, storeId: string) {
@@ -512,6 +514,14 @@ export class SyncService {
           },
         });
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromCashVoucher(voucher.id, user.userId),
+        {
+          sourceType: 'cash_voucher',
+          sourceId: voucher.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'shift_not_open') {
@@ -606,6 +616,14 @@ export class SyncService {
           },
         });
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromDebtPayment(payment.id, user.userId),
+        {
+          sourceType: 'debt_payment',
+          sourceId: payment.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error) {
@@ -1028,6 +1046,14 @@ export class SyncService {
           update: {},
         });
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromSale(sale.id, user.userId),
+        {
+          sourceType: 'sale',
+          sourceId: sale.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {

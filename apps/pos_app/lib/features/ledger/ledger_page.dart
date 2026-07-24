@@ -1,0 +1,221 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+
+/// Read-only ledger views for owner (server-of-truth).
+class LedgerRepository {
+  LedgerRepository({required Dio dio}) : _dio = dio;
+
+  final Dio _dio;
+
+  Future<List<Map<String, dynamic>>> journal({
+    required String from,
+    required String to,
+    String? storeId,
+  }) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/ledger/journal',
+      queryParameters: {
+        'from': from,
+        'to': to,
+        'storeId': ?storeId,
+      },
+    );
+    return (res.data ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> trialBalance(String periodYm) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/ledger/trial-balance',
+      queryParameters: {'periodYm': periodYm},
+    );
+    return res.data ?? {};
+  }
+
+  Future<void> lockPeriod(String periodYm) async {
+    await _dio.post<void>(
+      '/ledger/period-locks',
+      data: {'periodYm': periodYm},
+    );
+  }
+
+  Future<Map<String, dynamic>> periodPnl(String periodYm) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/reports/period/pnl',
+      queryParameters: {'periodYm': periodYm},
+    );
+    return res.data ?? {};
+  }
+
+  Future<String> periodExportCsv(String periodYm) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/reports/period/export.csv',
+      queryParameters: {'periodYm': periodYm},
+    );
+    return (res.data?['csv'] as String?) ?? '';
+  }
+}
+
+class LedgerHomePage extends StatefulWidget {
+  const LedgerHomePage({super.key, required this.repository, required this.isOwner});
+
+  final LedgerRepository repository;
+  final bool isOwner;
+
+  @override
+  State<LedgerHomePage> createState() => _LedgerHomePageState();
+}
+
+class _LedgerHomePageState extends State<LedgerHomePage> {
+  late String _periodYm;
+  List<Map<String, dynamic>> _entries = [];
+  List<Map<String, dynamic>> _tbRows = [];
+  Map<String, dynamic>? _pnl;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now().toUtc().add(const Duration(hours: 7));
+    _periodYm =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final parts = _periodYm.split('-');
+      final y = int.parse(parts[0]);
+      final m = int.parse(parts[1]);
+      final from = DateTime.utc(y, m, 1).subtract(const Duration(hours: 7));
+      final to = DateTime.utc(y, m + 1, 1).subtract(const Duration(hours: 7));
+      final entries = await widget.repository.journal(
+        from: from.toIso8601String(),
+        to: to.toIso8601String(),
+      );
+      final tb = await widget.repository.trialBalance(_periodYm);
+      final pnl = await widget.repository.periodPnl(_periodYm);
+      if (!mounted) return;
+      setState(() {
+        _entries = entries;
+        _tbRows = ((tb['rows'] as List?) ?? []).cast<Map<String, dynamic>>();
+        _pnl = pnl;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _lock() async {
+    try {
+      await widget.repository.lockPeriod(_periodYm);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã khóa sổ $_periodYm')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Khóa sổ thất bại: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Sổ kế toán'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Nhật ký'),
+              Tab(text: 'CĐPS'),
+              Tab(text: 'KQKD'),
+            ],
+          ),
+          actions: [
+            if (widget.isOwner)
+              IconButton(
+                tooltip: 'Khóa sổ tháng',
+                onPressed: _lock,
+                icon: const Icon(Icons.lock_outline),
+              ),
+            IconButton(
+              onPressed: _reload,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Text(_error!))
+                : TabBarView(
+                    children: [
+                      ListView.builder(
+                        itemCount: _entries.length,
+                        itemBuilder: (context, i) {
+                          final e = _entries[i];
+                          return ListTile(
+                            title: Text('${e['sourceType']} · ${e['sourceId']}'),
+                            subtitle: Text(
+                              '${e['periodYm']} · ${e['postedAt']}',
+                            ),
+                          );
+                        },
+                      ),
+                      ListView.builder(
+                        itemCount: _tbRows.length,
+                        itemBuilder: (context, i) {
+                          final r = _tbRows[i];
+                          return ListTile(
+                            title: Text('${r['accountCode']} ${r['name']}'),
+                            subtitle: Text(
+                              'Nợ ${r['debitVnd']} · Có ${r['creditVnd']}',
+                            ),
+                            trailing: Text('${r['balanceVnd']}'),
+                          );
+                        },
+                      ),
+                      ListView(
+                        children: [
+                          ListTile(
+                            title: const Text('Doanh thu'),
+                            trailing: Text('${_pnl?['revenueVnd'] ?? 0}'),
+                          ),
+                          ListTile(
+                            title: const Text('Giá vốn'),
+                            trailing: Text('${_pnl?['cogsVnd'] ?? 0}'),
+                          ),
+                          ListTile(
+                            title: const Text('Lãi gộp'),
+                            trailing: Text('${_pnl?['grossProfitVnd'] ?? 0}'),
+                          ),
+                          ListTile(
+                            title: const Text('Chi phí'),
+                            trailing:
+                                Text('${_pnl?['operatingExpenseVnd'] ?? 0}'),
+                          ),
+                          ListTile(
+                            title: const Text('Lãi ròng'),
+                            trailing: Text('${_pnl?['netIncomeVnd'] ?? 0}'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+      ),
+    );
+  }
+}

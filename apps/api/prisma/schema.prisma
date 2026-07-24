@@ -70,6 +70,13 @@ enum WastageReason {
   other
 }
 
+enum EInvoiceStatus {
+  draft
+  pending_sign
+  issued
+  cancelled
+}
+
 model Store {
   id               String   @id @default(uuid())
   code             String   @unique
@@ -92,6 +99,8 @@ model Store {
   wastageVouchers    WastageVoucher[]
   stockMovements     StockMovement[]
   saleReturns        SaleReturn[]
+  supplierPayables   SupplierPayable[]
+  supplierPayments   SupplierPayment[]
 }
 
 model User {
@@ -117,6 +126,8 @@ model User {
   stockMovements    StockMovement[]
   saleReturns       SaleReturn[]
   pushTokens        DevicePushToken[]
+  auditLogs         AuditLog[]
+  supplierPayments  SupplierPayment[]
 }
 
 model UserStore {
@@ -266,6 +277,7 @@ model Sale {
   lines          SaleLine[]
   debtLedger     DebtLedgerEntry?
   returns        SaleReturn[]
+  eInvoice       EInvoice?
   @@index([storeId, clientCreatedAt])
 }
 
@@ -431,6 +443,7 @@ model PurchaseReceipt {
   storeId         String
   supplierName    String
   supplierPhone   String?
+  supplierId      String?
   note            String?
   recordedById    String
   clientCreatedAt DateTime
@@ -438,7 +451,9 @@ model PurchaseReceipt {
   updatedAt       DateTime @updatedAt
   store           Store    @relation(fields: [storeId], references: [id])
   recordedBy      User     @relation(fields: [recordedById], references: [id])
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
   lines           PurchaseReceiptLine[]
+  payable         SupplierPayable?
   @@index([storeId, clientCreatedAt])
 }
 
@@ -497,4 +512,143 @@ model StockMovement {
   @@index([storeId, clientCreatedAt])
   @@index([productId, clientCreatedAt])
   @@index([docId])
+}
+
+enum AccountType {
+  asset
+  liability
+  equity
+  revenue
+  expense
+}
+
+model Account {
+  code      String      @id
+  name      String
+  type      AccountType
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  lines     JournalLine[]
+}
+
+model JournalEntry {
+  id         String   @id @default(uuid())
+  storeId    String?
+  periodYm   String
+  sourceType String
+  sourceId   String
+  postedAt   DateTime @default(now())
+  memo       String?
+  lines      JournalLine[]
+  @@unique([sourceType, sourceId])
+  @@index([periodYm, postedAt])
+  @@index([storeId, postedAt])
+}
+
+model JournalLine {
+  id          String       @id @default(uuid())
+  entryId     String
+  accountCode String
+  debitVnd    Int          @default(0)
+  creditVnd   Int          @default(0)
+  entry       JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account     Account      @relation(fields: [accountCode], references: [code])
+  @@index([entryId])
+  @@index([accountCode])
+}
+
+model PeriodLock {
+  periodYm   String   @id
+  lockedAt   DateTime @default(now())
+  lockedById String?
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  detailJson  String?
+  at          DateTime @default(now())
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+  @@index([at])
+  @@index([entityType, entityId])
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  note      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  receipts  PurchaseReceipt[]
+  payables  SupplierPayable[]
+  payments  SupplierPayment[]
+}
+
+model BankAccount {
+  id        String   @id @default(uuid())
+  name      String
+  bankName  String?
+  accountNo String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SupplierPayable {
+  id                String   @id @default(uuid())
+  supplierId        String
+  storeId           String
+  purchaseReceiptId String?  @unique
+  amountVnd         Int
+  balanceVnd        Int
+  clientCreatedAt   DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  supplier          Supplier @relation(fields: [supplierId], references: [id])
+  store             Store    @relation(fields: [storeId], references: [id])
+  purchaseReceipt   PurchaseReceipt? @relation(fields: [purchaseReceiptId], references: [id])
+  @@index([supplierId])
+  @@index([storeId])
+}
+
+model SupplierPayment {
+  id              String      @id @default(uuid())
+  supplierId      String
+  storeId         String
+  amountVnd       Int
+  channel         CashChannel
+  bankAccountId   String?
+  note            String?
+  recordedById    String
+  clientCreatedAt DateTime
+  createdAt       DateTime    @default(now())
+  supplier        Supplier    @relation(fields: [supplierId], references: [id])
+  store           Store       @relation(fields: [storeId], references: [id])
+  recordedBy      User        @relation(fields: [recordedById], references: [id])
+  @@index([supplierId])
+}
+
+model EInvoice {
+  id              String         @id @default(uuid())
+  saleId          String         @unique
+  status          EInvoiceStatus @default(draft)
+  buyerTaxCode    String?
+  templateCode    String?
+  serial          String?
+  invoiceNumber   String?
+  provider        String
+  providerRef     String?
+  xmlPath         String?
+  pdfPath         String?
+  errorMessage    String?
+  issuedAt        DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  sale            Sale           @relation(fields: [saleId], references: [id])
+  @@index([status])
 }

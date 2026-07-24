@@ -9,6 +9,9 @@ import { StoresModule } from './stores/stores.module';
 import { CustomersModule } from './customers/customers.module';
 import { ReportsModule } from './reports/reports.module';
 import { SyncModule } from './sync/sync.module';
+import { LedgerModule } from './ledger/ledger.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { EInvoiceModule } from './einvoice/einvoice.module';
 
 @Module({
   imports: [
@@ -21,6 +24,9 @@ import { SyncModule } from './sync/sync.module';
     SyncModule,
     ReportsModule,
     DevicesModule,
+    LedgerModule,
+    SuppliersModule,
+    EInvoiceModule,
   ],
   controllers: [HealthController],
 })

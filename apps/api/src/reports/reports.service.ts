@@ -372,4 +372,142 @@ export class ReportsService {
       }),
     };
   }
+
+  async periodTrialBalance(user: AuthUser, periodYm: string) {
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const entries = await this.prisma.journalEntry.findMany({
+      where: { periodYm },
+      include: { lines: true },
+    });
+    const byCode = new Map<string, { debitVnd: number; creditVnd: number }>();
+    for (const e of entries) {
+      for (const l of e.lines) {
+        const cur = byCode.get(l.accountCode) ?? { debitVnd: 0, creditVnd: 0 };
+        cur.debitVnd += l.debitVnd;
+        cur.creditVnd += l.creditVnd;
+        byCode.set(l.accountCode, cur);
+      }
+    }
+    const accounts = await this.prisma.account.findMany({
+      orderBy: { code: 'asc' },
+    });
+    return {
+      periodYm,
+      rows: accounts.map((a) => {
+        const t = byCode.get(a.code) ?? { debitVnd: 0, creditVnd: 0 };
+        return {
+          accountCode: a.code,
+          name: a.name,
+          type: a.type,
+          debitVnd: t.debitVnd,
+          creditVnd: t.creditVnd,
+          balanceVnd: t.debitVnd - t.creditVnd,
+        };
+      }),
+    };
+  }
+
+  async periodPnl(user: AuthUser, periodYm: string) {
+    const tb = await this.periodTrialBalance(user, periodYm);
+    const pick = (code: string) =>
+      tb.rows.find((r) => r.accountCode === code)?.balanceVnd ?? 0;
+    // Revenue credits → negative balance in Dr-Cr convention; flip for PnL
+    const revenue511 = -pick('511');
+    const otherIncome711 = -pick('711');
+    const cogs632 = pick('632');
+    const expense642 = pick('642');
+    const revenue = revenue511 + otherIncome711;
+    const gross = revenue - cogs632;
+    const net = gross - expense642;
+    return {
+      periodYm,
+      revenueVnd: revenue,
+      cogsVnd: cogs632,
+      grossProfitVnd: gross,
+      operatingExpenseVnd: expense642,
+      netIncomeVnd: net,
+    };
+  }
+
+  async vatSummary(user: AuthUser, periodYm: string) {
+    const tb = await this.periodTrialBalance(user, periodYm);
+    // MVP: no separate VAT accounts yet — output zero placeholders + revenue base
+    const revenue =
+      -(tb.rows.find((r) => r.accountCode === '511')?.balanceVnd ?? 0);
+    return {
+      periodYm,
+      outputVatVnd: 0,
+      inputVatVnd: 0,
+      netVatVnd: 0,
+      revenueBaseVnd: revenue,
+      note: 'VAT accounts not seeded; GTGT summary placeholder until tax CoA',
+    };
+  }
+
+  async periodExportCsv(user: AuthUser, periodYm: string): Promise<string> {
+    const tb = await this.periodTrialBalance(user, periodYm);
+    const pnl = await this.periodPnl(user, periodYm);
+    const lines = [
+      'section,accountCode,name,debitVnd,creditVnd,balanceVnd',
+      ...tb.rows.map(
+        (r) =>
+          `trial_balance,${r.accountCode},"${r.name}",${r.debitVnd},${r.creditVnd},${r.balanceVnd}`,
+      ),
+      `pnl,revenue,,${pnl.revenueVnd},,`,
+      `pnl,cogs,,${pnl.cogsVnd},,`,
+      `pnl,gross_profit,,${pnl.grossProfitVnd},,`,
+      `pnl,opex,,${pnl.operatingExpenseVnd},,`,
+      `pnl,net_income,,${pnl.netIncomeVnd},,`,
+    ];
+    return lines.join('\n');
+  }
+
+  async cashFundSummary(
+    user: AuthUser,
+    storeId: string,
+    from: string,
+    to: string,
+  ) {
+    this.assertStoreAccess(user, storeId);
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      throw new BadRequestException('invalid from/to');
+    }
+    const vouchers = await this.prisma.cashVoucher.findMany({
+      where: {
+        storeId,
+        clientCreatedAt: { gte: fromDate, lte: toDate },
+      },
+    });
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        storeId,
+        clientCreatedAt: { gte: fromDate, lte: toDate },
+      },
+    });
+    let voucherIn = 0;
+    let voucherOut = 0;
+    for (const v of vouchers) {
+      if (v.direction === 'in') voucherIn += v.amountVnd;
+      else voucherOut += v.amountVnd;
+    }
+    const saleCash = sales.reduce((s, x) => s + x.cashAmount, 0);
+    const saleTransfer = sales.reduce((s, x) => s + x.transferAmount, 0);
+    return {
+      storeId,
+      from,
+      to,
+      saleCashVnd: saleCash,
+      saleTransferVnd: saleTransfer,
+      voucherInVnd: voucherIn,
+      voucherOutVnd: voucherOut,
+      netCashVnd: saleCash + voucherIn - voucherOut,
+    };
+  }
 }

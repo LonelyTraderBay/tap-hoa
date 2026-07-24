@@ -10,6 +10,7 @@ import {
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { weightedAverageCost } from '../inventory/weighted-average-cost';
+import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   PushPurchaseReceiptDto,
@@ -25,7 +26,10 @@ type ProcessResult = AcceptResult | RejectResult;
 
 @Injectable()
 export class StockOpsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   private canAccessStore(user: AuthUser, storeId: string): boolean {
     return user.role === Role.owner || user.storeIds.includes(storeId);
@@ -588,12 +592,40 @@ export class StockOpsService {
     const clientCreatedAt = new Date(dto.clientCreatedAt);
     try {
       await this.prisma.$transaction(async (tx) => {
+        let supplierId = dto.supplierId?.trim() || null;
+        if (supplierId) {
+          const exists = await tx.supplier.findUnique({
+            where: { id: supplierId },
+          });
+          if (!exists) {
+            supplierId = null;
+          }
+        }
+        if (!supplierId) {
+          const created = await tx.supplier.create({
+            data: {
+              id: randomUUID(),
+              name: dto.supplierName.trim(),
+              phone: dto.supplierPhone ?? null,
+            },
+          });
+          supplierId = created.id;
+        }
+
+        let apAmount = 0;
+        for (const line of lines) {
+          if (line.unitCostVnd != null && line.unitCostVnd > 0) {
+            apAmount += Math.round(Number(line.qty) * line.unitCostVnd);
+          }
+        }
+
         await tx.purchaseReceipt.create({
           data: {
             id: dto.id,
             storeId: dto.storeId,
             supplierName: dto.supplierName.trim(),
             supplierPhone: dto.supplierPhone ?? null,
+            supplierId,
             note: dto.note ?? null,
             recordedById: user.userId,
             clientCreatedAt,
@@ -607,6 +639,21 @@ export class StockOpsService {
             },
           },
         });
+
+        if (apAmount > 0) {
+          await tx.supplierPayable.create({
+            data: {
+              id: randomUUID(),
+              supplierId,
+              storeId: dto.storeId,
+              purchaseReceiptId: dto.id,
+              amountVnd: apAmount,
+              balanceVnd: apAmount,
+              clientCreatedAt,
+            },
+          });
+        }
+
         for (const line of lines) {
           const stock = await tx.productStoreStock.findUnique({
             where: {
@@ -663,6 +710,14 @@ export class StockOpsService {
           }
         }
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromPurchaseReceipt(dto.id, user.userId),
+        {
+          sourceType: 'purchase_receipt',
+          sourceId: dto.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {

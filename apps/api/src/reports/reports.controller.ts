@@ -65,4 +65,62 @@ export class ReportsController {
     }
     return this.reportsService.debtAging(req.user, storeId);
   }
+
+  @Get('period/trial-balance')
+  periodTrial(
+    @Req() req: { user: AuthUser },
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    return this.reportsService.periodTrialBalance(req.user, periodYm);
+  }
+
+  @Get('period/pnl')
+  periodPnl(
+    @Req() req: { user: AuthUser },
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    return this.reportsService.periodPnl(req.user, periodYm);
+  }
+
+  @Get('period/vat')
+  periodVat(
+    @Req() req: { user: AuthUser },
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    return this.reportsService.vatSummary(req.user, periodYm);
+  }
+
+  @Get('period/export.csv')
+  async periodExport(
+    @Req() req: { user: AuthUser },
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    const csv = await this.reportsService.periodExportCsv(req.user, periodYm);
+    return { periodYm, csv };
+  }
+
+  @Get('cash-fund')
+  cashFund(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    if (!storeId || !from || !to) {
+      throw new BadRequestException('storeId, from, to required');
+    }
+    return this.reportsService.cashFundSummary(req.user, storeId, from, to);
+  }
 }
