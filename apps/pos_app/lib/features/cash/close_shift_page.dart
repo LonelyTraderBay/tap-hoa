@@ -10,7 +10,9 @@ import '../customers/customer_repository.dart';
 import '../customers/debt_payment_service.dart';
 import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
+import '../products/product_service.dart';
 import '../reports/day_report_repository.dart';
+import '../reports/stock_on_hand_repository.dart';
 import '../shifts/open_shift_page.dart';
 import '../shifts/shift_repository.dart';
 import 'expected_cash.dart';
@@ -22,7 +24,9 @@ class CloseShiftPage extends StatefulWidget {
     required this.storeId,
     required this.user,
     required this.dayReportRepository,
+    required this.stockOnHandRepository,
     required this.productRepository,
+    required this.productService,
     required this.customerRepository,
     required this.debtPaymentService,
     required this.cashVoucherService,
@@ -36,7 +40,9 @@ class CloseShiftPage extends StatefulWidget {
   final String storeId;
   final AuthUser user;
   final DayReportRepository dayReportRepository;
+  final StockOnHandRepository stockOnHandRepository;
   final ProductRepository productRepository;
+  final ProductService productService;
   final CustomerRepository customerRepository;
   final DebtPaymentService debtPaymentService;
   final CashVoucherService cashVoucherService;
@@ -140,7 +146,9 @@ class _CloseShiftPageState extends State<CloseShiftPage> {
             repository: widget.shiftRepository,
             user: widget.user,
             dayReportRepository: widget.dayReportRepository,
+            stockOnHandRepository: widget.stockOnHandRepository,
             productRepository: widget.productRepository,
+            productService: widget.productService,
             customerRepository: widget.customerRepository,
             debtPaymentService: widget.debtPaymentService,
             cashVoucherService: widget.cashVoucherService,

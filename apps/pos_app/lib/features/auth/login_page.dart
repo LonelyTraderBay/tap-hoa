@@ -11,6 +11,7 @@ import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
 import '../products/product_service.dart';
 import '../reports/day_report_repository.dart';
+import '../reports/stock_on_hand_repository.dart';
 import '../shifts/open_shift_page.dart';
 import '../shifts/shift_repository.dart';
 
@@ -20,6 +21,7 @@ class LoginPage extends StatefulWidget {
     required this.repository,
     required this.shiftRepository,
     required this.dayReportRepository,
+    required this.stockOnHandRepository,
     required this.productRepository,
     required this.productService,
     required this.customerRepository,
@@ -34,6 +36,7 @@ class LoginPage extends StatefulWidget {
   final AuthRepository repository;
   final ShiftRepository shiftRepository;
   final DayReportRepository dayReportRepository;
+  final StockOnHandRepository stockOnHandRepository;
   final ProductRepository productRepository;
   final ProductService productService;
   final CustomerRepository customerRepository;
@@ -78,6 +81,7 @@ class _LoginPageState extends State<LoginPage> {
               repository: widget.shiftRepository,
               user: user,
               dayReportRepository: widget.dayReportRepository,
+              stockOnHandRepository: widget.stockOnHandRepository,
               productRepository: widget.productRepository,
               productService: widget.productService,
               customerRepository: widget.customerRepository,

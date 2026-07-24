@@ -13,6 +13,7 @@ import '../customers/debt_customer_list_page.dart';
 import '../customers/debt_payment_service.dart';
 import '../reports/day_report_page.dart';
 import '../reports/day_report_repository.dart';
+import '../reports/stock_on_hand_repository.dart';
 import '../inventory/inventory_hub_page.dart';
 import '../inventory/inventory_service.dart';
 import '../sync/outbox_conflict_service.dart';
@@ -36,6 +37,7 @@ class PosPage extends StatefulWidget {
     required this.pullCatalog,
     required this.outboxWorker,
     required this.dayReportRepository,
+    required this.stockOnHandRepository,
     required this.shiftRepository,
     required this.cashVoucherService,
     required this.database,
@@ -53,6 +55,7 @@ class PosPage extends StatefulWidget {
   final PullCatalog pullCatalog;
   final OutboxWorker outboxWorker;
   final DayReportRepository dayReportRepository;
+  final StockOnHandRepository stockOnHandRepository;
   final ShiftRepository shiftRepository;
   final CashVoucherService cashVoucherService;
   final AppDatabase database;
@@ -203,6 +206,7 @@ class _PosPageState extends State<PosPage> {
                 MaterialPageRoute<void>(
                   builder: (_) => DayReportPage(
                     repository: widget.dayReportRepository,
+                    stockOnHandRepository: widget.stockOnHandRepository,
                     storeId: widget.storeId,
                     role: widget.role,
                   ),
@@ -239,7 +243,9 @@ class _PosPageState extends State<PosPage> {
                     storeId: widget.storeId,
                     user: widget.user,
                     dayReportRepository: widget.dayReportRepository,
+                    stockOnHandRepository: widget.stockOnHandRepository,
                     productRepository: widget.productRepository,
+                    productService: widget.productService,
                     customerRepository: widget.customerRepository,
                     debtPaymentService: widget.debtPaymentService,
                     cashVoucherService: widget.cashVoucherService,
@@ -280,6 +286,7 @@ class _PosPageState extends State<PosPage> {
                     db: widget.database,
                     inventoryService: InventoryService(db: widget.database),
                     productRepository: widget.productRepository,
+                    stockOnHandRepository: widget.stockOnHandRepository,
                     storeId: widget.storeId,
                     role: widget.role,
                   ),

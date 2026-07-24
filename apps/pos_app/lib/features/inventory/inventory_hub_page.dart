@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../../data/local/database.dart';
 import '../products/product_repository.dart';
+import '../reports/stock_on_hand_page.dart';
+import '../reports/stock_on_hand_repository.dart';
+import '../shifts/shift_repository.dart';
 import 'inventory_service.dart';
 
 class InventoryHubPage extends StatefulWidget {
@@ -11,6 +14,7 @@ class InventoryHubPage extends StatefulWidget {
     required this.db,
     required this.inventoryService,
     required this.productRepository,
+    required this.stockOnHandRepository,
     required this.storeId,
     required this.role,
   });
@@ -18,6 +22,7 @@ class InventoryHubPage extends StatefulWidget {
   final AppDatabase db;
   final InventoryService inventoryService;
   final ProductRepository productRepository;
+  final StockOnHandRepository stockOnHandRepository;
   final String storeId;
   final String role;
 
@@ -262,6 +267,29 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     }
   }
 
+  Future<void> _openStockOnHand() async {
+    List<StoreOption>? stores;
+    if (widget.role == 'owner') {
+      final rows = await widget.db.select(widget.db.storesLocal).get();
+      stores = rows
+          .map(
+            (s) => StoreOption(id: s.id, code: s.code, name: s.name),
+          )
+          .toList();
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StockOnHandPage(
+          repository: widget.stockOnHandRepository,
+          storeId: widget.storeId,
+          role: widget.role,
+          stores: stores,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canTransfer =
@@ -269,6 +297,12 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kho'),
+        actions: [
+          TextButton(
+            onPressed: _openStockOnHand,
+            child: const Text('Tồn hiện tại'),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           tabs: const [

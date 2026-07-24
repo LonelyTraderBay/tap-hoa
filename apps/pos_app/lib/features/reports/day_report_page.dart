@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'day_report_repository.dart';
 import 'ict_date.dart';
+import 'stock_on_hand_page.dart';
+import 'stock_on_hand_repository.dart';
 
 class DayReportPage extends StatefulWidget {
   const DayReportPage({
     super.key,
     required this.repository,
+    required this.stockOnHandRepository,
     required this.storeId,
     required this.role,
   });
 
   final DayReportRepository repository;
+  final StockOnHandRepository stockOnHandRepository;
   final String storeId;
   final String role;
 
@@ -83,6 +87,18 @@ class _DayReportPageState extends State<DayReportPage> {
     final m = date.month.toString().padLeft(2, '0');
     final y = date.year.toString();
     return '$d/$m/$y';
+  }
+
+  void _openStockOnHand() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StockOnHandPage(
+          repository: widget.stockOnHandRepository,
+          storeId: widget.storeId,
+          role: widget.role,
+        ),
+      ),
+    );
   }
 
   @override
@@ -226,6 +242,13 @@ class _DayReportPageState extends State<DayReportPage> {
                       ),
                     );
                   }),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: TextButton(
+                      onPressed: _openStockOnHand,
+                      child: const Text('Xem tồn hiện tại'),
+                    ),
+                  ),
                 ],
               ),
             ),

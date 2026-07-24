@@ -6,11 +6,14 @@ import 'package:pos_app/data/local/database.dart';
 import 'package:pos_app/data/sync/outbox_worker.dart';
 import 'package:pos_app/data/sync/pull_catalog.dart';
 import 'package:pos_app/features/auth/auth_repository.dart';
+import 'package:pos_app/features/cash/cash_voucher_service.dart';
 import 'package:pos_app/features/customers/customer_repository.dart';
 import 'package:pos_app/features/customers/debt_payment_service.dart';
 import 'package:pos_app/features/pos/checkout_service.dart';
 import 'package:pos_app/features/products/product_repository.dart';
+import 'package:pos_app/features/products/product_service.dart';
 import 'package:pos_app/features/reports/day_report_repository.dart';
+import 'package:pos_app/features/reports/stock_on_hand_repository.dart';
 import 'package:pos_app/features/shifts/shift_repository.dart';
 import 'package:pos_app/features/sync_status/sync_status_banner.dart';
 import 'package:pos_app/main.dart';
@@ -21,6 +24,8 @@ class MockShiftRepository extends Mock implements ShiftRepository {}
 
 class MockProductRepository extends Mock implements ProductRepository {}
 
+class MockProductService extends Mock implements ProductService {}
+
 class MockPullCatalog extends Mock implements PullCatalog {}
 
 class MockCheckoutService extends Mock implements CheckoutService {}
@@ -29,9 +34,13 @@ class MockOutboxWorker extends Mock implements OutboxWorker {}
 
 class MockDayReportRepository extends Mock implements DayReportRepository {}
 
+class MockStockOnHandRepository extends Mock implements StockOnHandRepository {}
+
 class MockCustomerRepository extends Mock implements CustomerRepository {}
 
 class MockDebtPaymentService extends Mock implements DebtPaymentService {}
+
+class MockCashVoucherService extends Mock implements CashVoucherService {}
 
 PosApp _buildApp({
   required AppDatabase database,
@@ -43,12 +52,15 @@ PosApp _buildApp({
     authRepository: authRepository ?? MockAuthRepository(),
     shiftRepository: shiftRepository ?? MockShiftRepository(),
     productRepository: MockProductRepository(),
+    productService: MockProductService(),
     pullCatalog: MockPullCatalog(),
     checkoutService: MockCheckoutService(),
     customerRepository: MockCustomerRepository(),
     debtPaymentService: MockDebtPaymentService(),
+    cashVoucherService: MockCashVoucherService(),
     outboxWorker: MockOutboxWorker(),
     dayReportRepository: MockDayReportRepository(),
+    stockOnHandRepository: MockStockOnHandRepository(),
   );
 }
 void main() {

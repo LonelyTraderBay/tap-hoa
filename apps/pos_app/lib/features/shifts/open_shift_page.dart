@@ -7,6 +7,7 @@ import '../../data/sync/pull_catalog.dart';
 import '../auth/auth_repository.dart';
 import '../cash/cash_voucher_service.dart';
 import '../reports/day_report_repository.dart';
+import '../reports/stock_on_hand_repository.dart';
 import '../pos/pos_page.dart';
 import '../customers/customer_repository.dart';
 import '../customers/debt_payment_service.dart';
@@ -21,6 +22,7 @@ class OpenShiftPage extends StatefulWidget {
     required this.repository,
     required this.user,
     required this.dayReportRepository,
+    required this.stockOnHandRepository,
     required this.productRepository,
     required this.productService,
     required this.customerRepository,
@@ -35,6 +37,7 @@ class OpenShiftPage extends StatefulWidget {
   final ShiftRepository repository;
   final AuthUser user;
   final DayReportRepository dayReportRepository;
+  final StockOnHandRepository stockOnHandRepository;
   final ProductRepository productRepository;
   final ProductService productService;
   final CustomerRepository customerRepository;
@@ -122,6 +125,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
             pullCatalog: widget.pullCatalog,
             outboxWorker: widget.outboxWorker,
             dayReportRepository: widget.dayReportRepository,
+            stockOnHandRepository: widget.stockOnHandRepository,
             shiftRepository: widget.repository,
             cashVoucherService: widget.cashVoucherService,
             database: widget.database,

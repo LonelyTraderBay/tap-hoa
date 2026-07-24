@@ -14,6 +14,7 @@ import 'features/pos/checkout_service.dart';
 import 'features/products/product_repository.dart';
 import 'features/products/product_service.dart';
 import 'features/reports/day_report_repository.dart';
+import 'features/reports/stock_on_hand_repository.dart';
 import 'features/shifts/shift_repository.dart';
 import 'features/sync_status/sync_status_banner.dart';
 
@@ -28,6 +29,10 @@ void main() {
   );
   final shiftRepository = ShiftRepository(dio: apiClient.dio, db: database);
   final dayReportRepository = DayReportRepository(
+    dio: apiClient.dio,
+    db: database,
+  );
+  final stockOnHandRepository = StockOnHandRepository(
     dio: apiClient.dio,
     db: database,
   );
@@ -59,6 +64,7 @@ void main() {
         authRepository: repository,
         shiftRepository: shiftRepository,
         dayReportRepository: dayReportRepository,
+        stockOnHandRepository: stockOnHandRepository,
         productRepository: productRepository,
         productService: productService,
         customerRepository: customerRepository,
@@ -79,6 +85,7 @@ class PosApp extends StatelessWidget {
     required this.authRepository,
     required this.shiftRepository,
     required this.dayReportRepository,
+    required this.stockOnHandRepository,
     required this.productRepository,
     required this.productService,
     required this.customerRepository,
@@ -93,6 +100,7 @@ class PosApp extends StatelessWidget {
   final AuthRepository authRepository;
   final ShiftRepository shiftRepository;
   final DayReportRepository dayReportRepository;
+  final StockOnHandRepository stockOnHandRepository;
   final ProductRepository productRepository;
   final ProductService productService;
   final CustomerRepository customerRepository;
@@ -119,6 +127,7 @@ class PosApp extends StatelessWidget {
         repository: authRepository,
         shiftRepository: shiftRepository,
         dayReportRepository: dayReportRepository,
+        stockOnHandRepository: stockOnHandRepository,
         productRepository: productRepository,
         productService: productService,
         customerRepository: customerRepository,
