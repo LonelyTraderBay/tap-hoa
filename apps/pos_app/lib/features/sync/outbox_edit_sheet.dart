@@ -10,6 +10,9 @@ import 'outbox_reason_labels.dart';
 
 enum _SheetMode { identity, qty, json }
 
+const _kStockTransferJsonWarning =
+    'Không thể sửa tồn kho tự động. Chỉ sửa payload; kiểm tra tồn local thủ công.';
+
 class OutboxEditSheet extends StatefulWidget {
   const OutboxEditSheet({
     super.key,
@@ -50,9 +53,9 @@ class OutboxEditSheet extends StatefulWidget {
 
 class _OutboxEditSheetState extends State<OutboxEditSheet> {
   late _SheetMode _mode;
-  late final TextEditingController _skuController;
-  late final TextEditingController _barcodeController;
-  late final TextEditingController _jsonController;
+  late TextEditingController _skuController;
+  late TextEditingController _barcodeController;
+  late TextEditingController _jsonController;
   final Map<String, TextEditingController> _qtyControllers = {};
   final Map<String, String> _productLabels = {};
 
@@ -64,6 +67,13 @@ class _OutboxEditSheetState extends State<OutboxEditSheet> {
   void initState() {
     super.initState();
     _warning = widget.initialJsonWarning;
+    if (_warning == null &&
+        _isStockTransferInsufficientStock(
+          widget.entry.lastError,
+          widget.entry.entityType,
+        )) {
+      _warning = _kStockTransferJsonWarning;
+    }
     _mode = _resolveInitialMode();
     _initControllers();
   }
@@ -73,6 +83,9 @@ class _OutboxEditSheetState extends State<OutboxEditSheet> {
       return _SheetMode.json;
     }
     final reason = widget.entry.lastError;
+    if (_isStockTransferInsufficientStock(reason, widget.entry.entityType)) {
+      return _SheetMode.json;
+    }
     if (_isIdentityConflict(reason, widget.entry.entityType)) {
       return _SheetMode.identity;
     }
@@ -92,27 +105,44 @@ class _OutboxEditSheetState extends State<OutboxEditSheet> {
         (entityType == 'sale' || entityType == 'wastage');
   }
 
+  bool _isStockTransferInsufficientStock(String? reason, String entityType) {
+    return reason == 'insufficient_stock' &&
+        (entityType == 'stock_transfer_create' ||
+            entityType == 'stock_transfer_approve' ||
+            entityType == 'stock_transfer_reject' ||
+            entityType == 'stock_transfer_receive');
+  }
+
   void _initControllers() {
-    final payload =
-        jsonDecode(widget.entry.payloadJson) as Map<String, dynamic>;
+    _skuController = TextEditingController();
+    _barcodeController = TextEditingController();
+    _jsonController = TextEditingController();
 
-    _skuController = TextEditingController(text: payload['sku'] as String? ?? '');
-    _barcodeController =
-        TextEditingController(text: payload['barcode'] as String? ?? '');
+    try {
+      final payload =
+          jsonDecode(widget.entry.payloadJson) as Map<String, dynamic>;
 
-    final pretty = const JsonEncoder.withIndent('  ').convert(payload);
-    _jsonController = TextEditingController(text: pretty);
+      _skuController.text = payload['sku'] as String? ?? '';
+      _barcodeController.text = payload['barcode'] as String? ?? '';
 
-    final lines = (payload['lines'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>();
-    for (final line in lines) {
-      final productId = line['productId'] as String?;
-      if (productId == null) continue;
-      _qtyControllers[productId] =
-          TextEditingController(text: line['qty']?.toString() ?? '');
-      _productLabels[productId] = productId;
+      final pretty = const JsonEncoder.withIndent('  ').convert(payload);
+      _jsonController.text = pretty;
+
+      final lines = (payload['lines'] as List<dynamic>? ?? [])
+          .cast<Map<String, dynamic>>();
+      for (final line in lines) {
+        final productId = line['productId'] as String?;
+        if (productId == null) continue;
+        _qtyControllers[productId] =
+            TextEditingController(text: line['qty']?.toString() ?? '');
+        _productLabels[productId] = productId;
+      }
+      _loadProductNames();
+    } catch (_) {
+      _jsonController.text = widget.entry.payloadJson;
+      _mode = _SheetMode.json;
+      _error = 'JSON không hợp lệ — sửa thủ công bên dưới';
     }
-    _loadProductNames();
   }
 
   Future<void> _loadProductNames() async {
@@ -168,10 +198,7 @@ class _OutboxEditSheetState extends State<OutboxEditSheet> {
       if (!mounted) return;
       if (error.message == 'use_raw_json') {
         setState(() => _isSubmitting = false);
-        _openJsonMode(
-          warning:
-              'Không thể sửa tồn kho tự động. Chỉ sửa payload; kiểm tra tồn local thủ công.',
-        );
+        _openJsonMode(warning: _kStockTransferJsonWarning);
         return;
       }
       if (error.message == 'invalid_qty') {
@@ -208,6 +235,13 @@ class _OutboxEditSheetState extends State<OutboxEditSheet> {
   }
 
   Future<bool> _saveQty() async {
+    if (_qtyControllers.isEmpty) {
+      setState(
+        () => _error = 'Không có dòng hàng trong payload — dùng Sửa JSON.',
+      );
+      return false;
+    }
+
     final productIdToQty = <String, String>{};
     for (final entry in _qtyControllers.entries) {
       final text = entry.value.text.trim();
@@ -265,6 +299,10 @@ class _OutboxEditSheetState extends State<OutboxEditSheet> {
       _mode != _SheetMode.json &&
       (_isIdentityConflict(widget.entry.lastError, widget.entry.entityType) ||
           _isQtyConflict(widget.entry.lastError, widget.entry.entityType));
+
+  bool get _canSave =>
+      !_isSubmitting &&
+      !(_mode == _SheetMode.qty && _qtyControllers.isEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -365,7 +403,7 @@ class _OutboxEditSheetState extends State<OutboxEditSheet> {
             ],
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: _isSubmitting ? null : _save,
+              onPressed: _canSave ? _save : null,
               child: _isSubmitting
                   ? const SizedBox(
                       width: 20,
