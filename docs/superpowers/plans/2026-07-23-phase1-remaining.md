@@ -51,7 +51,7 @@
 
 ## Sync & ops
 
-- [ ] Conflict resolution UI for rejected outbox entries
+- [x] Conflict resolution UI for rejected outbox entries
 - [x] Product/stock push from client (not only pull)
 - [ ] Multi-device cursor diagnostics for support
 
@@ -64,6 +64,7 @@
 3. ~~**Inter-store transfer + stocktake**~~ — done (`feat/inventory-stock-ops`)
 4. ~~**Product CRUD + barcode labels**~~ — done (`feat/product-crud-barcode-labels`)
 5. ~~**Thermal print + top SKU report**~~ — done (`feat/thermal-receipt-top-sku`; PDF receipt via OS print; ESC/POS drivers deferred)
+6. ~~**Conflict resolution UI (outbox reject)**~~ — done (`feat/conflict-outbox-ui`)
 
 ## Dependencies on MVP (done)
 
