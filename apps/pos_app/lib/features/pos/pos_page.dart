@@ -16,6 +16,8 @@ import '../reports/day_report_repository.dart';
 import '../reports/stock_on_hand_repository.dart';
 import '../inventory/inventory_hub_page.dart';
 import '../inventory/inventory_service.dart';
+import '../ledger/ledger_page.dart';
+import '../suppliers/suppliers_page.dart';
 import '../sync/outbox_conflict_service.dart';
 import '../sync/outbox_conflicts_page.dart';
 import '../sync/sync_diagnostics_page.dart';
@@ -358,6 +360,40 @@ class _PosPageState extends State<PosPage> {
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cấu hình in',
           ),
+          if (widget.role == 'owner')
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => LedgerHomePage(
+                      repository: LedgerRepository(
+                        dio: widget.dayReportRepository.dio,
+                      ),
+                      isOwner: true,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.menu_book_outlined),
+              tooltip: 'Sổ kế toán',
+            ),
+          if (widget.role == 'owner' || widget.role == 'store_manager')
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SuppliersPage(
+                      repository: SuppliersRepository(
+                        dio: widget.dayReportRepository.dio,
+                      ),
+                      storeId: widget.storeId,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.local_shipping_outlined),
+              tooltip: 'Công nợ NCC',
+            ),
           if (widget.role == 'owner' || widget.role == 'store_manager')
             IconButton(
               onPressed: _openSaleReturn,

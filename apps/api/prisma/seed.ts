@@ -1,10 +1,12 @@
 // apps/api/prisma/seed.ts
 import { CashDirection, PrismaClient, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { seedChartOfAccounts } from '../src/ledger/seed-accounts';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  await seedChartOfAccounts(prisma);
   const passwordHash = await bcrypt.hash('123456', 10);
   const s1 = await prisma.store.upsert({
     where: { code: 'CH1' },
@@ -99,6 +101,7 @@ async function main() {
     owner: owner.phone,
     stores: [s1.code, s2.code],
     cashCategories: cashCategories.map((c) => c.code),
+    accounts: 'seeded',
   });
 }
 

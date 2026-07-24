@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CustomersModule } from '../customers/customers.module';
 import { DevicesModule } from '../devices/devices.module';
+import { LedgerModule } from '../ledger/ledger.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ProductsModule } from '../products/products.module';
 import { ShiftsModule } from '../shifts/shifts.module';
@@ -16,6 +17,7 @@ import { SyncService } from './sync.service';
     CustomersModule,
     ShiftsModule,
     DevicesModule,
+    LedgerModule,
   ],
   controllers: [SyncController],
   providers: [SyncService, StockOpsService, SaleReturnsService],

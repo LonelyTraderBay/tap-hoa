@@ -1,0 +1,1 @@
+export const EINVOICE_ADAPTER = 'EINVOICE_ADAPTER';

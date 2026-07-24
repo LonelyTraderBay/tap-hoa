@@ -188,6 +188,7 @@ export type PushPurchaseReceiptDto = {
   storeId: string;
   supplierName: string;
   supplierPhone?: string | null;
+  supplierId?: string | null;
   note?: string | null;
   clientCreatedAt: string;
   lines: PushPurchaseLineDto[];

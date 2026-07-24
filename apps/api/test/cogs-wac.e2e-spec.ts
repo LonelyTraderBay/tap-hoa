@@ -47,6 +47,9 @@ describe('Phase 2 COGS WAC e2e', () => {
   });
 
   it('purchase updates avgCostVnd and sale snapshots unitCostVnd', async () => {
+    await prisma.eInvoice.deleteMany({
+      where: { sale: { storeId } },
+    });
     await prisma.saleLine.deleteMany({
       where: { sale: { storeId } },
     });

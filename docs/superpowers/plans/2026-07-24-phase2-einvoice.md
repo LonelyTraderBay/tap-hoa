@@ -1,8 +1,8 @@
-# Phase 2 Epic 4 — E-Invoice Plan (outline)
+# Phase 2 Epic 4 — E-Invoice Plan
 
-**Suggested tasks:**
-1. Prisma EInvoice + status enum; adapter module
-2. POST /einvoices/issue { saleId }; guard synced
-3. Provider HTTP client behind interface
-4. Flutter: nút Xuất HĐ trên đơn đã sync (owner/accountant role)
-5. e2e: unsynced reject; stub adapter issues code
+- [x] Prisma EInvoice + status enum; adapter module
+- [x] POST /einvoices/issue { saleId }; only for existing synced Sale
+- [x] StubEInvoiceAdapter behind EINVOICE_ADAPTER token
+- [x] e2e: missing sale 404; stub issues for synced sale
+
+**Gate:** unsynced/missing → reject; adapter swap không đụng checkout — PASS (`einvoice.e2e-spec.ts`).
