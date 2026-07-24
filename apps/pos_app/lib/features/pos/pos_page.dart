@@ -15,6 +15,7 @@ import '../reports/day_report_page.dart';
 import '../reports/day_report_repository.dart';
 import '../products/product_list_page.dart';
 import '../products/product_repository.dart';
+import '../products/product_service.dart';
 import '../shifts/shift_repository.dart';
 import 'cart.dart';
 import 'checkout_service.dart';
@@ -24,6 +25,7 @@ class PosPage extends StatefulWidget {
   const PosPage({
     super.key,
     required this.productRepository,
+    required this.productService,
     required this.checkoutService,
     required this.customerRepository,
     required this.debtPaymentService,
@@ -39,6 +41,7 @@ class PosPage extends StatefulWidget {
   });
 
   final ProductRepository productRepository;
+  final ProductService productService;
   final CheckoutService checkoutService;
   final CustomerRepository customerRepository;
   final DebtPaymentService debtPaymentService;
@@ -235,6 +238,9 @@ class _PosPageState extends State<PosPage> {
                     repository: widget.productRepository,
                     pullCatalog: widget.pullCatalog,
                     storeId: widget.storeId,
+                    productService: widget.productService,
+                    canEditCatalog: widget.role == 'owner' ||
+                        widget.role == 'store_manager',
                   ),
                 ),
               );

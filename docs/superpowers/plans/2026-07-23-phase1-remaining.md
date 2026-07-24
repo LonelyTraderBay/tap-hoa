@@ -9,18 +9,18 @@
 
 ## Inventory & stock operations
 
-- [ ] Inter-store stock transfer (create, approve, receive)
-- [ ] Stocktake / kiểm kê with variance reasons (tăng/giảm)
-- [ ] Wastage / hao hụt / xuất hủy vouchers
-- [ ] Supplier purchase receipts (phiếu nhập NCC)
-- [ ] Stock movement history UI per store
+- [x] Inter-store stock transfer (create, approve, receive)
+- [x] Stocktake / kiểm kê with variance reasons (tăng/giảm)
+- [x] Wastage / hao hụt / xuất hủy vouchers
+- [x] Supplier purchase receipts (phiếu nhập NCC)
+- [x] Stock movement history UI per store
 
 ## Product catalog polish
 
-- [ ] Full product CRUD UI (create/edit on client + sync push)
+- [x] Full product CRUD UI (create/edit on client + sync push)
 - [ ] Product groups / categories
 - [ ] Unit conversion (thùng ↔ chai)
-- [ ] Barcode label printing
+- [x] Barcode label printing
 
 ## Customer debt (beyond stub)
 
@@ -51,7 +51,7 @@
 ## Sync & ops
 
 - [ ] Conflict resolution UI for rejected outbox entries
-- [ ] Product/stock push from client (not only pull)
+- [x] Product/stock push from client (not only pull)
 - [ ] Multi-device cursor diagnostics for support
 
 ---
@@ -60,8 +60,8 @@
 
 1. ~~**Debt payments + history**~~ — done (`feat/debt-payments-credit-limit`)
 2. ~~**Cash in/out + shift reconciliation**~~ — done (`feat/cash-vouchers-shift-reconciliation`)
-3. **Inter-store transfer + stocktake** — multi-store inventory
-4. **Product CRUD + barcode labels** — catalog self-service
+3. ~~**Inter-store transfer + stocktake**~~ — done (`feat/inventory-stock-ops`)
+4. ~~**Product CRUD + barcode labels**~~ — done (`feat/product-crud-barcode-labels`)
 5. **Thermal print + top SKU report** — counter polish
 
 ## Dependencies on MVP (done)

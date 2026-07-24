@@ -79,6 +79,89 @@ export type PushCustomerUpsertDto = {
   creditLimitVnd?: number | null;
 };
 
+export type PushProductSeedStockDto = {
+  qty: string;
+  minQty?: string;
+};
+
+export type PushProductUpsertDto = {
+  id: string;
+  sku: string;
+  barcode?: string | null;
+  name: string;
+  unit: string;
+  isWeighted: boolean;
+  basePriceVnd: number;
+  costVnd?: number;
+  active: boolean;
+  storeId: string;
+  seedStock?: PushProductSeedStockDto | null;
+};
+
+export type PushStockLineDto = {
+  id?: string;
+  productId: string;
+  qty: string;
+};
+
+export type PushStockTransferCreateDto = {
+  id: string;
+  fromStoreId: string;
+  toStoreId: string;
+  note?: string | null;
+  clientCreatedAt: string;
+  lines: PushStockLineDto[];
+};
+
+export type PushStockTransferActionDto = {
+  id: string;
+  actionAt?: string;
+};
+
+export type PushStocktakeLineDto = {
+  id?: string;
+  productId: string;
+  systemQty: string;
+  countedQty: string;
+  varianceQty: string;
+  reason: 'increase' | 'decrease' | 'match';
+  reasonNote?: string | null;
+};
+
+export type PushStocktakeDto = {
+  id: string;
+  storeId: string;
+  note?: string | null;
+  clientCreatedAt: string;
+  lines: PushStocktakeLineDto[];
+};
+
+export type PushPurchaseLineDto = {
+  id?: string;
+  productId: string;
+  qty: string;
+  unitCostVnd?: number | null;
+};
+
+export type PushPurchaseReceiptDto = {
+  id: string;
+  storeId: string;
+  supplierName: string;
+  supplierPhone?: string | null;
+  note?: string | null;
+  clientCreatedAt: string;
+  lines: PushPurchaseLineDto[];
+};
+
+export type PushWastageDto = {
+  id: string;
+  storeId: string;
+  reasonCode: 'spoilage' | 'damage' | 'other';
+  note?: string | null;
+  clientCreatedAt: string;
+  lines: PushStockLineDto[];
+};
+
 export type PushSyncDto = {
   deviceId: string;
   shiftOpens?: PushShiftOpenDto[];
@@ -87,4 +170,12 @@ export type PushSyncDto = {
   debtPayments?: PushDebtPaymentDto[];
   cashVouchers?: PushCashVoucherDto[];
   customerUpserts?: PushCustomerUpsertDto[];
+  stockTransferCreates?: PushStockTransferCreateDto[];
+  stockTransferApproves?: PushStockTransferActionDto[];
+  stockTransferRejects?: PushStockTransferActionDto[];
+  stockTransferReceives?: PushStockTransferActionDto[];
+  stocktakes?: PushStocktakeDto[];
+  purchaseReceipts?: PushPurchaseReceiptDto[];
+  wastages?: PushWastageDto[];
+  productUpserts?: PushProductUpsertDto[];
 };

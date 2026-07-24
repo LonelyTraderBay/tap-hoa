@@ -10,11 +10,13 @@ import {
   PushCashVoucherDto,
   PushCustomerUpsertDto,
   PushDebtPaymentDto,
+  PushProductUpsertDto,
   PushSaleDto,
   PushShiftCloseDto,
   PushShiftOpenDto,
   PushSyncDto,
 } from './dto/push-sale.dto';
+import { StockOpsService } from './stock-ops.service';
 
 const PAYMENT_METHODS = new Set<string>(Object.values(PaymentMethod));
 
@@ -35,6 +37,7 @@ export class SyncService {
     private readonly customersService: CustomersService,
     private readonly prisma: PrismaService,
     private readonly shiftsService: ShiftsService,
+    private readonly stockOps: StockOpsService,
   ) {}
 
   private assertStoreAccess(user: AuthUser, storeId: string) {
@@ -50,8 +53,15 @@ export class SyncService {
     this.assertStoreAccess(user, storeId);
     const serverTime = new Date();
 
-    const [products, stocks, customers, debtLedger, cashCategories, cashVouchers] =
-      await Promise.all([
+    const [
+      products,
+      stocks,
+      customers,
+      debtLedger,
+      cashCategories,
+      cashVouchers,
+      inventory,
+    ] = await Promise.all([
       this.productsService.findUpdatedSince(since),
       this.productsService.findStocksForStoreSince(storeId, since),
       this.prisma.customer.findMany({
@@ -68,6 +78,7 @@ export class SyncService {
         where: { storeId, updatedAt: { gt: since } },
         orderBy: { clientCreatedAt: 'asc' },
       }),
+      this.stockOps.pullInventory(storeId, since),
     ]);
 
     return {
@@ -134,6 +145,7 @@ export class SyncService {
         clientCreatedAt: v.clientCreatedAt.toISOString(),
         updatedAt: v.updatedAt.toISOString(),
       })),
+      ...inventory,
       serverTime: serverTime.toISOString(),
     };
   }
@@ -151,6 +163,8 @@ export class SyncService {
     }
 
     const salesResult = await this.pushSales(user, body.deviceId, body.sales);
+
+    const inventoryResult = await this.pushInventory(user, body);
 
     const voucherResult = await this.pushCashVouchers(
       user,
@@ -178,15 +192,118 @@ export class SyncService {
       body.customerUpserts ?? [],
     );
 
+    const productResult = await this.pushProductUpserts(
+      user,
+      body.productUpserts ?? [],
+    );
+
     return {
       acceptedShiftIds,
       acceptedShiftCloseIds,
       closedShifts,
       rejectedShifts,
       ...salesResult,
+      ...inventoryResult,
       ...voucherResult,
       ...debtResult,
       ...customerResult,
+      ...productResult,
+    };
+  }
+
+  private async pushInventory(user: AuthUser, body: PushSyncDto) {
+    const acceptedStockTransferCreateIds: string[] = [];
+    const rejectedStockTransferCreates: { id: string; reason: string }[] = [];
+    for (const dto of body.stockTransferCreates ?? []) {
+      const result = await this.stockOps.processTransferCreate(user, dto);
+      if (result.accepted) {
+        acceptedStockTransferCreateIds.push(dto.id);
+      } else {
+        rejectedStockTransferCreates.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedStockTransferApproveIds: string[] = [];
+    const rejectedStockTransferApproves: { id: string; reason: string }[] = [];
+    for (const dto of body.stockTransferApproves ?? []) {
+      const result = await this.stockOps.processTransferApprove(user, dto);
+      if (result.accepted) {
+        acceptedStockTransferApproveIds.push(dto.id);
+      } else {
+        rejectedStockTransferApproves.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedStockTransferRejectIds: string[] = [];
+    const rejectedStockTransferRejects: { id: string; reason: string }[] = [];
+    for (const dto of body.stockTransferRejects ?? []) {
+      const result = await this.stockOps.processTransferReject(user, dto);
+      if (result.accepted) {
+        acceptedStockTransferRejectIds.push(dto.id);
+      } else {
+        rejectedStockTransferRejects.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedStockTransferReceiveIds: string[] = [];
+    const rejectedStockTransferReceives: { id: string; reason: string }[] = [];
+    for (const dto of body.stockTransferReceives ?? []) {
+      const result = await this.stockOps.processTransferReceive(user, dto);
+      if (result.accepted) {
+        acceptedStockTransferReceiveIds.push(dto.id);
+      } else {
+        rejectedStockTransferReceives.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedStocktakeIds: string[] = [];
+    const rejectedStocktakes: { id: string; reason: string }[] = [];
+    for (const dto of body.stocktakes ?? []) {
+      const result = await this.stockOps.processStocktake(user, dto);
+      if (result.accepted) {
+        acceptedStocktakeIds.push(dto.id);
+      } else {
+        rejectedStocktakes.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedPurchaseReceiptIds: string[] = [];
+    const rejectedPurchaseReceipts: { id: string; reason: string }[] = [];
+    for (const dto of body.purchaseReceipts ?? []) {
+      const result = await this.stockOps.processPurchaseReceipt(user, dto);
+      if (result.accepted) {
+        acceptedPurchaseReceiptIds.push(dto.id);
+      } else {
+        rejectedPurchaseReceipts.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedWastageIds: string[] = [];
+    const rejectedWastages: { id: string; reason: string }[] = [];
+    for (const dto of body.wastages ?? []) {
+      const result = await this.stockOps.processWastage(user, dto);
+      if (result.accepted) {
+        acceptedWastageIds.push(dto.id);
+      } else {
+        rejectedWastages.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    return {
+      acceptedStockTransferCreateIds,
+      rejectedStockTransferCreates,
+      acceptedStockTransferApproveIds,
+      rejectedStockTransferApproves,
+      acceptedStockTransferRejectIds,
+      rejectedStockTransferRejects,
+      acceptedStockTransferReceiveIds,
+      rejectedStockTransferReceives,
+      acceptedStocktakeIds,
+      rejectedStocktakes,
+      acceptedPurchaseReceiptIds,
+      rejectedPurchaseReceipts,
+      acceptedWastageIds,
+      rejectedWastages,
     };
   }
 
@@ -412,6 +529,23 @@ export class SyncService {
     return { acceptedCustomerUpsertIds };
   }
 
+  private async pushProductUpserts(
+    user: AuthUser,
+    upserts: PushProductUpsertDto[],
+  ) {
+    const acceptedProductUpsertIds: string[] = [];
+    const rejectedProductUpserts: { id: string; reason: string }[] = [];
+    for (const dto of upserts) {
+      const result = await this.productsService.upsertFromSync(user, dto);
+      if (result.accepted) {
+        acceptedProductUpsertIds.push(dto.id);
+      } else {
+        rejectedProductUpserts.push({ id: dto.id, reason: result.reason });
+      }
+    }
+    return { acceptedProductUpsertIds, rejectedProductUpserts };
+  }
+
   private async processShiftOpen(user: AuthUser, shift: PushShiftOpenDto) {
     if (
       !shift.id ||
@@ -550,10 +684,18 @@ export class SyncService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        for (const line of sale.lines) {
+        const saleLines = sale.lines.map((line) => ({
+          id: randomUUID(),
+          productId: line.productId,
+          qty: new Prisma.Decimal(line.qty),
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal,
+        }));
+
+        for (const line of saleLines) {
           const updated = await tx.$queryRaw<{ productId: string }[]>`
             UPDATE "ProductStoreStock"
-            SET "qty" = "qty" - CAST(${line.qty} AS DECIMAL),
+            SET "qty" = "qty" - CAST(${line.qty.toString()} AS DECIMAL),
                 "updatedAt" = CURRENT_TIMESTAMP
             WHERE "productId" = ${line.productId}
               AND "storeId" = ${sale.storeId}
@@ -579,15 +721,27 @@ export class SyncService {
             customerId: sale.customerId ?? null,
             clientCreatedAt,
             lines: {
-              create: sale.lines.map((line) => ({
-                id: randomUUID(),
+              create: saleLines.map((line) => ({
+                id: line.id,
                 productId: line.productId,
-                qty: new Prisma.Decimal(line.qty),
+                qty: line.qty,
                 unitPrice: line.unitPrice,
                 lineTotal: line.lineTotal,
               })),
             },
           },
+        });
+
+        await this.stockOps.recordSaleMovements(tx, {
+          saleId: sale.id,
+          storeId: sale.storeId,
+          recordedById: user.userId,
+          clientCreatedAt,
+          lines: saleLines.map((l) => ({
+            id: l.id,
+            productId: l.productId,
+            qty: l.qty,
+          })),
         });
 
         if (sale.debtAmount > 0 && sale.customerId) {

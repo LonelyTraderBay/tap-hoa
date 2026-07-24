@@ -7,6 +7,7 @@ class ProductWithStock {
     required this.id,
     required this.name,
     required this.sku,
+    this.barcode,
     required this.unit,
     required this.basePriceVnd,
     required this.qty,
@@ -15,9 +16,38 @@ class ProductWithStock {
   final String id;
   final String name;
   final String sku;
+  final String? barcode;
   final String unit;
   final int basePriceVnd;
   final String qty;
+}
+
+class ProductEditData {
+  const ProductEditData({
+    required this.id,
+    required this.sku,
+    this.barcode,
+    required this.name,
+    required this.unit,
+    required this.isWeighted,
+    required this.basePriceVnd,
+    required this.costVnd,
+    required this.active,
+    required this.qty,
+    required this.minQty,
+  });
+
+  final String id;
+  final String sku;
+  final String? barcode;
+  final String name;
+  final String unit;
+  final bool isWeighted;
+  final int basePriceVnd;
+  final int costVnd;
+  final bool active;
+  final String qty;
+  final String minQty;
 }
 
 class ProductRepository {
@@ -46,11 +76,43 @@ class ProductRepository {
           id: product.id,
           name: product.name,
           sku: product.sku,
+          barcode: product.barcode,
           unit: product.unit,
           basePriceVnd: product.basePriceVnd,
           qty: stock.qty,
         );
       }).toList(),
+    );
+  }
+
+  Future<List<ProductWithStock>> listWithStock(String storeId) {
+    return watchByStore(storeId).first;
+  }
+
+  Future<ProductEditData?> getForEdit(String productId, String storeId) async {
+    final product = await (_db.select(_db.products)
+          ..where((t) => t.id.equals(productId)))
+        .getSingleOrNull();
+    if (product == null) return null;
+
+    final stock = await (_db.select(_db.productStocks)
+          ..where(
+            (t) => t.productId.equals(productId) & t.storeId.equals(storeId),
+          ))
+        .getSingleOrNull();
+
+    return ProductEditData(
+      id: product.id,
+      sku: product.sku,
+      barcode: product.barcode,
+      name: product.name,
+      unit: product.unit,
+      isWeighted: product.isWeighted,
+      basePriceVnd: product.basePriceVnd,
+      costVnd: product.costVnd,
+      active: product.active,
+      qty: stock?.qty ?? '0',
+      minQty: stock?.minQty ?? '0',
     );
   }
 }
