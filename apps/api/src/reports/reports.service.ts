@@ -3,7 +3,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Role, Prisma } from '@prisma/client';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -19,6 +19,20 @@ export type StoreDayReport = {
 export type DayReportResponse = {
   byStore: StoreDayReport[];
   totalRevenueVnd: number;
+};
+
+export type TopSkuItem = {
+  productId: string;
+  sku: string;
+  name: string;
+  qty: number;
+  revenueVnd: number;
+  estimatedGrossVnd: number | null;
+};
+
+export type TopSkusResponse = {
+  date: string;
+  items: TopSkuItem[];
 };
 
 const ICT_OFFSET_HOURS = 7;
@@ -123,5 +137,93 @@ export class ReportsService {
     );
 
     return { byStore, totalRevenueVnd };
+  }
+
+  async topSkus(
+    user: AuthUser,
+    date: string,
+    storeId?: string,
+    limit?: number,
+  ): Promise<TopSkusResponse> {
+    const { start, end } = this.parseDateRange(date);
+    const storeIds = await this.resolveStoreIds(user, storeId);
+    const effectiveLimit = Math.min(Math.max(limit ?? 10, 1), 50);
+
+    if (storeIds.length === 0) {
+      return { date, items: [] };
+    }
+
+    const lines = await this.prisma.saleLine.findMany({
+      where: {
+        sale: {
+          storeId: { in: storeIds },
+          clientCreatedAt: { gte: start, lt: end },
+        },
+      },
+      select: {
+        productId: true,
+        qty: true,
+        lineTotal: true,
+      },
+    });
+
+    type Agg = {
+      productId: string;
+      qty: number;
+      revenueVnd: number;
+    };
+
+    const byProduct = new Map<string, Agg>();
+
+    for (const line of lines) {
+      const qtyNum = Number(line.qty);
+      let agg = byProduct.get(line.productId);
+      if (!agg) {
+        agg = {
+          productId: line.productId,
+          qty: 0,
+          revenueVnd: 0,
+        };
+        byProduct.set(line.productId, agg);
+      }
+      agg.qty += qtyNum;
+      agg.revenueVnd += line.lineTotal;
+    }
+
+    if (byProduct.size === 0) {
+      return { date, items: [] };
+    }
+
+    const productIds = [...byProduct.keys()];
+    const products = await this.prisma.$queryRaw<
+      { id: string; sku: string; name: string; costVnd: number | null }[]
+    >(
+      Prisma.sql`SELECT id, sku, name, "costVnd" FROM "Product" WHERE id IN (${Prisma.join(productIds)})`,
+    );
+    const productById = new Map(products.map((product) => [product.id, product]));
+
+    const items: TopSkuItem[] = [...byProduct.values()]
+      .map((agg) => {
+        const product = productById.get(agg.productId);
+        const costVnd = product?.costVnd ?? null;
+        return {
+          productId: agg.productId,
+          sku: product?.sku ?? '',
+          name: product?.name ?? '',
+          qty: agg.qty,
+          revenueVnd: agg.revenueVnd,
+          estimatedGrossVnd:
+            costVnd == null ? null : agg.revenueVnd - agg.qty * costVnd,
+        };
+      })
+      .sort((a, b) => {
+        if (b.qty !== a.qty) {
+          return b.qty - a.qty;
+        }
+        return b.revenueVnd - a.revenueVnd;
+      })
+      .slice(0, effectiveLimit);
+
+    return { date, items };
   }
 }

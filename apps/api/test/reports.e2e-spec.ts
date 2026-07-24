@@ -51,6 +51,39 @@ function makeSaleDto(
   };
 }
 
+function makeSaleDtoWithLines(
+  saleId: string,
+  opts: {
+    storeId: string;
+    shiftId: string;
+    soldById: string;
+    clientCreatedAt: string;
+    lines: Array<{
+      productId: string;
+      qty: string;
+      unitPrice: number;
+      lineTotal: number;
+    }>;
+  },
+) {
+  const totalVnd = opts.lines.reduce((sum, line) => sum + line.lineTotal, 0);
+  return {
+    id: saleId,
+    storeId: opts.storeId,
+    shiftId: opts.shiftId,
+    soldById: opts.soldById,
+    paymentMethod: 'cash',
+    cashAmount: totalVnd,
+    transferAmount: 0,
+    debtAmount: 0,
+    discountVnd: 0,
+    totalVnd,
+    customerId: null,
+    clientCreatedAt: opts.clientCreatedAt,
+    lines: opts.lines,
+  };
+}
+
 describe('Reports day', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -240,5 +273,175 @@ describe('Reports day', () => {
     expect(report.body.totalRevenueVnd).toBe(33000);
     expect(report.body.byStore).toHaveLength(1);
     expect(report.body.byStore[0].orderCount).toBe(2);
+  });
+});
+
+describe('Reports top-skus', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    prisma = moduleRef.get(PrismaService);
+    await app.init();
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "Product" ALTER COLUMN "costVnd" DROP NOT NULL',
+    );
+  });
+
+  beforeEach(async () => {
+    await prisma.saleLine.deleteMany();
+    await prisma.sale.deleteMany();
+    await prisma.shift.updateMany({
+      where: { closedAt: null },
+      data: { closedAt: new Date(), closingCash: 0 },
+    });
+    await prisma.stockMovement.deleteMany({
+      where: { product: { sku: { in: ['TOP-SKU-A', 'TOP-SKU-B'] } } },
+    });
+    await prisma.productStoreStock.deleteMany({
+      where: { product: { sku: { in: ['TOP-SKU-A', 'TOP-SKU-B'] } } },
+    });
+    await prisma.product.deleteMany({
+      where: { sku: { in: ['TOP-SKU-A', 'TOP-SKU-B'] } },
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  async function seedTopSkuProducts(storeId: string) {
+    const productA = await prisma.product.create({
+      data: {
+        sku: 'TOP-SKU-A',
+        name: 'Top Product A',
+        unit: 'chai',
+        basePriceVnd: 10000,
+        costVnd: 5000,
+      },
+    });
+    const productB = await prisma.product.create({
+      data: {
+        sku: 'TOP-SKU-B',
+        name: 'Top Product B',
+        unit: 'chai',
+        basePriceVnd: 8000,
+        costVnd: 0,
+      },
+    });
+    await prisma.$executeRawUnsafe(
+      'UPDATE "Product" SET "costVnd" = NULL WHERE id = $1',
+      productB.id,
+    );
+    for (const product of [productA, productB]) {
+      await prisma.productStoreStock.create({
+        data: {
+          productId: product.id,
+          storeId,
+          qty: 100,
+          minQty: 10,
+        },
+      });
+    }
+    return { productA, productB };
+  }
+
+  it('GET /reports/top-skus ranks by qty and computes estimatedGrossVnd', async () => {
+    const login = await loginAsOwner(app);
+    const storesRes = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const ch1 = storesRes.body.find(
+      (store: { code: string }) => store.code === 'CH1',
+    );
+    if (!ch1) {
+      throw new Error('Seed store CH1 not found');
+    }
+
+    const { productA, productB } = await seedTopSkuProducts(ch1.id);
+
+    const reportDate = '2026-07-24';
+    const clientCreatedAt = `${reportDate}T10:00:00.000Z`;
+    const shiftId = randomUUID();
+
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-top-sku',
+        shiftOpens: [
+          {
+            id: shiftId,
+            storeId: ch1.id,
+            openingCash: 500000,
+            openedAt: `${reportDate}T00:00:00.000Z`,
+          },
+        ],
+        sales: [
+          makeSaleDtoWithLines(randomUUID(), {
+            storeId: ch1.id,
+            shiftId,
+            soldById: login.user.id,
+            clientCreatedAt,
+            lines: [
+              {
+                productId: productB.id,
+                qty: '3',
+                unitPrice: 8000,
+                lineTotal: 24000,
+              },
+            ],
+          }),
+          makeSaleDtoWithLines(randomUUID(), {
+            storeId: ch1.id,
+            shiftId,
+            soldById: login.user.id,
+            clientCreatedAt,
+            lines: [
+              {
+                productId: productB.id,
+                qty: '2',
+                unitPrice: 8000,
+                lineTotal: 16000,
+              },
+            ],
+          }),
+          makeSaleDtoWithLines(randomUUID(), {
+            storeId: ch1.id,
+            shiftId,
+            soldById: login.user.id,
+            clientCreatedAt,
+            lines: [
+              {
+                productId: productA.id,
+                qty: '3',
+                unitPrice: 10000,
+                lineTotal: 30000,
+              },
+            ],
+          }),
+        ],
+      })
+      .expect(201);
+
+    const report = await request(app.getHttpServer())
+      .get(`/reports/top-skus?date=${reportDate}&storeId=${ch1.id}`)
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(200);
+
+    expect(report.body.date).toBe(reportDate);
+    expect(report.body.items).toHaveLength(2);
+    expect(report.body.items[0].productId).toBe(productB.id);
+    expect(report.body.items[0].qty).toBe(5);
+    expect(report.body.items[0].revenueVnd).toBe(40000);
+    expect(report.body.items[0].estimatedGrossVnd).toBeNull();
+    expect(report.body.items[1].productId).toBe(productA.id);
+    expect(report.body.items[1].qty).toBe(3);
+    expect(report.body.items[1].revenueVnd).toBe(30000);
+    expect(report.body.items[1].estimatedGrossVnd).toBe(15000);
   });
 });
