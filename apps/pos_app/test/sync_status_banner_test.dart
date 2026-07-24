@@ -16,6 +16,12 @@ void main() {
     await db.close();
   });
 
+  Future<void> unmount(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    // Drift stream cancel schedules a zero-duration timer; flush it.
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+
   testWidgets('shows pending outbox count', (tester) async {
     await db.into(db.outboxEntries).insert(
       OutboxEntriesCompanion.insert(
@@ -32,6 +38,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('1 đang chờ đồng bộ'), findsOneWidget);
+    await unmount(tester);
   });
 
   testWidgets('shows last sync error', (tester) async {
@@ -52,6 +59,7 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('insufficient_stock'), findsOneWidget);
+    await unmount(tester);
   });
 
   testWidgets('ignores pending non-sale outbox entries', (tester) async {
@@ -70,6 +78,7 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('đang chờ đồng bộ'), findsNothing);
+    await unmount(tester);
   });
 
   testWidgets('hides when outbox is clear', (tester) async {
@@ -81,5 +90,6 @@ void main() {
     expect(find.byType(SyncStatusBanner), findsOneWidget);
     expect(find.textContaining('đồng bộ'), findsNothing);
     expect(find.textContaining('Lỗi:'), findsNothing);
+    await unmount(tester);
   });
 }

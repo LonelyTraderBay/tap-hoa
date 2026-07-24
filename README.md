@@ -94,13 +94,15 @@ flutter test
 
 Manual smoke test after API + POS are running:
 
-- [ ] **Login and select store** — sign in as `0900000001` / `123456`, pick CH1 or CH2
-- [ ] **Open shift** — enter opening cash; cannot sell without an open shift
-- [ ] **Pull products** — catalog sync shows STING-330 and stock qty for the selected store
-- [ ] **Sell offline then sync** — disable network, complete a cash sale, re-enable network, run sync (auto timer, app resume, or manual **Đồng bộ**); sale appears on server
-- [ ] **Second device sees new stock after pull** — after device A syncs a sale, device B pulls and stock qty decreases
-- [ ] **Day report shows revenue** — `/reports/day` and in-app day report match sales for the store (owner sees consolidated total)
-- [ ] **Debt sale increases customer balance after sync** — checkout with debt + customer selected; after push, customer balance increases on server and in debt list
+- [x] **Login and select store** — sign in as `0900000001` / `123456`, pick CH1 or CH2 (`auth.e2e`)
+- [x] **Open shift** — enter opening cash; cannot sell without an open shift (`shifts.e2e`)
+- [x] **Pull products** — catalog sync shows STING-330 and stock qty for the selected store (`sync-pull.e2e`)
+- [x] **Sell offline then sync** — disable network, complete a cash sale, re-enable network, run sync (auto timer, app resume, or manual **Đồng bộ**); sale appears on server (`sync-push.e2e`)
+- [x] **Second device sees new stock after pull** — after device A syncs a sale, device B pulls and stock qty decreases (`sync-multi-device.e2e`)
+- [x] **Day report shows revenue** — `/reports/day` and in-app day report match sales for the store (owner sees consolidated total) (`reports.e2e`)
+- [x] **Debt sale increases customer balance after sync** — checkout with debt + customer selected; after push, customer balance increases on server and in debt list (`customers-debt.e2e` / `debt-payments.e2e`)
+
+Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PASS 2026-07-24).
 
 ## API surface (Phase 1)
 

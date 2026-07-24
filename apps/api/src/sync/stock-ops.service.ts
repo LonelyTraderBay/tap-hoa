@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { weightedAverageCost } from '../inventory/weighted-average-cost';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   PushPurchaseReceiptDto,
@@ -615,6 +616,8 @@ export class StockOpsService {
               },
             },
           });
+          const oldQty = stock ? Number(stock.qty) : 0;
+          const oldAvg = stock?.avgCostVnd ?? 0;
           if (!stock) {
             await tx.productStoreStock.create({
               data: {
@@ -622,6 +625,7 @@ export class StockOpsService {
                 storeId: dto.storeId,
                 qty: 0,
                 minQty: 0,
+                avgCostVnd: 0,
               },
             });
           }
@@ -637,6 +641,21 @@ export class StockOpsService {
             clientCreatedAt,
           });
           if (line.unitCostVnd != null) {
+            const nextAvg = weightedAverageCost(
+              oldQty,
+              oldAvg,
+              Number(line.qty),
+              line.unitCostVnd,
+            );
+            await tx.productStoreStock.update({
+              where: {
+                productId_storeId: {
+                  productId: line.productId,
+                  storeId: dto.storeId,
+                },
+              },
+              data: { avgCostVnd: nextAvg },
+            });
             await tx.product.update({
               where: { id: line.productId },
               data: { costVnd: line.unitCostVnd },

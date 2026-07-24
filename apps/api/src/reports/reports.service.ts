@@ -184,6 +184,8 @@ export class ReportsService {
         productId: true,
         qty: true,
         lineTotal: true,
+        unitCostVnd: true,
+        sale: { select: { storeId: true } },
       },
     });
 
@@ -191,6 +193,8 @@ export class ReportsService {
       productId: string;
       qty: number;
       revenueVnd: number;
+      cogsVnd: number;
+      hasCogs: boolean;
     };
 
     const byProduct = new Map<string, Agg>();
@@ -203,11 +207,17 @@ export class ReportsService {
           productId: line.productId,
           qty: 0,
           revenueVnd: 0,
+          cogsVnd: 0,
+          hasCogs: false,
         };
         byProduct.set(line.productId, agg);
       }
       agg.qty += qtyNum;
       agg.revenueVnd += line.lineTotal;
+      if (line.unitCostVnd != null) {
+        agg.cogsVnd += qtyNum * line.unitCostVnd;
+        agg.hasCogs = true;
+      }
     }
 
     if (byProduct.size === 0) {
@@ -221,18 +231,43 @@ export class ReportsService {
     });
     const productById = new Map(products.map((product) => [product.id, product]));
 
+    const stocks = await this.prisma.productStoreStock.findMany({
+      where: {
+        productId: { in: productIds },
+        storeId: { in: storeIds },
+      },
+      select: { productId: true, avgCostVnd: true },
+    });
+    const avgByProduct = new Map<string, number>();
+    for (const stock of stocks) {
+      const prev = avgByProduct.get(stock.productId);
+      if (prev == null || stock.avgCostVnd > 0) {
+        avgByProduct.set(stock.productId, stock.avgCostVnd);
+      }
+    }
+
     const items: TopSkuItem[] = [...byProduct.values()]
       .map((agg) => {
         const product = productById.get(agg.productId);
+        let estimatedGrossVnd: number | null = null;
+        if (product) {
+          if (agg.hasCogs) {
+            estimatedGrossVnd = agg.revenueVnd - Math.round(agg.cogsVnd);
+          } else {
+            const unit =
+              (avgByProduct.get(agg.productId) ?? 0) > 0
+                ? avgByProduct.get(agg.productId)!
+                : product.costVnd;
+            estimatedGrossVnd = agg.revenueVnd - agg.qty * unit;
+          }
+        }
         return {
           productId: agg.productId,
           sku: product?.sku ?? '',
           name: product?.name ?? '',
           qty: agg.qty,
           revenueVnd: agg.revenueVnd,
-          estimatedGrossVnd: product
-            ? agg.revenueVnd - agg.qty * product.costVnd
-            : null,
+          estimatedGrossVnd,
         };
       })
       .sort((a, b) => {
@@ -268,7 +303,9 @@ export class ReportsService {
     const items = rows.map((row) => {
       const qty = Number(row.qty);
       const minQty = Number(row.minQty);
-      const estimatedValueVnd = Math.round(qty * row.product.costVnd);
+      const unitCost =
+        row.avgCostVnd > 0 ? row.avgCostVnd : row.product.costVnd;
+      const estimatedValueVnd = Math.round(qty * unitCost);
       return {
         productId: row.productId,
         sku: row.product.sku,
@@ -276,7 +313,7 @@ export class ReportsService {
         unit: row.product.unit,
         qty,
         minQty,
-        costVnd: row.product.costVnd,
+        costVnd: unitCost,
         estimatedValueVnd,
         belowMin: qty < minQty,
       };

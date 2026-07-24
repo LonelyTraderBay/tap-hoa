@@ -135,6 +135,44 @@ class CheckoutService {
         final pack = parsePackSize(product.packSize);
         final baseQty = toBaseQty(sellQty, pack);
 
+        var unitCostVnd = 0;
+        if (product.kind == 'combo') {
+          final components = await (_db.select(_db.productComboComponents)
+                ..where((t) => t.comboProductId.equals(product.id)))
+              .get();
+          if (components.isEmpty) {
+            throw InsufficientStockException(line.productId);
+          }
+          for (final c in components) {
+            final componentStock = await (_db.select(_db.productStocks)
+                  ..where(
+                    (t) =>
+                        t.productId.equals(c.componentProductId) &
+                        t.storeId.equals(storeId),
+                  ))
+                .getSingleOrNull();
+            final componentProduct = await (_db.select(_db.products)
+                  ..where((t) => t.id.equals(c.componentProductId)))
+                .getSingleOrNull();
+            final avg = (componentStock?.avgCostVnd ?? 0) > 0
+                ? componentStock!.avgCostVnd
+                : (componentProduct?.costVnd ?? 0);
+            unitCostVnd +=
+                (avg * (Decimal.parse(c.qtyBase).toDouble())).round();
+          }
+        } else {
+          final stock = await (_db.select(_db.productStocks)
+                ..where(
+                  (t) =>
+                      t.productId.equals(line.productId) &
+                      t.storeId.equals(storeId),
+                ))
+              .getSingleOrNull();
+          unitCostVnd = (stock?.avgCostVnd ?? 0) > 0
+              ? stock!.avgCostVnd
+              : product.costVnd;
+        }
+
         await _db.into(_db.saleLinesLocal).insert(
           SaleLinesLocalCompanion.insert(
             id: lineId,
@@ -143,6 +181,7 @@ class CheckoutService {
             qty: _formatQty(baseQty),
             unitPrice: line.unitPrice,
             lineTotal: line.lineTotal,
+            unitCostVnd: Value(unitCostVnd),
           ),
         );
 
@@ -157,9 +196,6 @@ class CheckoutService {
           final components = await (_db.select(_db.productComboComponents)
                 ..where((t) => t.comboProductId.equals(product.id)))
               .get();
-          if (components.isEmpty) {
-            throw InsufficientStockException(line.productId);
-          }
           for (final c in components) {
             final componentQty = baseQty * Decimal.parse(c.qtyBase);
             await _decrementStock(

@@ -43,7 +43,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -86,6 +86,10 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(products, products.kind);
         await migrator.addColumn(products, products.groupId);
         await migrator.addColumn(storesLocal, storesLocal.debtOverdueDays);
+      }
+      if (from < 7) {
+        await migrator.addColumn(productStocks, productStocks.avgCostVnd);
+        await migrator.addColumn(saleLinesLocal, saleLinesLocal.unitCostVnd);
       }
     },
   );
@@ -388,6 +392,7 @@ class AppDatabase extends _$AppDatabase {
             storeId: stock['storeId'] as String,
             qty: stock['qty'] as String,
             minQty: stock['minQty'] as String,
+            avgCostVnd: Value(stock['avgCostVnd'] as int? ?? 0),
             updatedAt: DateTime.parse(stock['updatedAt'] as String),
           ),
         );

@@ -75,10 +75,15 @@ class _LoginPageState extends State<LoginPage> {
         _phoneController.text.trim(),
         _passwordController.text,
       );
-      await PushService(
-        db: widget.database,
-        dio: widget.dayReportRepository.dio,
-      ).registerAfterLogin();
+      // Never block login on FCM / dio failures (tests + soft-fail prod).
+      try {
+        await PushService(
+          db: widget.database,
+          dio: widget.dayReportRepository.dio,
+        ).registerAfterLogin();
+      } catch (_) {
+        // ignore
+      }
       if (mounted) {
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
