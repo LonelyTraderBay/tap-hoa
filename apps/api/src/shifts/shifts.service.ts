@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role, Shift } from '@prisma/client';
 import { AuthUser } from '../auth/jwt.strategy';
+import {
+  ShiftCashInputs,
+  computeShiftCashSnapshot,
+} from '../cash/expected-cash';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type OpenShiftDto = {
@@ -49,6 +53,74 @@ export class ShiftsService {
     if (shift.closedAt != null) {
       throw new ConflictException('Shift already closed');
     }
+  }
+
+  private async loadShiftCashInputsWithClient(
+    client: Prisma.TransactionClient,
+    shiftId: string,
+  ): Promise<ShiftCashInputs> {
+    const shift = await client.shift.findUniqueOrThrow({
+      where: { id: shiftId },
+    });
+
+    const salesAgg = await client.sale.aggregate({
+      where: { shiftId },
+      _sum: { cashAmount: true, transferAmount: true },
+    });
+
+    const debtPayments = await client.debtLedgerEntry.findMany({
+      where: { shiftId, type: 'payment' },
+      select: { paymentMethod: true, amountVnd: true },
+    });
+
+    const vouchers = await client.cashVoucher.findMany({
+      where: { shiftId },
+      select: { direction: true, channel: true, amountVnd: true },
+    });
+
+    let debtPaymentCashTotal = 0;
+    let debtPaymentTransferTotal = 0;
+    for (const entry of debtPayments) {
+      if (entry.paymentMethod === 'cash') {
+        debtPaymentCashTotal += entry.amountVnd;
+      } else if (entry.paymentMethod === 'transfer') {
+        debtPaymentTransferTotal += entry.amountVnd;
+      }
+    }
+
+    let voucherCashInTotal = 0;
+    let voucherCashOutTotal = 0;
+    let voucherTransferInTotal = 0;
+    let voucherTransferOutTotal = 0;
+    for (const voucher of vouchers) {
+      if (voucher.direction === 'in' && voucher.channel === 'cash') {
+        voucherCashInTotal += voucher.amountVnd;
+      } else if (voucher.direction === 'out' && voucher.channel === 'cash') {
+        voucherCashOutTotal += voucher.amountVnd;
+      } else if (voucher.direction === 'in' && voucher.channel === 'transfer') {
+        voucherTransferInTotal += voucher.amountVnd;
+      } else if (voucher.direction === 'out' && voucher.channel === 'transfer') {
+        voucherTransferOutTotal += voucher.amountVnd;
+      }
+    }
+
+    return {
+      openingCash: shift.openingCash,
+      saleCashTotal: salesAgg._sum.cashAmount ?? 0,
+      saleTransferTotal: salesAgg._sum.transferAmount ?? 0,
+      debtPaymentCashTotal,
+      debtPaymentTransferTotal,
+      voucherCashInTotal,
+      voucherCashOutTotal,
+      voucherTransferInTotal,
+      voucherTransferOutTotal,
+    };
+  }
+
+  async loadShiftCashInputs(shiftId: string): Promise<ShiftCashInputs> {
+    return this.prisma.$transaction((tx) =>
+      this.loadShiftCashInputsWithClient(tx, shiftId),
+    );
   }
 
   async open(user: AuthUser, dto: OpenShiftDto) {
@@ -115,24 +187,39 @@ export class ShiftsService {
   }
 
   async close(user: AuthUser, shiftId: string, dto: CloseShiftDto) {
-    const shift = await this.prisma.shift.findUnique({ where: { id: shiftId } });
-    if (!shift) {
-      throw new NotFoundException('Shift not found');
-    }
-    if (shift.userId !== user.userId) {
-      throw new ForbiddenException('Cannot close another user shift');
-    }
-    if (shift.closedAt) {
-      throw new ConflictException('Shift already closed');
-    }
+    // Sequential ops in one transaction: re-read open shift, aggregate, close atomically.
+    return this.prisma.$transaction(async (tx) => {
+      const shift = await tx.shift.findUnique({ where: { id: shiftId } });
+      if (!shift) {
+        throw new NotFoundException('Shift not found');
+      }
+      if (shift.userId !== user.userId) {
+        throw new ForbiddenException('Cannot close another user shift');
+      }
+      if (shift.closedAt) {
+        throw new ConflictException('Shift already closed');
+      }
 
-    return this.prisma.shift.update({
-      where: { id: shiftId },
-      data: {
-        closedAt: dto.closedAt ? new Date(dto.closedAt) : new Date(),
-        closingCash: dto.closingCash,
-        note: dto.note,
-      },
+      const inputs = await this.loadShiftCashInputsWithClient(tx, shiftId);
+      const snapshot = computeShiftCashSnapshot(inputs, dto.closingCash);
+      const closedAt = dto.closedAt ? new Date(dto.closedAt) : new Date();
+
+      const updated = await tx.shift.updateMany({
+        where: { id: shiftId, closedAt: null },
+        data: {
+          closedAt,
+          closingCash: dto.closingCash,
+          note: dto.note,
+          expectedCashVnd: snapshot.expectedCashVnd,
+          varianceVnd: snapshot.varianceVnd,
+          transferInShiftVnd: snapshot.transferInShiftVnd,
+        },
+      });
+      if (updated.count === 0) {
+        throw new ConflictException('Shift already closed');
+      }
+
+      return tx.shift.findUniqueOrThrow({ where: { id: shiftId } });
     });
   }
 

@@ -31,9 +31,9 @@
 
 ## Cash management
 
-- [ ] Cash in/out vouchers with categories
-- [ ] Shift close reconciliation vs expected cash
-- [ ] Basic thu chi ledger tied to shift/store
+- [x] Cash in/out vouchers with categories
+- [x] Shift close reconciliation vs expected cash
+- [x] Basic thu chi ledger tied to shift/store
 
 ## POS hardware & UX
 
@@ -59,7 +59,7 @@
 ## Suggested implementation order
 
 1. ~~**Debt payments + history**~~ — done (`feat/debt-payments-credit-limit`)
-2. **Cash in/out + shift reconciliation** — daily store ops
+2. ~~**Cash in/out + shift reconciliation**~~ — done (`feat/cash-vouchers-shift-reconciliation`)
 3. **Inter-store transfer + stocktake** — multi-store inventory
 4. **Product CRUD + barcode labels** — catalog self-service
 5. **Thermal print + top SKU report** — counter polish

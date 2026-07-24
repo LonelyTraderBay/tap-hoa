@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/local/database.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import '../auth/auth_repository.dart';
+import '../cash/cash_voucher_service.dart';
 import '../reports/day_report_repository.dart';
 import '../pos/pos_page.dart';
 import '../customers/customer_repository.dart';
@@ -21,6 +23,8 @@ class OpenShiftPage extends StatefulWidget {
     required this.productRepository,
     required this.customerRepository,
     required this.debtPaymentService,
+    required this.cashVoucherService,
+    required this.database,
     required this.pullCatalog,
     required this.checkoutService,
     required this.outboxWorker,
@@ -32,6 +36,8 @@ class OpenShiftPage extends StatefulWidget {
   final ProductRepository productRepository;
   final CustomerRepository customerRepository;
   final DebtPaymentService debtPaymentService;
+  final CashVoucherService cashVoucherService;
+  final AppDatabase database;
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
   final OutboxWorker outboxWorker;
@@ -112,6 +118,10 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
             pullCatalog: widget.pullCatalog,
             outboxWorker: widget.outboxWorker,
             dayReportRepository: widget.dayReportRepository,
+            shiftRepository: widget.repository,
+            cashVoucherService: widget.cashVoucherService,
+            database: widget.database,
+            user: widget.user,
             storeId: store.id,
             role: widget.user.role,
           ),

@@ -22,13 +22,15 @@ part 'database.g.dart';
     MetaLocal,
     CustomersLocal,
     DebtLedgerLocal,
+    CashCategoriesLocal,
+    CashVouchersLocal,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -42,6 +44,13 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         await migrator.addColumn(customersLocal, customersLocal.creditLimitVnd);
         await migrator.createTable(debtLedgerLocal);
+      }
+      if (from < 4) {
+        await migrator.createTable(cashCategoriesLocal);
+        await migrator.createTable(cashVouchersLocal);
+        await migrator.addColumn(shiftsLocal, shiftsLocal.expectedCashVnd);
+        await migrator.addColumn(shiftsLocal, shiftsLocal.varianceVnd);
+        await migrator.addColumn(shiftsLocal, shiftsLocal.transferInShiftVnd);
       }
     },
   );
@@ -75,6 +84,36 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> setLastPullAt(String storeId, DateTime at) {
     return setMetaValue(_lastPullAtKey(storeId), at.toUtc().toIso8601String());
+  }
+
+  Future<void> upsertCashCategory(Map<String, dynamic> category) {
+    return into(cashCategoriesLocal).insertOnConflictUpdate(
+      CashCategoriesLocalCompanion.insert(
+        id: category['id'] as String,
+        code: category['code'] as String,
+        name: category['name'] as String,
+        direction: category['direction'] as String,
+        sortOrder: Value(category['sortOrder'] as int? ?? 0),
+      ),
+    );
+  }
+
+  Future<void> upsertCashVoucher(Map<String, dynamic> voucher) {
+    return into(cashVouchersLocal).insertOnConflictUpdate(
+      CashVouchersLocalCompanion.insert(
+        id: voucher['id'] as String,
+        storeId: voucher['storeId'] as String,
+        shiftId: voucher['shiftId'] as String,
+        categoryId: voucher['categoryId'] as String,
+        direction: voucher['direction'] as String,
+        channel: voucher['channel'] as String,
+        amountVnd: voucher['amountVnd'] as int,
+        note: Value(voucher['note'] as String?),
+        recordedById: voucher['recordedById'] as String,
+        clientCreatedAt: DateTime.parse(voucher['clientCreatedAt'] as String),
+        updatedAt: DateTime.parse(voucher['updatedAt'] as String),
+      ),
+    );
   }
 
   Future<void> upsertCustomersAndDebtLedger({

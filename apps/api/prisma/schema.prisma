@@ -31,6 +31,16 @@ enum DebtPaymentChannel {
   transfer
 }
 
+enum CashDirection {
+  in
+  out
+}
+
+enum CashChannel {
+  cash
+  transfer
+}
+
 model Store {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -44,6 +54,7 @@ model Store {
   shifts    Shift[]
   customers Customer[]
   debtLedger DebtLedgerEntry[]
+  cashVouchers CashVoucher[]
 }
 
 model User {
@@ -59,6 +70,7 @@ model User {
   shifts       Shift[]
   sales        Sale[]   @relation("SoldBy")
   debtLedger   DebtLedgerEntry[]
+  cashVouchers CashVoucher[]
 }
 
 model UserStore {
@@ -96,17 +108,21 @@ model ProductStoreStock {
 }
 
 model Shift {
-  id           String    @id @default(uuid())
-  storeId      String
-  userId       String
-  openedAt     DateTime
-  closedAt     DateTime?
-  openingCash  Int
-  closingCash  Int?
-  note         String?
-  store        Store     @relation(fields: [storeId], references: [id])
-  user         User      @relation(fields: [userId], references: [id])
-  sales        Sale[]
+  id                  String    @id @default(uuid())
+  storeId             String
+  userId              String
+  openedAt            DateTime
+  closedAt            DateTime?
+  openingCash         Int
+  closingCash         Int?
+  expectedCashVnd     Int?
+  varianceVnd         Int?
+  transferInShiftVnd  Int?
+  note                String?
+  store               Store     @relation(fields: [storeId], references: [id])
+  user                User      @relation(fields: [userId], references: [id])
+  sales               Sale[]
+  cashVouchers        CashVoucher[]
 }
 
 model Customer {
@@ -185,4 +201,34 @@ model SyncCursor {
   deviceId   String   @id
   userId     String
   lastPullAt DateTime
+}
+
+model CashCategory {
+  id        String        @id @default(uuid())
+  code      String        @unique
+  name      String
+  direction CashDirection
+  sortOrder Int           @default(0)
+  vouchers  CashVoucher[]
+}
+
+model CashVoucher {
+  id              String        @id @default(uuid())
+  storeId         String
+  shiftId         String
+  categoryId      String
+  direction       CashDirection
+  channel         CashChannel
+  amountVnd       Int
+  note            String?
+  recordedById    String
+  clientCreatedAt DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  store           Store         @relation(fields: [storeId], references: [id])
+  shift           Shift         @relation(fields: [shiftId], references: [id])
+  category        CashCategory  @relation(fields: [categoryId], references: [id])
+  recordedBy      User          @relation(fields: [recordedById], references: [id])
+  @@index([storeId, clientCreatedAt])
+  @@index([shiftId, clientCreatedAt])
 }

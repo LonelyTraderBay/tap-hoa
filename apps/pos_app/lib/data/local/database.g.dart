@@ -2565,6 +2565,38 @@ class $ShiftsLocalTable extends ShiftsLocal
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _expectedCashVndMeta = const VerificationMeta(
+    'expectedCashVnd',
+  );
+  @override
+  late final GeneratedColumn<int> expectedCashVnd = GeneratedColumn<int>(
+    'expected_cash_vnd',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _varianceVndMeta = const VerificationMeta(
+    'varianceVnd',
+  );
+  @override
+  late final GeneratedColumn<int> varianceVnd = GeneratedColumn<int>(
+    'variance_vnd',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _transferInShiftVndMeta =
+      const VerificationMeta('transferInShiftVnd');
+  @override
+  late final GeneratedColumn<int> transferInShiftVnd = GeneratedColumn<int>(
+    'transfer_in_shift_vnd',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2575,6 +2607,9 @@ class $ShiftsLocalTable extends ShiftsLocal
     openingCash,
     closingCash,
     note,
+    expectedCashVnd,
+    varianceVnd,
+    transferInShiftVnd,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2649,6 +2684,33 @@ class $ShiftsLocalTable extends ShiftsLocal
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('expected_cash_vnd')) {
+      context.handle(
+        _expectedCashVndMeta,
+        expectedCashVnd.isAcceptableOrUnknown(
+          data['expected_cash_vnd']!,
+          _expectedCashVndMeta,
+        ),
+      );
+    }
+    if (data.containsKey('variance_vnd')) {
+      context.handle(
+        _varianceVndMeta,
+        varianceVnd.isAcceptableOrUnknown(
+          data['variance_vnd']!,
+          _varianceVndMeta,
+        ),
+      );
+    }
+    if (data.containsKey('transfer_in_shift_vnd')) {
+      context.handle(
+        _transferInShiftVndMeta,
+        transferInShiftVnd.isAcceptableOrUnknown(
+          data['transfer_in_shift_vnd']!,
+          _transferInShiftVndMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2690,6 +2752,18 @@ class $ShiftsLocalTable extends ShiftsLocal
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      expectedCashVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_cash_vnd'],
+      ),
+      varianceVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variance_vnd'],
+      ),
+      transferInShiftVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}transfer_in_shift_vnd'],
+      ),
     );
   }
 
@@ -2708,6 +2782,9 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
   final int openingCash;
   final int? closingCash;
   final String? note;
+  final int? expectedCashVnd;
+  final int? varianceVnd;
+  final int? transferInShiftVnd;
   const ShiftsLocalData({
     required this.id,
     required this.storeId,
@@ -2717,6 +2794,9 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
     required this.openingCash,
     this.closingCash,
     this.note,
+    this.expectedCashVnd,
+    this.varianceVnd,
+    this.transferInShiftVnd,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2735,6 +2815,15 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    if (!nullToAbsent || expectedCashVnd != null) {
+      map['expected_cash_vnd'] = Variable<int>(expectedCashVnd);
+    }
+    if (!nullToAbsent || varianceVnd != null) {
+      map['variance_vnd'] = Variable<int>(varianceVnd);
+    }
+    if (!nullToAbsent || transferInShiftVnd != null) {
+      map['transfer_in_shift_vnd'] = Variable<int>(transferInShiftVnd);
+    }
     return map;
   }
 
@@ -2752,6 +2841,15 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
           ? const Value.absent()
           : Value(closingCash),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      expectedCashVnd: expectedCashVnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedCashVnd),
+      varianceVnd: varianceVnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(varianceVnd),
+      transferInShiftVnd: transferInShiftVnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transferInShiftVnd),
     );
   }
 
@@ -2769,6 +2867,9 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
       openingCash: serializer.fromJson<int>(json['openingCash']),
       closingCash: serializer.fromJson<int?>(json['closingCash']),
       note: serializer.fromJson<String?>(json['note']),
+      expectedCashVnd: serializer.fromJson<int?>(json['expectedCashVnd']),
+      varianceVnd: serializer.fromJson<int?>(json['varianceVnd']),
+      transferInShiftVnd: serializer.fromJson<int?>(json['transferInShiftVnd']),
     );
   }
   @override
@@ -2783,6 +2884,9 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
       'openingCash': serializer.toJson<int>(openingCash),
       'closingCash': serializer.toJson<int?>(closingCash),
       'note': serializer.toJson<String?>(note),
+      'expectedCashVnd': serializer.toJson<int?>(expectedCashVnd),
+      'varianceVnd': serializer.toJson<int?>(varianceVnd),
+      'transferInShiftVnd': serializer.toJson<int?>(transferInShiftVnd),
     };
   }
 
@@ -2795,6 +2899,9 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
     int? openingCash,
     Value<int?> closingCash = const Value.absent(),
     Value<String?> note = const Value.absent(),
+    Value<int?> expectedCashVnd = const Value.absent(),
+    Value<int?> varianceVnd = const Value.absent(),
+    Value<int?> transferInShiftVnd = const Value.absent(),
   }) => ShiftsLocalData(
     id: id ?? this.id,
     storeId: storeId ?? this.storeId,
@@ -2804,6 +2911,13 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
     openingCash: openingCash ?? this.openingCash,
     closingCash: closingCash.present ? closingCash.value : this.closingCash,
     note: note.present ? note.value : this.note,
+    expectedCashVnd: expectedCashVnd.present
+        ? expectedCashVnd.value
+        : this.expectedCashVnd,
+    varianceVnd: varianceVnd.present ? varianceVnd.value : this.varianceVnd,
+    transferInShiftVnd: transferInShiftVnd.present
+        ? transferInShiftVnd.value
+        : this.transferInShiftVnd,
   );
   ShiftsLocalData copyWithCompanion(ShiftsLocalCompanion data) {
     return ShiftsLocalData(
@@ -2819,6 +2933,15 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
           ? data.closingCash.value
           : this.closingCash,
       note: data.note.present ? data.note.value : this.note,
+      expectedCashVnd: data.expectedCashVnd.present
+          ? data.expectedCashVnd.value
+          : this.expectedCashVnd,
+      varianceVnd: data.varianceVnd.present
+          ? data.varianceVnd.value
+          : this.varianceVnd,
+      transferInShiftVnd: data.transferInShiftVnd.present
+          ? data.transferInShiftVnd.value
+          : this.transferInShiftVnd,
     );
   }
 
@@ -2832,7 +2955,10 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
           ..write('closedAt: $closedAt, ')
           ..write('openingCash: $openingCash, ')
           ..write('closingCash: $closingCash, ')
-          ..write('note: $note')
+          ..write('note: $note, ')
+          ..write('expectedCashVnd: $expectedCashVnd, ')
+          ..write('varianceVnd: $varianceVnd, ')
+          ..write('transferInShiftVnd: $transferInShiftVnd')
           ..write(')'))
         .toString();
   }
@@ -2847,6 +2973,9 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
     openingCash,
     closingCash,
     note,
+    expectedCashVnd,
+    varianceVnd,
+    transferInShiftVnd,
   );
   @override
   bool operator ==(Object other) =>
@@ -2859,7 +2988,10 @@ class ShiftsLocalData extends DataClass implements Insertable<ShiftsLocalData> {
           other.closedAt == this.closedAt &&
           other.openingCash == this.openingCash &&
           other.closingCash == this.closingCash &&
-          other.note == this.note);
+          other.note == this.note &&
+          other.expectedCashVnd == this.expectedCashVnd &&
+          other.varianceVnd == this.varianceVnd &&
+          other.transferInShiftVnd == this.transferInShiftVnd);
 }
 
 class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
@@ -2871,6 +3003,9 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
   final Value<int> openingCash;
   final Value<int?> closingCash;
   final Value<String?> note;
+  final Value<int?> expectedCashVnd;
+  final Value<int?> varianceVnd;
+  final Value<int?> transferInShiftVnd;
   final Value<int> rowid;
   const ShiftsLocalCompanion({
     this.id = const Value.absent(),
@@ -2881,6 +3016,9 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
     this.openingCash = const Value.absent(),
     this.closingCash = const Value.absent(),
     this.note = const Value.absent(),
+    this.expectedCashVnd = const Value.absent(),
+    this.varianceVnd = const Value.absent(),
+    this.transferInShiftVnd = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ShiftsLocalCompanion.insert({
@@ -2892,6 +3030,9 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
     required int openingCash,
     this.closingCash = const Value.absent(),
     this.note = const Value.absent(),
+    this.expectedCashVnd = const Value.absent(),
+    this.varianceVnd = const Value.absent(),
+    this.transferInShiftVnd = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        storeId = Value(storeId),
@@ -2907,6 +3048,9 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
     Expression<int>? openingCash,
     Expression<int>? closingCash,
     Expression<String>? note,
+    Expression<int>? expectedCashVnd,
+    Expression<int>? varianceVnd,
+    Expression<int>? transferInShiftVnd,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2918,6 +3062,10 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
       if (openingCash != null) 'opening_cash': openingCash,
       if (closingCash != null) 'closing_cash': closingCash,
       if (note != null) 'note': note,
+      if (expectedCashVnd != null) 'expected_cash_vnd': expectedCashVnd,
+      if (varianceVnd != null) 'variance_vnd': varianceVnd,
+      if (transferInShiftVnd != null)
+        'transfer_in_shift_vnd': transferInShiftVnd,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2931,6 +3079,9 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
     Value<int>? openingCash,
     Value<int?>? closingCash,
     Value<String?>? note,
+    Value<int?>? expectedCashVnd,
+    Value<int?>? varianceVnd,
+    Value<int?>? transferInShiftVnd,
     Value<int>? rowid,
   }) {
     return ShiftsLocalCompanion(
@@ -2942,6 +3093,9 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
       openingCash: openingCash ?? this.openingCash,
       closingCash: closingCash ?? this.closingCash,
       note: note ?? this.note,
+      expectedCashVnd: expectedCashVnd ?? this.expectedCashVnd,
+      varianceVnd: varianceVnd ?? this.varianceVnd,
+      transferInShiftVnd: transferInShiftVnd ?? this.transferInShiftVnd,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2973,6 +3127,15 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (expectedCashVnd.present) {
+      map['expected_cash_vnd'] = Variable<int>(expectedCashVnd.value);
+    }
+    if (varianceVnd.present) {
+      map['variance_vnd'] = Variable<int>(varianceVnd.value);
+    }
+    if (transferInShiftVnd.present) {
+      map['transfer_in_shift_vnd'] = Variable<int>(transferInShiftVnd.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2990,6 +3153,9 @@ class ShiftsLocalCompanion extends UpdateCompanion<ShiftsLocalData> {
           ..write('openingCash: $openingCash, ')
           ..write('closingCash: $closingCash, ')
           ..write('note: $note, ')
+          ..write('expectedCashVnd: $expectedCashVnd, ')
+          ..write('varianceVnd: $varianceVnd, ')
+          ..write('transferInShiftVnd: $transferInShiftVnd, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4798,6 +4964,1030 @@ class DebtLedgerLocalCompanion extends UpdateCompanion<DebtLedgerLocalData> {
   }
 }
 
+class $CashCategoriesLocalTable extends CashCategoriesLocal
+    with TableInfo<$CashCategoriesLocalTable, CashCategoriesLocalData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CashCategoriesLocalTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _codeMeta = const VerificationMeta('code');
+  @override
+  late final GeneratedColumn<String> code = GeneratedColumn<String>(
+    'code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _directionMeta = const VerificationMeta(
+    'direction',
+  );
+  @override
+  late final GeneratedColumn<String> direction = GeneratedColumn<String>(
+    'direction',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, code, name, direction, sortOrder];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cash_categories_local';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CashCategoriesLocalData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('code')) {
+      context.handle(
+        _codeMeta,
+        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_codeMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('direction')) {
+      context.handle(
+        _directionMeta,
+        direction.isAcceptableOrUnknown(data['direction']!, _directionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_directionMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CashCategoriesLocalData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CashCategoriesLocalData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      direction: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}direction'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $CashCategoriesLocalTable createAlias(String alias) {
+    return $CashCategoriesLocalTable(attachedDatabase, alias);
+  }
+}
+
+class CashCategoriesLocalData extends DataClass
+    implements Insertable<CashCategoriesLocalData> {
+  final String id;
+  final String code;
+  final String name;
+  final String direction;
+  final int sortOrder;
+  const CashCategoriesLocalData({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.direction,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['code'] = Variable<String>(code);
+    map['name'] = Variable<String>(name);
+    map['direction'] = Variable<String>(direction);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  CashCategoriesLocalCompanion toCompanion(bool nullToAbsent) {
+    return CashCategoriesLocalCompanion(
+      id: Value(id),
+      code: Value(code),
+      name: Value(name),
+      direction: Value(direction),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory CashCategoriesLocalData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CashCategoriesLocalData(
+      id: serializer.fromJson<String>(json['id']),
+      code: serializer.fromJson<String>(json['code']),
+      name: serializer.fromJson<String>(json['name']),
+      direction: serializer.fromJson<String>(json['direction']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'code': serializer.toJson<String>(code),
+      'name': serializer.toJson<String>(name),
+      'direction': serializer.toJson<String>(direction),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  CashCategoriesLocalData copyWith({
+    String? id,
+    String? code,
+    String? name,
+    String? direction,
+    int? sortOrder,
+  }) => CashCategoriesLocalData(
+    id: id ?? this.id,
+    code: code ?? this.code,
+    name: name ?? this.name,
+    direction: direction ?? this.direction,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
+  CashCategoriesLocalData copyWithCompanion(CashCategoriesLocalCompanion data) {
+    return CashCategoriesLocalData(
+      id: data.id.present ? data.id.value : this.id,
+      code: data.code.present ? data.code.value : this.code,
+      name: data.name.present ? data.name.value : this.name,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashCategoriesLocalData(')
+          ..write('id: $id, ')
+          ..write('code: $code, ')
+          ..write('name: $name, ')
+          ..write('direction: $direction, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, code, name, direction, sortOrder);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CashCategoriesLocalData &&
+          other.id == this.id &&
+          other.code == this.code &&
+          other.name == this.name &&
+          other.direction == this.direction &&
+          other.sortOrder == this.sortOrder);
+}
+
+class CashCategoriesLocalCompanion
+    extends UpdateCompanion<CashCategoriesLocalData> {
+  final Value<String> id;
+  final Value<String> code;
+  final Value<String> name;
+  final Value<String> direction;
+  final Value<int> sortOrder;
+  final Value<int> rowid;
+  const CashCategoriesLocalCompanion({
+    this.id = const Value.absent(),
+    this.code = const Value.absent(),
+    this.name = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CashCategoriesLocalCompanion.insert({
+    required String id,
+    required String code,
+    required String name,
+    required String direction,
+    this.sortOrder = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       code = Value(code),
+       name = Value(name),
+       direction = Value(direction);
+  static Insertable<CashCategoriesLocalData> custom({
+    Expression<String>? id,
+    Expression<String>? code,
+    Expression<String>? name,
+    Expression<String>? direction,
+    Expression<int>? sortOrder,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (code != null) 'code': code,
+      if (name != null) 'name': name,
+      if (direction != null) 'direction': direction,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CashCategoriesLocalCompanion copyWith({
+    Value<String>? id,
+    Value<String>? code,
+    Value<String>? name,
+    Value<String>? direction,
+    Value<int>? sortOrder,
+    Value<int>? rowid,
+  }) {
+    return CashCategoriesLocalCompanion(
+      id: id ?? this.id,
+      code: code ?? this.code,
+      name: name ?? this.name,
+      direction: direction ?? this.direction,
+      sortOrder: sortOrder ?? this.sortOrder,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (code.present) {
+      map['code'] = Variable<String>(code.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<String>(direction.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashCategoriesLocalCompanion(')
+          ..write('id: $id, ')
+          ..write('code: $code, ')
+          ..write('name: $name, ')
+          ..write('direction: $direction, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CashVouchersLocalTable extends CashVouchersLocal
+    with TableInfo<$CashVouchersLocalTable, CashVouchersLocalData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CashVouchersLocalTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _shiftIdMeta = const VerificationMeta(
+    'shiftId',
+  );
+  @override
+  late final GeneratedColumn<String> shiftId = GeneratedColumn<String>(
+    'shift_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _directionMeta = const VerificationMeta(
+    'direction',
+  );
+  @override
+  late final GeneratedColumn<String> direction = GeneratedColumn<String>(
+    'direction',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _channelMeta = const VerificationMeta(
+    'channel',
+  );
+  @override
+  late final GeneratedColumn<String> channel = GeneratedColumn<String>(
+    'channel',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountVndMeta = const VerificationMeta(
+    'amountVnd',
+  );
+  @override
+  late final GeneratedColumn<int> amountVnd = GeneratedColumn<int>(
+    'amount_vnd',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _recordedByIdMeta = const VerificationMeta(
+    'recordedById',
+  );
+  @override
+  late final GeneratedColumn<String> recordedById = GeneratedColumn<String>(
+    'recorded_by_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _clientCreatedAtMeta = const VerificationMeta(
+    'clientCreatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> clientCreatedAt =
+      GeneratedColumn<DateTime>(
+        'client_created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    storeId,
+    shiftId,
+    categoryId,
+    direction,
+    channel,
+    amountVnd,
+    note,
+    recordedById,
+    clientCreatedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cash_vouchers_local';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CashVouchersLocalData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('shift_id')) {
+      context.handle(
+        _shiftIdMeta,
+        shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_shiftIdMeta);
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryIdMeta);
+    }
+    if (data.containsKey('direction')) {
+      context.handle(
+        _directionMeta,
+        direction.isAcceptableOrUnknown(data['direction']!, _directionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_directionMeta);
+    }
+    if (data.containsKey('channel')) {
+      context.handle(
+        _channelMeta,
+        channel.isAcceptableOrUnknown(data['channel']!, _channelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_channelMeta);
+    }
+    if (data.containsKey('amount_vnd')) {
+      context.handle(
+        _amountVndMeta,
+        amountVnd.isAcceptableOrUnknown(data['amount_vnd']!, _amountVndMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountVndMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('recorded_by_id')) {
+      context.handle(
+        _recordedByIdMeta,
+        recordedById.isAcceptableOrUnknown(
+          data['recorded_by_id']!,
+          _recordedByIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recordedByIdMeta);
+    }
+    if (data.containsKey('client_created_at')) {
+      context.handle(
+        _clientCreatedAtMeta,
+        clientCreatedAt.isAcceptableOrUnknown(
+          data['client_created_at']!,
+          _clientCreatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_clientCreatedAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CashVouchersLocalData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CashVouchersLocalData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      shiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shift_id'],
+      )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      )!,
+      direction: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}direction'],
+      )!,
+      channel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}channel'],
+      )!,
+      amountVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_vnd'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      recordedById: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recorded_by_id'],
+      )!,
+      clientCreatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}client_created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CashVouchersLocalTable createAlias(String alias) {
+    return $CashVouchersLocalTable(attachedDatabase, alias);
+  }
+}
+
+class CashVouchersLocalData extends DataClass
+    implements Insertable<CashVouchersLocalData> {
+  final String id;
+  final String storeId;
+  final String shiftId;
+  final String categoryId;
+  final String direction;
+  final String channel;
+  final int amountVnd;
+  final String? note;
+  final String recordedById;
+  final DateTime clientCreatedAt;
+  final DateTime updatedAt;
+  const CashVouchersLocalData({
+    required this.id,
+    required this.storeId,
+    required this.shiftId,
+    required this.categoryId,
+    required this.direction,
+    required this.channel,
+    required this.amountVnd,
+    this.note,
+    required this.recordedById,
+    required this.clientCreatedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['store_id'] = Variable<String>(storeId);
+    map['shift_id'] = Variable<String>(shiftId);
+    map['category_id'] = Variable<String>(categoryId);
+    map['direction'] = Variable<String>(direction);
+    map['channel'] = Variable<String>(channel);
+    map['amount_vnd'] = Variable<int>(amountVnd);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['recorded_by_id'] = Variable<String>(recordedById);
+    map['client_created_at'] = Variable<DateTime>(clientCreatedAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CashVouchersLocalCompanion toCompanion(bool nullToAbsent) {
+    return CashVouchersLocalCompanion(
+      id: Value(id),
+      storeId: Value(storeId),
+      shiftId: Value(shiftId),
+      categoryId: Value(categoryId),
+      direction: Value(direction),
+      channel: Value(channel),
+      amountVnd: Value(amountVnd),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      recordedById: Value(recordedById),
+      clientCreatedAt: Value(clientCreatedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CashVouchersLocalData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CashVouchersLocalData(
+      id: serializer.fromJson<String>(json['id']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      shiftId: serializer.fromJson<String>(json['shiftId']),
+      categoryId: serializer.fromJson<String>(json['categoryId']),
+      direction: serializer.fromJson<String>(json['direction']),
+      channel: serializer.fromJson<String>(json['channel']),
+      amountVnd: serializer.fromJson<int>(json['amountVnd']),
+      note: serializer.fromJson<String?>(json['note']),
+      recordedById: serializer.fromJson<String>(json['recordedById']),
+      clientCreatedAt: serializer.fromJson<DateTime>(json['clientCreatedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'storeId': serializer.toJson<String>(storeId),
+      'shiftId': serializer.toJson<String>(shiftId),
+      'categoryId': serializer.toJson<String>(categoryId),
+      'direction': serializer.toJson<String>(direction),
+      'channel': serializer.toJson<String>(channel),
+      'amountVnd': serializer.toJson<int>(amountVnd),
+      'note': serializer.toJson<String?>(note),
+      'recordedById': serializer.toJson<String>(recordedById),
+      'clientCreatedAt': serializer.toJson<DateTime>(clientCreatedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CashVouchersLocalData copyWith({
+    String? id,
+    String? storeId,
+    String? shiftId,
+    String? categoryId,
+    String? direction,
+    String? channel,
+    int? amountVnd,
+    Value<String?> note = const Value.absent(),
+    String? recordedById,
+    DateTime? clientCreatedAt,
+    DateTime? updatedAt,
+  }) => CashVouchersLocalData(
+    id: id ?? this.id,
+    storeId: storeId ?? this.storeId,
+    shiftId: shiftId ?? this.shiftId,
+    categoryId: categoryId ?? this.categoryId,
+    direction: direction ?? this.direction,
+    channel: channel ?? this.channel,
+    amountVnd: amountVnd ?? this.amountVnd,
+    note: note.present ? note.value : this.note,
+    recordedById: recordedById ?? this.recordedById,
+    clientCreatedAt: clientCreatedAt ?? this.clientCreatedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CashVouchersLocalData copyWithCompanion(CashVouchersLocalCompanion data) {
+    return CashVouchersLocalData(
+      id: data.id.present ? data.id.value : this.id,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      channel: data.channel.present ? data.channel.value : this.channel,
+      amountVnd: data.amountVnd.present ? data.amountVnd.value : this.amountVnd,
+      note: data.note.present ? data.note.value : this.note,
+      recordedById: data.recordedById.present
+          ? data.recordedById.value
+          : this.recordedById,
+      clientCreatedAt: data.clientCreatedAt.present
+          ? data.clientCreatedAt.value
+          : this.clientCreatedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashVouchersLocalData(')
+          ..write('id: $id, ')
+          ..write('storeId: $storeId, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('direction: $direction, ')
+          ..write('channel: $channel, ')
+          ..write('amountVnd: $amountVnd, ')
+          ..write('note: $note, ')
+          ..write('recordedById: $recordedById, ')
+          ..write('clientCreatedAt: $clientCreatedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    storeId,
+    shiftId,
+    categoryId,
+    direction,
+    channel,
+    amountVnd,
+    note,
+    recordedById,
+    clientCreatedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CashVouchersLocalData &&
+          other.id == this.id &&
+          other.storeId == this.storeId &&
+          other.shiftId == this.shiftId &&
+          other.categoryId == this.categoryId &&
+          other.direction == this.direction &&
+          other.channel == this.channel &&
+          other.amountVnd == this.amountVnd &&
+          other.note == this.note &&
+          other.recordedById == this.recordedById &&
+          other.clientCreatedAt == this.clientCreatedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CashVouchersLocalCompanion
+    extends UpdateCompanion<CashVouchersLocalData> {
+  final Value<String> id;
+  final Value<String> storeId;
+  final Value<String> shiftId;
+  final Value<String> categoryId;
+  final Value<String> direction;
+  final Value<String> channel;
+  final Value<int> amountVnd;
+  final Value<String?> note;
+  final Value<String> recordedById;
+  final Value<DateTime> clientCreatedAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CashVouchersLocalCompanion({
+    this.id = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.channel = const Value.absent(),
+    this.amountVnd = const Value.absent(),
+    this.note = const Value.absent(),
+    this.recordedById = const Value.absent(),
+    this.clientCreatedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CashVouchersLocalCompanion.insert({
+    required String id,
+    required String storeId,
+    required String shiftId,
+    required String categoryId,
+    required String direction,
+    required String channel,
+    required int amountVnd,
+    this.note = const Value.absent(),
+    required String recordedById,
+    required DateTime clientCreatedAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       storeId = Value(storeId),
+       shiftId = Value(shiftId),
+       categoryId = Value(categoryId),
+       direction = Value(direction),
+       channel = Value(channel),
+       amountVnd = Value(amountVnd),
+       recordedById = Value(recordedById),
+       clientCreatedAt = Value(clientCreatedAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<CashVouchersLocalData> custom({
+    Expression<String>? id,
+    Expression<String>? storeId,
+    Expression<String>? shiftId,
+    Expression<String>? categoryId,
+    Expression<String>? direction,
+    Expression<String>? channel,
+    Expression<int>? amountVnd,
+    Expression<String>? note,
+    Expression<String>? recordedById,
+    Expression<DateTime>? clientCreatedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (storeId != null) 'store_id': storeId,
+      if (shiftId != null) 'shift_id': shiftId,
+      if (categoryId != null) 'category_id': categoryId,
+      if (direction != null) 'direction': direction,
+      if (channel != null) 'channel': channel,
+      if (amountVnd != null) 'amount_vnd': amountVnd,
+      if (note != null) 'note': note,
+      if (recordedById != null) 'recorded_by_id': recordedById,
+      if (clientCreatedAt != null) 'client_created_at': clientCreatedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CashVouchersLocalCompanion copyWith({
+    Value<String>? id,
+    Value<String>? storeId,
+    Value<String>? shiftId,
+    Value<String>? categoryId,
+    Value<String>? direction,
+    Value<String>? channel,
+    Value<int>? amountVnd,
+    Value<String?>? note,
+    Value<String>? recordedById,
+    Value<DateTime>? clientCreatedAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CashVouchersLocalCompanion(
+      id: id ?? this.id,
+      storeId: storeId ?? this.storeId,
+      shiftId: shiftId ?? this.shiftId,
+      categoryId: categoryId ?? this.categoryId,
+      direction: direction ?? this.direction,
+      channel: channel ?? this.channel,
+      amountVnd: amountVnd ?? this.amountVnd,
+      note: note ?? this.note,
+      recordedById: recordedById ?? this.recordedById,
+      clientCreatedAt: clientCreatedAt ?? this.clientCreatedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (shiftId.present) {
+      map['shift_id'] = Variable<String>(shiftId.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<String>(direction.value);
+    }
+    if (channel.present) {
+      map['channel'] = Variable<String>(channel.value);
+    }
+    if (amountVnd.present) {
+      map['amount_vnd'] = Variable<int>(amountVnd.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (recordedById.present) {
+      map['recorded_by_id'] = Variable<String>(recordedById.value);
+    }
+    if (clientCreatedAt.present) {
+      map['client_created_at'] = Variable<DateTime>(clientCreatedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashVouchersLocalCompanion(')
+          ..write('id: $id, ')
+          ..write('storeId: $storeId, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('direction: $direction, ')
+          ..write('channel: $channel, ')
+          ..write('amountVnd: $amountVnd, ')
+          ..write('note: $note, ')
+          ..write('recordedById: $recordedById, ')
+          ..write('clientCreatedAt: $clientCreatedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4813,6 +6003,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DebtLedgerLocalTable debtLedgerLocal = $DebtLedgerLocalTable(
     this,
   );
+  late final $CashCategoriesLocalTable cashCategoriesLocal =
+      $CashCategoriesLocalTable(this);
+  late final $CashVouchersLocalTable cashVouchersLocal =
+      $CashVouchersLocalTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4828,6 +6022,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     metaLocal,
     customersLocal,
     debtLedgerLocal,
+    cashCategoriesLocal,
+    cashVouchersLocal,
   ];
 }
 
@@ -6108,6 +7304,9 @@ typedef $$ShiftsLocalTableCreateCompanionBuilder =
       required int openingCash,
       Value<int?> closingCash,
       Value<String?> note,
+      Value<int?> expectedCashVnd,
+      Value<int?> varianceVnd,
+      Value<int?> transferInShiftVnd,
       Value<int> rowid,
     });
 typedef $$ShiftsLocalTableUpdateCompanionBuilder =
@@ -6120,6 +7319,9 @@ typedef $$ShiftsLocalTableUpdateCompanionBuilder =
       Value<int> openingCash,
       Value<int?> closingCash,
       Value<String?> note,
+      Value<int?> expectedCashVnd,
+      Value<int?> varianceVnd,
+      Value<int?> transferInShiftVnd,
       Value<int> rowid,
     });
 
@@ -6169,6 +7371,21 @@ class $$ShiftsLocalTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedCashVnd => $composableBuilder(
+    column: $table.expectedCashVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get varianceVnd => $composableBuilder(
+    column: $table.varianceVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get transferInShiftVnd => $composableBuilder(
+    column: $table.transferInShiftVnd,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6221,6 +7438,21 @@ class $$ShiftsLocalTableOrderingComposer
     column: $table.note,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get expectedCashVnd => $composableBuilder(
+    column: $table.expectedCashVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get varianceVnd => $composableBuilder(
+    column: $table.varianceVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get transferInShiftVnd => $composableBuilder(
+    column: $table.transferInShiftVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ShiftsLocalTableAnnotationComposer
@@ -6259,6 +7491,21 @@ class $$ShiftsLocalTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<int> get expectedCashVnd => $composableBuilder(
+    column: $table.expectedCashVnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get varianceVnd => $composableBuilder(
+    column: $table.varianceVnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get transferInShiftVnd => $composableBuilder(
+    column: $table.transferInShiftVnd,
+    builder: (column) => column,
+  );
 }
 
 class $$ShiftsLocalTableTableManager
@@ -6300,6 +7547,9 @@ class $$ShiftsLocalTableTableManager
                 Value<int> openingCash = const Value.absent(),
                 Value<int?> closingCash = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<int?> expectedCashVnd = const Value.absent(),
+                Value<int?> varianceVnd = const Value.absent(),
+                Value<int?> transferInShiftVnd = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ShiftsLocalCompanion(
                 id: id,
@@ -6310,6 +7560,9 @@ class $$ShiftsLocalTableTableManager
                 openingCash: openingCash,
                 closingCash: closingCash,
                 note: note,
+                expectedCashVnd: expectedCashVnd,
+                varianceVnd: varianceVnd,
+                transferInShiftVnd: transferInShiftVnd,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6322,6 +7575,9 @@ class $$ShiftsLocalTableTableManager
                 required int openingCash,
                 Value<int?> closingCash = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<int?> expectedCashVnd = const Value.absent(),
+                Value<int?> varianceVnd = const Value.absent(),
+                Value<int?> transferInShiftVnd = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ShiftsLocalCompanion.insert(
                 id: id,
@@ -6332,6 +7588,9 @@ class $$ShiftsLocalTableTableManager
                 openingCash: openingCash,
                 closingCash: closingCash,
                 note: note,
+                expectedCashVnd: expectedCashVnd,
+                varianceVnd: varianceVnd,
+                transferInShiftVnd: transferInShiftVnd,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -7322,6 +8581,555 @@ typedef $$DebtLedgerLocalTableProcessedTableManager =
       DebtLedgerLocalData,
       PrefetchHooks Function()
     >;
+typedef $$CashCategoriesLocalTableCreateCompanionBuilder =
+    CashCategoriesLocalCompanion Function({
+      required String id,
+      required String code,
+      required String name,
+      required String direction,
+      Value<int> sortOrder,
+      Value<int> rowid,
+    });
+typedef $$CashCategoriesLocalTableUpdateCompanionBuilder =
+    CashCategoriesLocalCompanion Function({
+      Value<String> id,
+      Value<String> code,
+      Value<String> name,
+      Value<String> direction,
+      Value<int> sortOrder,
+      Value<int> rowid,
+    });
+
+class $$CashCategoriesLocalTableFilterComposer
+    extends Composer<_$AppDatabase, $CashCategoriesLocalTable> {
+  $$CashCategoriesLocalTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CashCategoriesLocalTableOrderingComposer
+    extends Composer<_$AppDatabase, $CashCategoriesLocalTable> {
+  $$CashCategoriesLocalTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CashCategoriesLocalTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CashCategoriesLocalTable> {
+  $$CashCategoriesLocalTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get code =>
+      $composableBuilder(column: $table.code, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get direction =>
+      $composableBuilder(column: $table.direction, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+}
+
+class $$CashCategoriesLocalTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CashCategoriesLocalTable,
+          CashCategoriesLocalData,
+          $$CashCategoriesLocalTableFilterComposer,
+          $$CashCategoriesLocalTableOrderingComposer,
+          $$CashCategoriesLocalTableAnnotationComposer,
+          $$CashCategoriesLocalTableCreateCompanionBuilder,
+          $$CashCategoriesLocalTableUpdateCompanionBuilder,
+          (
+            CashCategoriesLocalData,
+            BaseReferences<
+              _$AppDatabase,
+              $CashCategoriesLocalTable,
+              CashCategoriesLocalData
+            >,
+          ),
+          CashCategoriesLocalData,
+          PrefetchHooks Function()
+        > {
+  $$CashCategoriesLocalTableTableManager(
+    _$AppDatabase db,
+    $CashCategoriesLocalTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CashCategoriesLocalTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CashCategoriesLocalTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CashCategoriesLocalTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> code = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> direction = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CashCategoriesLocalCompanion(
+                id: id,
+                code: code,
+                name: name,
+                direction: direction,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String code,
+                required String name,
+                required String direction,
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CashCategoriesLocalCompanion.insert(
+                id: id,
+                code: code,
+                name: name,
+                direction: direction,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CashCategoriesLocalTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CashCategoriesLocalTable,
+      CashCategoriesLocalData,
+      $$CashCategoriesLocalTableFilterComposer,
+      $$CashCategoriesLocalTableOrderingComposer,
+      $$CashCategoriesLocalTableAnnotationComposer,
+      $$CashCategoriesLocalTableCreateCompanionBuilder,
+      $$CashCategoriesLocalTableUpdateCompanionBuilder,
+      (
+        CashCategoriesLocalData,
+        BaseReferences<
+          _$AppDatabase,
+          $CashCategoriesLocalTable,
+          CashCategoriesLocalData
+        >,
+      ),
+      CashCategoriesLocalData,
+      PrefetchHooks Function()
+    >;
+typedef $$CashVouchersLocalTableCreateCompanionBuilder =
+    CashVouchersLocalCompanion Function({
+      required String id,
+      required String storeId,
+      required String shiftId,
+      required String categoryId,
+      required String direction,
+      required String channel,
+      required int amountVnd,
+      Value<String?> note,
+      required String recordedById,
+      required DateTime clientCreatedAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CashVouchersLocalTableUpdateCompanionBuilder =
+    CashVouchersLocalCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> shiftId,
+      Value<String> categoryId,
+      Value<String> direction,
+      Value<String> channel,
+      Value<int> amountVnd,
+      Value<String?> note,
+      Value<String> recordedById,
+      Value<DateTime> clientCreatedAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CashVouchersLocalTableFilterComposer
+    extends Composer<_$AppDatabase, $CashVouchersLocalTable> {
+  $$CashVouchersLocalTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shiftId => $composableBuilder(
+    column: $table.shiftId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get channel => $composableBuilder(
+    column: $table.channel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountVnd => $composableBuilder(
+    column: $table.amountVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recordedById => $composableBuilder(
+    column: $table.recordedById,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CashVouchersLocalTableOrderingComposer
+    extends Composer<_$AppDatabase, $CashVouchersLocalTable> {
+  $$CashVouchersLocalTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get shiftId => $composableBuilder(
+    column: $table.shiftId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get channel => $composableBuilder(
+    column: $table.channel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountVnd => $composableBuilder(
+    column: $table.amountVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recordedById => $composableBuilder(
+    column: $table.recordedById,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CashVouchersLocalTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CashVouchersLocalTable> {
+  $$CashVouchersLocalTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get storeId =>
+      $composableBuilder(column: $table.storeId, builder: (column) => column);
+
+  GeneratedColumn<String> get shiftId =>
+      $composableBuilder(column: $table.shiftId, builder: (column) => column);
+
+  GeneratedColumn<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get direction =>
+      $composableBuilder(column: $table.direction, builder: (column) => column);
+
+  GeneratedColumn<String> get channel =>
+      $composableBuilder(column: $table.channel, builder: (column) => column);
+
+  GeneratedColumn<int> get amountVnd =>
+      $composableBuilder(column: $table.amountVnd, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get recordedById => $composableBuilder(
+    column: $table.recordedById,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CashVouchersLocalTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CashVouchersLocalTable,
+          CashVouchersLocalData,
+          $$CashVouchersLocalTableFilterComposer,
+          $$CashVouchersLocalTableOrderingComposer,
+          $$CashVouchersLocalTableAnnotationComposer,
+          $$CashVouchersLocalTableCreateCompanionBuilder,
+          $$CashVouchersLocalTableUpdateCompanionBuilder,
+          (
+            CashVouchersLocalData,
+            BaseReferences<
+              _$AppDatabase,
+              $CashVouchersLocalTable,
+              CashVouchersLocalData
+            >,
+          ),
+          CashVouchersLocalData,
+          PrefetchHooks Function()
+        > {
+  $$CashVouchersLocalTableTableManager(
+    _$AppDatabase db,
+    $CashVouchersLocalTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CashVouchersLocalTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CashVouchersLocalTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CashVouchersLocalTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> shiftId = const Value.absent(),
+                Value<String> categoryId = const Value.absent(),
+                Value<String> direction = const Value.absent(),
+                Value<String> channel = const Value.absent(),
+                Value<int> amountVnd = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String> recordedById = const Value.absent(),
+                Value<DateTime> clientCreatedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CashVouchersLocalCompanion(
+                id: id,
+                storeId: storeId,
+                shiftId: shiftId,
+                categoryId: categoryId,
+                direction: direction,
+                channel: channel,
+                amountVnd: amountVnd,
+                note: note,
+                recordedById: recordedById,
+                clientCreatedAt: clientCreatedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String storeId,
+                required String shiftId,
+                required String categoryId,
+                required String direction,
+                required String channel,
+                required int amountVnd,
+                Value<String?> note = const Value.absent(),
+                required String recordedById,
+                required DateTime clientCreatedAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CashVouchersLocalCompanion.insert(
+                id: id,
+                storeId: storeId,
+                shiftId: shiftId,
+                categoryId: categoryId,
+                direction: direction,
+                channel: channel,
+                amountVnd: amountVnd,
+                note: note,
+                recordedById: recordedById,
+                clientCreatedAt: clientCreatedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CashVouchersLocalTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CashVouchersLocalTable,
+      CashVouchersLocalData,
+      $$CashVouchersLocalTableFilterComposer,
+      $$CashVouchersLocalTableOrderingComposer,
+      $$CashVouchersLocalTableAnnotationComposer,
+      $$CashVouchersLocalTableCreateCompanionBuilder,
+      $$CashVouchersLocalTableUpdateCompanionBuilder,
+      (
+        CashVouchersLocalData,
+        BaseReferences<
+          _$AppDatabase,
+          $CashVouchersLocalTable,
+          CashVouchersLocalData
+        >,
+      ),
+      CashVouchersLocalData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7346,4 +9154,8 @@ class $AppDatabaseManager {
       $$CustomersLocalTableTableManager(_db, _db.customersLocal);
   $$DebtLedgerLocalTableTableManager get debtLedgerLocal =>
       $$DebtLedgerLocalTableTableManager(_db, _db.debtLedgerLocal);
+  $$CashCategoriesLocalTableTableManager get cashCategoriesLocal =>
+      $$CashCategoriesLocalTableTableManager(_db, _db.cashCategoriesLocal);
+  $$CashVouchersLocalTableTableManager get cashVouchersLocal =>
+      $$CashVouchersLocalTableTableManager(_db, _db.cashVouchersLocal);
 }

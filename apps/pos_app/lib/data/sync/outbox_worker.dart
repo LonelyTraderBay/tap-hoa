@@ -1,30 +1,69 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../local/database.dart';
+
+class ClosedShiftSnapshot {
+  const ClosedShiftSnapshot({
+    required this.id,
+    required this.expectedCashVnd,
+    required this.varianceVnd,
+    required this.transferInShiftVnd,
+    required this.closingCash,
+    required this.closedAt,
+    this.note,
+  });
+
+  final String id;
+  final int expectedCashVnd;
+  final int varianceVnd;
+  final int transferInShiftVnd;
+  final int closingCash;
+  final DateTime closedAt;
+  final String? note;
+
+  factory ClosedShiftSnapshot.fromJson(Map<String, dynamic> json) {
+    return ClosedShiftSnapshot(
+      id: json['id'] as String,
+      expectedCashVnd: json['expectedCashVnd'] as int,
+      varianceVnd: json['varianceVnd'] as int,
+      transferInShiftVnd: json['transferInShiftVnd'] as int,
+      closingCash: json['closingCash'] as int,
+      closedAt: DateTime.parse(json['closedAt'] as String),
+      note: json['note'] as String?,
+    );
+  }
+}
 
 class PushSyncResult {
   const PushSyncResult({
     required this.acceptedIds,
     required this.acceptedShiftIds,
     required this.acceptedShiftCloseIds,
+    required this.closedShifts,
     required this.acceptedDebtPaymentIds,
+    required this.acceptedCashVoucherIds,
     required this.acceptedCustomerUpsertIds,
     required this.rejected,
     required this.rejectedShifts,
     required this.rejectedDebtPayments,
+    required this.rejectedCashVouchers,
   });
 
   final List<String> acceptedIds;
   final List<String> acceptedShiftIds;
   final List<String> acceptedShiftCloseIds;
+  final List<ClosedShiftSnapshot> closedShifts;
   final List<String> acceptedDebtPaymentIds;
+  final List<String> acceptedCashVoucherIds;
   final List<String> acceptedCustomerUpsertIds;
   final List<RejectedSale> rejected;
   final List<RejectedSale> rejectedShifts;
   final List<RejectedSale> rejectedDebtPayments;
+  final List<RejectedSale> rejectedCashVouchers;
 
   factory PushSyncResult.fromJson(Map<String, dynamic> json) {
     final rejected = (json['rejected'] as List<dynamic>? ?? [])
@@ -40,8 +79,18 @@ class PushSyncResult {
           (json['acceptedShiftCloseIds'] as List<dynamic>? ?? [])
               .map((id) => id as String)
               .toList(),
+      closedShifts: [
+        for (final item
+            in (json['closedShifts'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>())
+          ClosedShiftSnapshot.fromJson(item),
+      ],
       acceptedDebtPaymentIds:
           (json['acceptedDebtPaymentIds'] as List<dynamic>? ?? [])
+              .map((id) => id as String)
+              .toList(),
+      acceptedCashVoucherIds:
+          (json['acceptedCashVoucherIds'] as List<dynamic>? ?? [])
               .map((id) => id as String)
               .toList(),
       acceptedCustomerUpsertIds:
@@ -67,6 +116,15 @@ class PushSyncResult {
       rejectedDebtPayments: [
         for (final item
             in (json['rejectedDebtPayments'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>())
+          RejectedSale(
+            id: item['id'] as String,
+            reason: item['reason'] as String,
+          ),
+      ],
+      rejectedCashVouchers: [
+        for (final item
+            in (json['rejectedCashVouchers'] as List<dynamic>? ?? [])
                 .cast<Map<String, dynamic>>())
           RejectedSale(
             id: item['id'] as String,
@@ -99,6 +157,7 @@ class OutboxWorker {
     final shiftOpens = <Map<String, dynamic>>[];
     final shiftCloses = <Map<String, dynamic>>[];
     final debtPayments = <Map<String, dynamic>>[];
+    final cashVouchers = <Map<String, dynamic>>[];
     final customerUpserts = <Map<String, dynamic>>[];
     for (final entry in pending) {
       final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
@@ -111,6 +170,8 @@ class OutboxWorker {
           shiftCloses.add(payload);
         case 'debt_payment':
           debtPayments.add(payload);
+        case 'cash_voucher':
+          cashVouchers.add(payload);
         case 'customer_upsert':
           customerUpserts.add(payload);
       }
@@ -119,6 +180,7 @@ class OutboxWorker {
         sales.isEmpty &&
         shiftCloses.isEmpty &&
         debtPayments.isEmpty &&
+        cashVouchers.isEmpty &&
         customerUpserts.isEmpty) {
       return;
     }
@@ -131,8 +193,9 @@ class OutboxWorker {
           'deviceId': deviceId,
           'shiftOpens': shiftOpens,
           'sales': sales,
-          'shiftCloses': shiftCloses,
+          'cashVouchers': cashVouchers,
           'debtPayments': debtPayments,
+          'shiftCloses': shiftCloses,
           'customerUpserts': customerUpserts,
         },
       );
@@ -147,9 +210,14 @@ class OutboxWorker {
         'shift_close',
         result.acceptedShiftCloseIds,
       );
+      await _applyClosedShiftSnapshots(result.closedShifts);
       await _db.markOutboxEntitiesDone(
         'debt_payment',
         result.acceptedDebtPaymentIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'cash_voucher',
+        result.acceptedCashVoucherIds,
       );
       await _db.markOutboxEntitiesDone(
         'customer_upsert',
@@ -172,8 +240,33 @@ class OutboxWorker {
           entityType: 'debt_payment',
         );
       }
+      for (final rejected in result.rejectedCashVouchers) {
+        await _db.markOutboxError(
+          rejected.id,
+          rejected.reason,
+          entityType: 'cash_voucher',
+        );
+      }
     } on DioException {
       // stay pending; do not throw to UI
+    }
+  }
+
+  Future<void> _applyClosedShiftSnapshots(
+    List<ClosedShiftSnapshot> snapshots,
+  ) async {
+    for (final snapshot in snapshots) {
+      await (_db.update(_db.shiftsLocal)..where((s) => s.id.equals(snapshot.id)))
+          .write(
+        ShiftsLocalCompanion(
+          closedAt: Value(snapshot.closedAt),
+          closingCash: Value(snapshot.closingCash),
+          note: Value(snapshot.note),
+          expectedCashVnd: Value(snapshot.expectedCashVnd),
+          varianceVnd: Value(snapshot.varianceVnd),
+          transferInShiftVnd: Value(snapshot.transferInShiftVnd),
+        ),
+      );
     }
   }
 

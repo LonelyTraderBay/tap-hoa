@@ -152,6 +152,9 @@ describe('Shifts', () => {
     expect(closed.body.closingCash).toBe(350000);
     expect(closed.body.closedAt).toBeDefined();
     expect(closed.body.note).toBe('End of day');
+    expect(closed.body.expectedCashVnd).toBe(300000);
+    expect(closed.body.varianceVnd).toBe(50000);
+    expect(closed.body.transferInShiftVnd).toBe(0);
   });
 
   it('returns same shift on idempotent open with same clientId', async () => {

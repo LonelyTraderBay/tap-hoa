@@ -81,6 +81,9 @@ class ShiftsLocal extends Table {
   IntColumn get openingCash => integer()();
   IntColumn get closingCash => integer().nullable()();
   TextColumn get note => text().nullable()();
+  IntColumn get expectedCashVnd => integer().nullable()();
+  IntColumn get varianceVnd => integer().nullable()();
+  IntColumn get transferInShiftVnd => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -130,6 +133,34 @@ class DebtLedgerLocal extends Table {
   TextColumn get recordedById => text()();
   TextColumn get paymentMethod => text().nullable()();
   TextColumn get note => text().nullable()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class CashCategoriesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get code => text().unique()();
+  TextColumn get name => text()();
+  TextColumn get direction => text()(); // in | out
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class CashVouchersLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get shiftId => text()();
+  TextColumn get categoryId => text()();
+  TextColumn get direction => text()();
+  TextColumn get channel => text()(); // cash | transfer
+  IntColumn get amountVnd => integer()();
+  TextColumn get note => text().nullable()();
+  TextColumn get recordedById => text()();
   DateTimeColumn get clientCreatedAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
