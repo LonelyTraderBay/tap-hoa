@@ -1,3 +1,4 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +7,7 @@ import '../customers/customer_picker_sheet.dart';
 import '../customers/customer_repository.dart';
 import 'cart.dart';
 import 'checkout_service.dart';
+import 'receipt_print.dart';
 
 class PaymentSheet extends StatefulWidget {
   const PaymentSheet({
@@ -13,12 +15,14 @@ class PaymentSheet extends StatefulWidget {
     required this.cart,
     required this.checkoutService,
     required this.customerRepository,
+    required this.storeName,
     required this.onCompleted,
   });
 
   final Cart cart;
   final CheckoutService checkoutService;
   final CustomerRepository customerRepository;
+  final String storeName;
   final VoidCallback onCompleted;
 
   static Future<void> show(
@@ -26,6 +30,7 @@ class PaymentSheet extends StatefulWidget {
     required Cart cart,
     required CheckoutService checkoutService,
     required CustomerRepository customerRepository,
+    required String storeName,
     required VoidCallback onCompleted,
   }) {
     return showModalBottomSheet<void>(
@@ -35,6 +40,7 @@ class PaymentSheet extends StatefulWidget {
         cart: cart,
         checkoutService: checkoutService,
         customerRepository: customerRepository,
+        storeName: storeName,
         onCompleted: onCompleted,
       ),
     );
@@ -124,10 +130,36 @@ class _PaymentSheetState extends State<PaymentSheet> {
     });
 
     try {
-      await widget.checkoutService.complete(
+      final soldAt = DateTime.now();
+      final saleId = await widget.checkoutService.complete(
         cart: widget.cart,
         payment: payment,
         customerId: _selectedCustomer?.id,
+      );
+      if (!mounted) return;
+
+      final lines = widget.cart.lines
+          .map(
+            (line) => ReceiptLine(
+              name: line.name,
+              qtyLabel: _qtyLabel(line.qty),
+              unitPriceVnd: line.unitPrice,
+              lineTotalVnd: line.lineTotal,
+            ),
+          )
+          .toList();
+
+      await promptAndPrintReceipt(
+        context,
+        storeName: widget.storeName,
+        saleId: saleId,
+        soldAt: soldAt,
+        lines: lines,
+        totalVnd: _totalVnd,
+        cashVnd: cash,
+        transferVnd: transfer,
+        debtVnd: debt,
+        customerName: _selectedCustomer?.name,
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -233,6 +265,13 @@ class _PaymentSheetState extends State<PaymentSheet> {
         ],
       ),
     );
+  }
+
+  String _qtyLabel(Decimal qty) {
+    if (qty == qty.truncate()) {
+      return qty.truncate().toString();
+    }
+    return qty.toStringAsFixed(3);
   }
 
   Widget _amountField(String label, TextEditingController controller) {

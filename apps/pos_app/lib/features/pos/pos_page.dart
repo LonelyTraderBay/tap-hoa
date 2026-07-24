@@ -39,6 +39,7 @@ class PosPage extends StatefulWidget {
     required this.database,
     required this.user,
     required this.storeId,
+    required this.storeName,
     required this.role,
   });
 
@@ -55,6 +56,7 @@ class PosPage extends StatefulWidget {
   final AppDatabase database;
   final AuthUser user;
   final String storeId;
+  final String storeName;
   final String role;
 
   @override
@@ -106,6 +108,7 @@ class _PosPageState extends State<PosPage> {
       cart: _cart,
       checkoutService: widget.checkoutService,
       customerRepository: widget.customerRepository,
+      storeName: widget.storeName,
       onCompleted: () {
         setState(() {
           _cart.lines.clear();

@@ -127,6 +127,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
             database: widget.database,
             user: widget.user,
             storeId: store.id,
+            storeName: store.name,
             role: widget.user.role,
           ),
         ),
