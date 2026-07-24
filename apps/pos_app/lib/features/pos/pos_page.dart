@@ -13,6 +13,8 @@ import '../customers/debt_customer_list_page.dart';
 import '../customers/debt_payment_service.dart';
 import '../reports/day_report_page.dart';
 import '../reports/day_report_repository.dart';
+import '../inventory/inventory_hub_page.dart';
+import '../inventory/inventory_service.dart';
 import '../products/product_list_page.dart';
 import '../products/product_repository.dart';
 import '../products/product_service.dart';
@@ -234,6 +236,23 @@ class _PosPageState extends State<PosPage> {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
+                  builder: (_) => InventoryHubPage(
+                    db: widget.database,
+                    inventoryService: InventoryService(db: widget.database),
+                    productRepository: widget.productRepository,
+                    storeId: widget.storeId,
+                    role: widget.role,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.warehouse_outlined),
+            tooltip: 'Kho',
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
                   builder: (_) => ProductListPage(
                     repository: widget.productRepository,
                     pullCatalog: widget.pullCatalog,
@@ -246,6 +265,7 @@ class _PosPageState extends State<PosPage> {
               );
             },
             icon: const Icon(Icons.inventory_2_outlined),
+            tooltip: 'Hàng hóa',
           ),
         ],
       ),

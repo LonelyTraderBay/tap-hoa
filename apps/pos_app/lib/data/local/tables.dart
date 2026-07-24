@@ -167,3 +167,122 @@ class CashVouchersLocal extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+class StockTransfersLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get fromStoreId => text()();
+  TextColumn get toStoreId => text()();
+  TextColumn get status => text()(); // draft|approved|rejected|received
+  TextColumn get note => text().nullable()();
+  TextColumn get createdById => text()();
+  TextColumn get approvedById => text().nullable()();
+  TextColumn get receivedById => text().nullable()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get approvedAt => dateTime().nullable()();
+  DateTimeColumn get receivedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class StockTransferLinesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get transferId => text()();
+  TextColumn get productId => text()();
+  TextColumn get qty => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class StocktakesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get note => text().nullable()();
+  TextColumn get recordedById => text()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class StocktakeLinesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get stocktakeId => text()();
+  TextColumn get productId => text()();
+  TextColumn get systemQty => text()();
+  TextColumn get countedQty => text()();
+  TextColumn get varianceQty => text()();
+  TextColumn get reason => text()();
+  TextColumn get reasonNote => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class PurchaseReceiptsLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get supplierName => text()();
+  TextColumn get supplierPhone => text().nullable()();
+  TextColumn get note => text().nullable()();
+  TextColumn get recordedById => text()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class PurchaseReceiptLinesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get receiptId => text()();
+  TextColumn get productId => text()();
+  TextColumn get qty => text()();
+  IntColumn get unitCostVnd => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class WastageVouchersLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get reasonCode => text()();
+  TextColumn get note => text().nullable()();
+  TextColumn get recordedById => text()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class WastageVoucherLinesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get wastageId => text()();
+  TextColumn get productId => text()();
+  TextColumn get qty => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class StockMovementsLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get productId => text()();
+  TextColumn get qtyDelta => text()();
+  TextColumn get balanceAfter => text()();
+  TextColumn get docType => text()();
+  TextColumn get docId => text()();
+  TextColumn get docLineId => text().nullable()();
+  TextColumn get recordedById => text()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
