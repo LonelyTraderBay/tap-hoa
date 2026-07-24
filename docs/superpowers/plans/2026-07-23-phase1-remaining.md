@@ -46,7 +46,7 @@
 ## Reports (Phase 1 extensions)
 
 - [x] Top SKU / best sellers for the day
-- [ ] Stock-on-hand report per store
+- [x] Stock-on-hand report per store
 - [ ] Export CSV for day revenue
 
 ## Sync & ops
@@ -65,6 +65,7 @@
 4. ~~**Product CRUD + barcode labels**~~ — done (`feat/product-crud-barcode-labels`)
 5. ~~**Thermal print + top SKU report**~~ — done (`feat/thermal-receipt-top-sku`; PDF receipt via OS print; ESC/POS drivers deferred)
 6. ~~**Conflict resolution UI (outbox reject)**~~ — done (`feat/conflict-outbox-ui`)
+7. ~~**Stock-on-hand report per store**~~ — done (`feat/stock-on-hand-report`)
 
 ## Dependencies on MVP (done)
 
