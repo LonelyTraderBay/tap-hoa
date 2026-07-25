@@ -59,14 +59,12 @@ Xây dựng MVP **offline-first** cho quán tạp hóa nhiều điểm bán (2�
 
 ## Cố ý chưa làm (plan sau)
 
-Xem `docs/superpowers/plans/2026-07-23-phase1-remaining.md`:
+Xem `docs/superpowers/plans/2026-07-23-phase1-remaining.md` (Phase 1 polish đã tick).
 
-- Chuyển kho / kiểm kê / hủy hàng
-- Aging công nợ / quá hạn
-- In hóa đơn nhiệt (ESC/POS)
-- Nhóm sản phẩm / quy đổi đơn vị
-- Giai đoạn 2: sổ kế toán, giá vốn, HĐĐT
+**Giai đoạn 2 (2026-07-25):** Done + closeout PASS — sổ kế toán, WAC, AP/NCC, HĐĐT stub, báo cáo kỳ, Flutter surfaces, bút toán trả hàng/kiểm kê.  
+Gate: `docs/superpowers/plans/2026-07-25-phase2-hardening.md`.
 
+**Phase 3 (outline):** VAT/GTGT CoA thật; provider HĐĐT thật; Excel/PDF; trả hàng NCC; đối chiếu CK đầy đủ.
 ## Cách chạy nhanh
 
 1. PostgreSQL (khuyến nghị Supabase local port `54322` trên Windows)

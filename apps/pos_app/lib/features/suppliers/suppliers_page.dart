@@ -23,8 +23,30 @@ class SuppliersRepository {
   }
 
   Future<List<Map<String, dynamic>>> payables(String supplierId) async {
-    final res = await _dio.get<List<dynamic>>('/suppliers/$supplierId/payables');
+    final res =
+        await _dio.get<List<dynamic>>('/suppliers/$supplierId/payables');
     return (res.data ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> bankAccounts() async {
+    final res = await _dio.get<List<dynamic>>('/suppliers/bank-accounts');
+    return (res.data ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createBankAccount({
+    required String name,
+    String? bankName,
+    String? accountNo,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/suppliers/bank-accounts',
+      data: {
+        'name': name,
+        'bankName': ?bankName,
+        'accountNo': ?accountNo,
+      },
+    );
+    return res.data ?? {};
   }
 
   Future<void> pay({
@@ -32,6 +54,7 @@ class SuppliersRepository {
     required String storeId,
     required int amountVnd,
     required String channel,
+    String? bankAccountId,
   }) async {
     await _dio.post<void>(
       '/suppliers/$supplierId/payments',
@@ -39,6 +62,7 @@ class SuppliersRepository {
         'storeId': storeId,
         'amountVnd': amountVnd,
         'channel': channel,
+        'bankAccountId': ?bankAccountId,
       },
     );
   }
@@ -49,10 +73,12 @@ class SuppliersPage extends StatefulWidget {
     super.key,
     required this.repository,
     required this.storeId,
+    this.isOwner = false,
   });
 
   final SuppliersRepository repository;
   final String storeId;
+  final bool isOwner;
 
   @override
   State<SuppliersPage> createState() => _SuppliersPageState();
@@ -60,6 +86,7 @@ class SuppliersPage extends StatefulWidget {
 
 class _SuppliersPageState extends State<SuppliersPage> {
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _banks = [];
   String? _error;
   bool _loading = true;
 
@@ -76,9 +103,11 @@ class _SuppliersPageState extends State<SuppliersPage> {
     });
     try {
       final items = await widget.repository.list();
+      final banks = await widget.repository.bankAccounts();
       if (!mounted) return;
       setState(() {
         _items = items;
+        _banks = banks;
         _loading = false;
       });
     } catch (e) {
@@ -130,16 +159,30 @@ class _SuppliersPageState extends State<SuppliersPage> {
     await _reload();
   }
 
-  Future<void> _pay(Map<String, dynamic> supplier) async {
-    final amountCtrl = TextEditingController();
+  Future<void> _addBank() async {
+    final nameCtrl = TextEditingController();
+    final bankCtrl = TextEditingController();
+    final noCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Thanh toán ${supplier['name']}'),
-        content: TextField(
-          controller: amountCtrl,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Số tiền (VND)'),
+        title: const Text('Thêm tài khoản NH'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Tên hiển thị'),
+            ),
+            TextField(
+              controller: bankCtrl,
+              decoration: const InputDecoration(labelText: 'Ngân hàng'),
+            ),
+            TextField(
+              controller: noCtrl,
+              decoration: const InputDecoration(labelText: 'Số TK'),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -148,18 +191,92 @@ class _SuppliersPageState extends State<SuppliersPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Chi'),
+            child: const Text('Lưu'),
           ),
         ],
       ),
     );
+    if (ok != true || nameCtrl.text.trim().isEmpty) return;
+    await widget.repository.createBankAccount(
+      name: nameCtrl.text.trim(),
+      bankName: bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim(),
+      accountNo: noCtrl.text.trim().isEmpty ? null : noCtrl.text.trim(),
+    );
+    await _reload();
+  }
+
+  Future<void> _pay(Map<String, dynamic> supplier) async {
+    final amountCtrl = TextEditingController();
+    var channel = 'cash';
+    String? bankId = _banks.isEmpty ? null : _banks.first['id'] as String?;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Thanh toán ${supplier['name']}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Số tiền (VND)'),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'cash', label: Text('Tiền mặt')),
+                  ButtonSegment(value: 'transfer', label: Text('CK')),
+                ],
+                selected: {channel},
+                onSelectionChanged: (v) =>
+                    setLocal(() => channel = v.first),
+              ),
+              if (channel == 'transfer') ...[
+                const SizedBox(height: 8),
+                if (_banks.isEmpty)
+                  const Text('Chưa có TK NH — thêm trước khi chi CK')
+                else
+                  ..._banks.map(
+                    (b) => ListTile(
+                      dense: true,
+                      selected: bankId == b['id'],
+                      title: Text('${b['name']}'),
+                      onTap: () => setLocal(() => bankId = b['id'] as String),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Chi'),
+            ),
+          ],
+        ),
+      ),
+    );
     final amount = int.tryParse(amountCtrl.text.trim());
     if (ok != true || amount == null || amount <= 0) return;
+    if (channel == 'transfer' && (bankId == null || bankId!.isEmpty)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chọn tài khoản ngân hàng')),
+      );
+      return;
+    }
     await widget.repository.pay(
       supplierId: supplier['id'] as String,
       storeId: widget.storeId,
       amountVnd: amount,
-      channel: 'cash',
+      channel: channel,
+      bankAccountId: channel == 'transfer' ? bankId : null,
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -173,6 +290,12 @@ class _SuppliersPageState extends State<SuppliersPage> {
       appBar: AppBar(
         title: const Text('Công nợ NCC'),
         actions: [
+          if (widget.isOwner)
+            IconButton(
+              tooltip: 'Thêm TK NH',
+              onPressed: _addBank,
+              icon: const Icon(Icons.account_balance_outlined),
+            ),
           IconButton(onPressed: _addSupplier, icon: const Icon(Icons.add)),
         ],
       ),

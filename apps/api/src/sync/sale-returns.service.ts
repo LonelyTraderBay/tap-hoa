@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, Role, StockDocType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushSaleReturnDto } from './dto/push-sale.dto';
 
@@ -21,7 +22,10 @@ function ictDateKey(d: Date): string {
 
 @Injectable()
 export class SaleReturnsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   private canAccessStore(user: AuthUser, storeId: string): boolean {
     return user.role === Role.owner || user.storeIds.includes(storeId);
@@ -212,6 +216,14 @@ export class SaleReturnsService {
           });
         }
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromSaleReturn(dto.id, user.userId),
+        {
+          sourceType: 'sale_return',
+          sourceId: dto.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {

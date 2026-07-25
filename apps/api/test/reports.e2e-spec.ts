@@ -99,6 +99,9 @@ describe('Reports day', () => {
   });
 
   beforeEach(async () => {
+    await prisma.eInvoice.deleteMany();
+    await prisma.saleReturnLine.deleteMany();
+    await prisma.saleReturn.deleteMany();
     await prisma.saleLine.deleteMany();
     await prisma.sale.deleteMany();
     await prisma.shift.updateMany({
@@ -291,6 +294,9 @@ describe('Reports top-skus', () => {
   });
 
   beforeEach(async () => {
+    await prisma.eInvoice.deleteMany();
+    await prisma.saleReturnLine.deleteMany();
+    await prisma.saleReturn.deleteMany();
     await prisma.saleLine.deleteMany();
     await prisma.sale.deleteMany();
     await prisma.shift.updateMany({

@@ -35,6 +35,9 @@ describe('Cash vouchers sync', () => {
   beforeEach(async () => {
     await prisma.cashVoucher.deleteMany();
     await prisma.debtLedgerEntry.deleteMany();
+    await prisma.eInvoice.deleteMany();
+    await prisma.saleReturnLine.deleteMany();
+    await prisma.saleReturn.deleteMany();
     await prisma.saleLine.deleteMany();
     await prisma.sale.deleteMany();
     await prisma.customer.deleteMany();
