@@ -141,10 +141,10 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 | Bank recon | `POST /reports/bank-recon/import`, `GET /reports/bank-recon` (read-only), `POST .../match|unmatch|auto-match|lock` |
 | Suppliers | `POST /suppliers/:id/returns` (requires `purchaseReceiptId`), `GET /suppliers/:id/returnable-receipts` |
 
-### Optional FCM
+### Optional FCM (default off for day 1)
 
-- API: set `FIREBASE_SERVICE_ACCOUNT` to a service-account JSON file path. Without it, push registration still works; sends are logged/skipped.
-- POS: replace `apps/pos_app/lib/firebase_options.dart` via `flutterfire configure`. Without real options, the app runs and skips FCM.
+- **Default:** FCM off — no `FIREBASE_SERVICE_ACCOUNT`, placeholder `firebase_options.dart`; app and API run normally.
+- **Enable later:** `docs/ops/fcm.md` — `flutterfire configure` + absolute-path `FIREBASE_SERVICE_ACCOUNT` on API host only.
 
 ### Optional e-invoice HTTP gateway
 
@@ -166,6 +166,13 @@ See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklis
 | HĐĐT HTTP gateway / stub | `docs/ops/einvoice-http.md` |
 | Android release signing + APK | `docs/ops/android-release.md` |
 | Windows prod `API_URL` + smoke | `docs/ops/windows-prod.md` |
+
+### Wave B ops (stable day 1–3)
+
+| Topic | Doc |
+|-------|-----|
+| Multi-device smoke (required) | `docs/ops/smoke-multi-device.md` |
+| FCM optional (default **off**) | `docs/ops/fcm.md` |
 
 Host choice for Wave 1: Docker Compose (`apps/api/Dockerfile`, `apps/api/docker-compose.prod.yml`); live VPS execution is an operator follow-up when credentials are available.
 

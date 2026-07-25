@@ -58,6 +58,6 @@ to the counter. Use the **real owner account** from `docs/ops/production-secrets
 - [ ] **Đồng bộ** — run **Đồng bộ** (or wait for auto sync); confirm no sync errors.
 - [ ] **Báo cáo ngày** — open the day report; revenue for today includes the test sale.
 
-Optional follow-up (not required for Wave 1 Windows pointer): second device pull,
-đóng ca, HĐĐT — see `docs/ops/einvoice-http.md` and Wave 2 checklists in
-`docs/superpowers/plans/2026-07-25-hoan-thien-uu-tien.md`.
+Optional follow-up (not required for Wave 1 Windows pointer): multi-device smoke,
+đóng ca, HĐĐT — see [smoke-multi-device.md](smoke-multi-device.md),
+[einvoice-http.md](einvoice-http.md), and [go-live-checklist.md](go-live-checklist.md) Wave B.

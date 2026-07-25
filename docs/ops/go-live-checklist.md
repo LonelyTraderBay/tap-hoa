@@ -93,5 +93,42 @@ files, or backup dumps.
 - [ ] POS points at prod API; ≥ 1 cash sale synced and visible in day report.
 - [ ] HĐĐT: gateway verified **or** stub documented as **chưa HĐĐT thật**.
 
-Next: Wave B (multi-device smoke, PDF Unicode, optional FCM) — see
-`docs/superpowers/plans/2026-07-25-hoan-thien-con-lai.md`.
+---
+
+## Wave B — Stable operations (P1)
+
+Run after Wave A definition of done. Operator runbooks (no live credentials in git):
+
+| Task | Topic | Runbook |
+|------|-------|---------|
+| B.1 | Multi-device smoke | [smoke-multi-device.md](smoke-multi-device.md) |
+| B.2 | FCM (optional; default **off**) | [fcm.md](fcm.md) |
+| B.3 | Period PDF Unicode | code on `fix/period-pdf-unicode-font` — see repo plan |
+
+**Default day-1 FCM:** off — app and API run without Firebase; see [fcm.md](fcm.md).
+
+### Task B.1 — Multi-device smoke (required)
+
+**Docs:** [smoke-multi-device.md](smoke-multi-device.md)
+
+- [ ] Máy A offline: mở ca → bán nợ + TM → online → **Đồng bộ** (`shift_open` before `sale`).
+- [ ] Máy B pull: tồn giảm; báo cáo ngày khớp.
+- [ ] Đóng ca A: expected vs thực tế; lệch + ghi chú OK.
+- [ ] Owner: sổ kỳ / VAT / Excel hoặc PDF thử once.
+
+### Task B.2 — FCM (optional; default off)
+
+**Docs:** [fcm.md](fcm.md)
+
+- [ ] Document **FCM off** for day 1 **or** complete optional enable path (`flutterfire configure` + `FIREBASE_SERVICE_ACCOUNT`).
+- [ ] If on: smoke low-stock or sync alert once.
+
+---
+
+## Wave B definition of done
+
+- [ ] B.1 multi-device smoke passed on prod (or staging mirror).
+- [ ] B.2 FCM explicitly **off** documented **or** push smoke passed.
+- [ ] B.3 period PDF Vietnamese (when branch merged) — operator smoke on host.
+
+Plan reference: `docs/superpowers/plans/2026-07-25-hoan-thien-con-lai.md`.
