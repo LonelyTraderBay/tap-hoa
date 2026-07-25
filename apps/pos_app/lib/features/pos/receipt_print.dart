@@ -1,10 +1,14 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../shared/pdf_fonts.dart';
 import '../reports/ict_date.dart';
@@ -12,6 +16,8 @@ import 'receipt_windows_raw.dart';
 
 const _receiptWidthMm = 58.0;
 const _maxNameChars = 24;
+
+enum _ReceiptPostCheckoutAction { print, share }
 
 class ReceiptLine {
   const ReceiptLine({
@@ -61,6 +67,13 @@ String formatIctDateTime(DateTime soldAt) {
   return '$day/$month/$year $hour:$minute';
 }
 
+String receiptPdfFileName(String saleId) {
+  final safeId = shortenSaleId(
+    saleId,
+  ).replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
+  return 'receipt-${safeId.isEmpty ? 'sale' : safeId}.pdf';
+}
+
 Future<Uint8List> buildReceiptPdf({
   required String storeName,
   required String saleId,
@@ -86,10 +99,7 @@ Future<Uint8List> buildReceiptPdf({
   doc.addPage(
     pw.Page(
       pageFormat: pageFormat,
-      theme: pw.ThemeData.withFont(
-        base: pdfFontRegular,
-        bold: pdfFontBold,
-      ),
+      theme: pw.ThemeData.withFont(base: pdfFontRegular, bold: pdfFontBold),
       build: (context) {
         final children = <pw.Widget>[
           pw.Text(
@@ -129,7 +139,10 @@ Future<Uint8List> buildReceiptPdf({
 
         if (cashVnd > 0) {
           children.add(
-            pw.Text('Tiền mặt: ${formatReceiptVnd(cashVnd)} VND', style: textStyle),
+            pw.Text(
+              'Tiền mặt: ${formatReceiptVnd(cashVnd)} VND',
+              style: textStyle,
+            ),
           );
         }
         if (transferVnd > 0) {
@@ -142,7 +155,10 @@ Future<Uint8List> buildReceiptPdf({
         }
         if (debtVnd > 0) {
           children.add(
-            pw.Text('Công nợ: ${formatReceiptVnd(debtVnd)} VND', style: textStyle),
+            pw.Text(
+              'Công nợ: ${formatReceiptVnd(debtVnd)} VND',
+              style: textStyle,
+            ),
           );
         }
 
@@ -155,6 +171,95 @@ Future<Uint8List> buildReceiptPdf({
   );
 
   return doc.save();
+}
+
+class ReceiptPdfShareResult {
+  const ReceiptPdfShareResult({
+    required this.path,
+    required this.openedFallback,
+  });
+
+  final String path;
+  final bool openedFallback;
+}
+
+Future<String> writeReceiptPdfToTemp({
+  required String storeName,
+  required String saleId,
+  required DateTime soldAt,
+  required List<ReceiptLine> lines,
+  required int totalVnd,
+  required int cashVnd,
+  required int transferVnd,
+  required int debtVnd,
+  String? customerName,
+}) async {
+  final bytes = await buildReceiptPdf(
+    storeName: storeName,
+    saleId: saleId,
+    soldAt: soldAt,
+    lines: lines,
+    totalVnd: totalVnd,
+    cashVnd: cashVnd,
+    transferVnd: transferVnd,
+    debtVnd: debtVnd,
+    customerName: customerName,
+  );
+  final dir = await getTemporaryDirectory();
+  final path =
+      '${dir.path}${Platform.pathSeparator}${receiptPdfFileName(saleId)}';
+  await File(path).writeAsBytes(bytes, flush: true);
+  return path;
+}
+
+Future<ReceiptPdfShareResult> shareReceiptPdf({
+  required String storeName,
+  required String saleId,
+  required DateTime soldAt,
+  required List<ReceiptLine> lines,
+  required int totalVnd,
+  required int cashVnd,
+  required int transferVnd,
+  required int debtVnd,
+  String? customerName,
+}) async {
+  final path = await writeReceiptPdfToTemp(
+    storeName: storeName,
+    saleId: saleId,
+    soldAt: soldAt,
+    lines: lines,
+    totalVnd: totalVnd,
+    cashVnd: cashVnd,
+    transferVnd: transferVnd,
+    debtVnd: debtVnd,
+    customerName: customerName,
+  );
+  final fileName = receiptPdfFileName(saleId);
+
+  try {
+    final result = await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(path, mimeType: 'application/pdf')],
+        fileNameOverrides: [fileName],
+        subject: 'Hóa đơn ${shortenSaleId(saleId)}',
+      ),
+    );
+    if (Platform.isWindows && result.status == ShareResultStatus.unavailable) {
+      await _revealReceiptPdf(path);
+      return ReceiptPdfShareResult(path: path, openedFallback: true);
+    }
+  } catch (_) {
+    if (!Platform.isWindows) rethrow;
+    await _revealReceiptPdf(path);
+    return ReceiptPdfShareResult(path: path, openedFallback: true);
+  }
+
+  return ReceiptPdfShareResult(path: path, openedFallback: false);
+}
+
+Future<void> _revealReceiptPdf(String path) async {
+  await Clipboard.setData(ClipboardData(text: path));
+  await Process.start('explorer.exe', ['/select,', path]);
 }
 
 Future<void> promptAndPrintReceipt(
@@ -171,29 +276,68 @@ Future<void> promptAndPrintReceipt(
   String printMode = 'ask',
   String? printerName,
 }) async {
-  final shouldPrint = printMode == 'escpos' || printMode == 'pdf'
-      ? true
-      : await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) {
-            return AlertDialog(
-              title: const Text('In hóa đơn?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Không'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Có'),
-                ),
-              ],
-            );
-          },
-        );
-  if (!context.mounted || shouldPrint != true) return;
+  final action = await showDialog<_ReceiptPostCheckoutAction>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Hóa đơn'),
+        content: const Text('Bạn muốn in hoặc gửi hóa đơn?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Bỏ qua'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_ReceiptPostCheckoutAction.share),
+            child: const Text('Gửi'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_ReceiptPostCheckoutAction.print),
+            child: const Text('In'),
+          ),
+        ],
+      );
+    },
+  );
+  if (!context.mounted || action == null) return;
 
-  if (printMode == 'escpos') {
+  if (action == _ReceiptPostCheckoutAction.share) {
+    try {
+      final result = await shareReceiptPdf(
+        storeName: storeName,
+        saleId: saleId,
+        soldAt: soldAt,
+        lines: lines,
+        totalVnd: totalVnd,
+        cashVnd: cashVnd,
+        transferVnd: transferVnd,
+        debtVnd: debtVnd,
+        customerName: customerName,
+      );
+      if (!context.mounted) return;
+      final message = result.openedFallback
+          ? 'Đã lưu PDF hóa đơn: ${result.path}'
+          : 'Đã mở chia sẻ hóa đơn';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Gửi hóa đơn thất bại')));
+      }
+    }
+    return;
+  }
+
+  final effectivePrintMode = printMode == 'ask' ? 'pdf' : printMode;
+
+  if (effectivePrintMode == 'escpos') {
     try {
       final bytes = buildReceiptEscPosBytes(
         storeName: storeName,
@@ -219,9 +363,9 @@ Future<void> promptAndPrintReceipt(
         final sent = await sendRawToWindowsPrinter(name, bytes);
         if (sent) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Đã gửi in ESC/POS')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Đã gửi in ESC/POS')));
           }
           return;
         }
@@ -268,9 +412,9 @@ Future<void> promptAndPrintReceipt(
     );
   } catch (_) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('In hóa đơn thất bại')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('In hóa đơn thất bại')));
     }
   }
 }

@@ -5,6 +5,7 @@
 ### POS
 
 - Added per-cart-line VND discounts, synced as `SaleLine.discountVnd`; line discounts apply before invoice-level discounts.
+- Added post-checkout receipt sharing with a saved PDF fallback on Windows.
 
 ### Phase 2 — Closeout follow-up
 

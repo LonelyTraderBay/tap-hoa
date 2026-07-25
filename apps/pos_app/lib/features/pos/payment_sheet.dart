@@ -156,23 +156,32 @@ class _PaymentSheetState extends State<PaymentSheet> {
 
       final printMode =
           await widget.database?.metaValue('receiptPrintMode') ?? 'ask';
-      final printerName =
-          await widget.database?.metaValue('receiptPrinterName');
-      if (!mounted) return;
-      await promptAndPrintReceipt(
-        context,
-        storeName: widget.storeName,
-        saleId: saleId,
-        soldAt: soldAt,
-        lines: lines,
-        totalVnd: _totalVnd,
-        cashVnd: cash,
-        transferVnd: transfer,
-        debtVnd: debt,
-        customerName: _selectedCustomer?.name,
-        printMode: printMode,
-        printerName: printerName,
+      final printerName = await widget.database?.metaValue(
+        'receiptPrinterName',
       );
+      if (!mounted) return;
+      try {
+        await promptAndPrintReceipt(
+          context,
+          storeName: widget.storeName,
+          saleId: saleId,
+          soldAt: soldAt,
+          lines: lines,
+          totalVnd: _totalVnd,
+          cashVnd: cash,
+          transferVnd: transfer,
+          debtVnd: debt,
+          customerName: _selectedCustomer?.name,
+          printMode: printMode,
+          printerName: printerName,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Tạo hóa đơn thất bại')));
+        }
+      }
       if (!mounted) return;
       Navigator.of(context).pop();
       widget.onCompleted();

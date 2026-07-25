@@ -57,6 +57,12 @@ void main() {
     expect(formatReceiptVnd(1200), '1.200');
   });
 
+  test('receiptPdfFileName sanitizes sale id', () {
+    expect(receiptPdfFileName('abc12345-6789'), 'receipt-abc12345-678.pdf');
+    expect(receiptPdfFileName('bad/id:01'), 'receipt-bad-id-01.pdf');
+    expect(receiptPdfFileName(''), 'receipt-sale.pdf');
+  });
+
   test('truncateReceiptName limits length', () {
     expect(
       truncateReceiptName('Mì gói Hảo Hảo tôm chua cay extra long'),
