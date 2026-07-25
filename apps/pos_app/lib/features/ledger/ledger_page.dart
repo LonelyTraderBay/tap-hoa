@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -52,8 +53,23 @@ class LedgerRepository {
     );
   }
 
+  Future<void> unlockPeriod(String periodYm, String reason) async {
+    await _dio.post<void>(
+      '/ledger/period-locks/$periodYm/unlock',
+      data: {'reason': reason},
+    );
+  }
+
   Future<List<Map<String, dynamic>>> periodLocks() async {
     final res = await _dio.get<List<dynamic>>('/ledger/period-locks');
+    return (res.data ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> listAudit({int limit = 50}) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/ledger/audit',
+      queryParameters: {'limit': limit},
+    );
     return (res.data ?? []).cast<Map<String, dynamic>>();
   }
 
@@ -163,6 +179,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
   List<Map<String, dynamic>> _entries = [];
   List<Map<String, dynamic>> _tbRows = [];
   List<Map<String, dynamic>> _locks = [];
+  List<Map<String, dynamic>> _audit = [];
   Map<String, dynamic>? _pnl;
   Map<String, dynamic>? _vat;
   String? _error;
@@ -206,6 +223,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
         storeId: widget.storeId,
       );
       final locks = await widget.repository.periodLocks();
+      final audit = await widget.repository.listAudit();
       if (!mounted) return;
       setState(() {
         _entries = entries;
@@ -213,6 +231,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
         _pnl = pnl;
         _vat = vat;
         _locks = locks;
+        _audit = audit;
         _loading = false;
       });
     } catch (e) {
@@ -222,6 +241,70 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _unlock(String periodYm) async {
+    final reason = await _promptUnlockReason(periodYm);
+    if (reason == null) return;
+    try {
+      await widget.repository.unlockPeriod(periodYm, reason);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã mở khóa kỳ $periodYm')),
+      );
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Mở khóa thất bại: $e')),
+      );
+    }
+  }
+
+  Future<String?> _promptUnlockReason(String periodYm) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        String? errorText;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: Text('Mở khóa kỳ $periodYm'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Lý do',
+                errorText: errorText,
+              ),
+              minLines: 2,
+              maxLines: 4,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final trimmed = controller.text.trim();
+                  if (trimmed.length < 3) {
+                    setDialogState(() {
+                      errorText = 'Nhập ít nhất 3 ký tự';
+                    });
+                    return;
+                  }
+                  Navigator.pop(ctx, trimmed);
+                },
+                child: const Text('Mở khóa'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+    return result;
   }
 
   Future<void> _lock() async {
@@ -372,6 +455,92 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
   bool get _periodLocked =>
       _locks.any((l) => l['periodYm']?.toString() == _periodYm);
 
+  String? _auditReason(Map<String, dynamic> row) {
+    final detailJson = row['detailJson']?.toString();
+    if (detailJson == null || detailJson.isEmpty) return null;
+    try {
+      final detail = jsonDecode(detailJson);
+      if (detail is Map && detail['reason'] != null) {
+        return detail['reason'].toString();
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  String _auditActionLabel(String action) {
+    switch (action) {
+      case 'period_lock':
+        return 'Khóa sổ';
+      case 'period_unlock':
+        return 'Mở khóa';
+      case 'journal_blocked_period_lock':
+        return 'Chặn ghi sổ';
+      default:
+        return action;
+    }
+  }
+
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+    );
+  }
+
+  Widget _buildJournalTab() {
+    return ListView(
+      children: [
+        _sectionHeader('Kỳ đã khóa'),
+        if (_locks.isEmpty)
+          const ListTile(title: Text('Chưa khóa kỳ nào'))
+        else
+          for (final lock in _locks)
+            ListTile(
+              leading: const Icon(Icons.lock_outline),
+              title: Text(lock['periodYm']?.toString() ?? ''),
+              subtitle: Text('Khóa lúc ${lock['lockedAt'] ?? ''}'),
+              trailing: widget.isOwner
+                  ? TextButton(
+                      onPressed: () => _unlock(lock['periodYm'].toString()),
+                      child: const Text('Mở khóa'),
+                    )
+                  : null,
+            ),
+        _sectionHeader('Nhật ký khóa sổ'),
+        if (_audit.isEmpty)
+          const ListTile(title: Text('Chưa có nhật ký'))
+        else
+          for (final row in _audit)
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: Text(
+                '${_auditActionLabel(row['action']?.toString() ?? '')}'
+                ' · ${row['entityId'] ?? ''}',
+              ),
+              subtitle: Text(
+                [
+                  row['at']?.toString() ?? '',
+                  if (_auditReason(row) != null) 'Lý do: ${_auditReason(row)}',
+                ].where((v) => v.isNotEmpty).join('\n'),
+              ),
+            ),
+        _sectionHeader('Nhật ký bút toán'),
+        if (_entries.isEmpty)
+          const ListTile(title: Text('Chưa có bút toán'))
+        else
+          for (final e in _entries)
+            ListTile(
+              title: Text('${e['sourceType']} · ${e['sourceId']}'),
+              subtitle: Text(
+                '${e['periodYm']} · ${e['postedAt']}',
+              ),
+            ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lockHint = _periodLocked
@@ -455,18 +624,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
                 ? Center(child: Text(_error!))
                 : TabBarView(
                     children: [
-                      ListView.builder(
-                        itemCount: _entries.length,
-                        itemBuilder: (context, i) {
-                          final e = _entries[i];
-                          return ListTile(
-                            title: Text('${e['sourceType']} · ${e['sourceId']}'),
-                            subtitle: Text(
-                              '${e['periodYm']} · ${e['postedAt']}',
-                            ),
-                          );
-                        },
-                      ),
+                      _buildJournalTab(),
                       ListView.builder(
                         itemCount: _tbRows.length,
                         itemBuilder: (context, i) {

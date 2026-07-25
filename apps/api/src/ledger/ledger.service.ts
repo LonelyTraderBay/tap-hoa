@@ -574,6 +574,42 @@ export class LedgerService {
     return lock;
   }
 
+  async unlockPeriod(user: AuthUser, periodYm: string, reason: string) {
+    if (user.role !== Role.owner) {
+      throw new Error('owner_required');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new Error('invalid_period');
+    }
+    const trimmedReason = reason.trim();
+    if (trimmedReason.length < 3) {
+      throw new Error('invalid_reason');
+    }
+    await this.prisma.periodLock.deleteMany({ where: { periodYm } });
+    await this.writeAudit({
+      actorUserId: user.userId,
+      action: 'period_unlock',
+      entityType: 'period_lock',
+      entityId: periodYm,
+      detail: { reason: trimmedReason },
+    });
+    return { unlocked: true, periodYm };
+  }
+
+  async listAudit(user: AuthUser, limit = 50) {
+    this.assertLedgerAccess(user);
+    const take = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
+    return this.prisma.auditLog.findMany({
+      where: {
+        action: {
+          in: ['period_lock', 'period_unlock', 'journal_blocked_period_lock'],
+        },
+      },
+      orderBy: { at: 'desc' },
+      take,
+    });
+  }
+
   private assertLedgerAccess(user: AuthUser, storeId?: string) {
     if (user.role === Role.owner) return;
     if (user.role === Role.store_manager) {

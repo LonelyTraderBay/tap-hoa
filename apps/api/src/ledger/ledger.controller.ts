@@ -4,6 +4,8 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  HttpCode,
+  Param,
   Post,
   Query,
   Req,
@@ -75,12 +77,47 @@ export class LedgerController {
     }
   }
 
+  @Post('period-locks/:periodYm/unlock')
+  @HttpCode(200)
+  async unlockPeriod(
+    @Req() req: { user: AuthUser },
+    @Param('periodYm') periodYm: string,
+    @Body() body: { reason?: string },
+  ) {
+    try {
+      return await this.ledger.unlockPeriod(
+        req.user,
+        periodYm,
+        body?.reason ?? '',
+      );
+    } catch (e) {
+      this.mapError(e);
+    }
+  }
+
+  @Get('audit')
+  async audit(@Req() req: { user: AuthUser }, @Query('limit') limit?: string) {
+    try {
+      return await this.ledger.listAudit(req.user, limit ? Number(limit) : 50);
+    } catch (e) {
+      this.mapError(e);
+    }
+  }
+
   private mapError(e: unknown): never {
     const msg = e instanceof Error ? e.message : String(e);
-    if (msg === 'forbidden' || msg === 'owner_required' || msg === 'store_forbidden') {
+    if (
+      msg === 'forbidden' ||
+      msg === 'owner_required' ||
+      msg === 'store_forbidden'
+    ) {
       throw new ForbiddenException(msg);
     }
-    if (msg === 'invalid_date' || msg === 'invalid_period') {
+    if (
+      msg === 'invalid_date' ||
+      msg === 'invalid_period' ||
+      msg === 'invalid_reason'
+    ) {
       throw new BadRequestException(msg);
     }
     throw e;
