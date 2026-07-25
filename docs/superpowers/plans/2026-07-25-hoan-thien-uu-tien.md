@@ -9,14 +9,15 @@
 
 **Tech Stack:** NestJS 10 + Prisma + PostgreSQL (`apps/api`); Flutter 3 + Drift (`apps/pos_app`); HĐĐT qua `EINVOICE_PROVIDER=http`; optional FCM.
 
-**Trạng thái hiện tại (2026-07-25):**
+**Trạng thái (cập nhật 2026-07-25):**
 
 | Hạng mục | Trạng thái |
 |----------|------------|
-| Phase 1–2 | Done + closeout PASS |
-| Phase 3 features (#12–#16) | Merged vào `main` |
-| Phase 3 hardening | **PASS trên `hardening/phase3-closeout`**; PR [#17](https://github.com/LonelyTraderBay/tap-hoa/pull/17) **OPEN**, chưa merge `main` |
-| Dockerfile / CI deploy | Chưa có |
+| Phase 1–3 + hardening PR #17 | **Done** trên `main` |
+| Wave 0–1 (merge + ops in-repo) | **Done** local `main` @ `9dd1fad` (ahead `origin` — cần push) |
+| Deploy VPS / secrets / backup thật | Chưa (operator) |
+| Wave 2–5 | Chưa |
+| **Kế hoạch còn lại** | `docs/superpowers/plans/2026-07-25-hoan-thien-con-lai.md` |
 | Nộp CQT / SDK Viettel–MISA riêng | Ngoài scope (giữ YAGNI) |
 
 ## Global Constraints
