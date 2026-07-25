@@ -38,14 +38,7 @@ describe('Phase 2 e-invoice e2e', () => {
     await app.close();
   });
 
-  it('rejects missing sale; issues stub for synced sale', async () => {
-    await request(app.getHttpServer())
-      .post('/einvoices/issue')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ saleId: randomUUID() })
-      .expect(404);
-
-    await prisma.eInvoice.deleteMany();
+  async function createSyncedSale(deviceId: string) {
     await prisma.shift.updateMany({
       where: { storeId, closedAt: null },
       data: { closedAt: new Date(), closingCash: 0 },
@@ -75,7 +68,7 @@ describe('Phase 2 e-invoice e2e', () => {
       .post('/sync/push')
       .set('Authorization', `Bearer ${token}`)
       .send({
-        deviceId: 'e2e-einvoice',
+        deviceId,
         sales: [
           {
             id: saleId,
@@ -101,6 +94,18 @@ describe('Phase 2 e-invoice e2e', () => {
         ],
       })
       .expect(201);
+    return saleId;
+  }
+
+  it('rejects missing sale; issues stub for synced sale', async () => {
+    await request(app.getHttpServer())
+      .post('/einvoices/issue')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ saleId: randomUUID() })
+      .expect(404);
+
+    await prisma.eInvoice.deleteMany();
+    const saleId = await createSyncedSale('e2e-einvoice');
 
     const issued = await request(app.getHttpServer())
       .post('/einvoices/issue')
@@ -116,5 +121,56 @@ describe('Phase 2 e-invoice e2e', () => {
     expect(issued.body.status).toBe('issued');
     expect(issued.body.provider).toBe('stub');
     expect(issued.body.invoiceNumber).toMatch(/^STUB-/);
+  });
+
+  it('cancels issued stub invoice idempotently and blocks re-issue', async () => {
+    await prisma.eInvoice.deleteMany();
+    const saleId = await createSyncedSale('e2e-einvoice-cancel');
+
+    const issued = await request(app.getHttpServer())
+      .post('/einvoices/issue')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ saleId })
+      .expect(201);
+
+    const cancelled = await request(app.getHttpServer())
+      .post(`/einvoices/${issued.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'Khach huy don' })
+      .expect(201);
+
+    expect(cancelled.body.status).toBe('cancelled');
+
+    const repeated = await request(app.getHttpServer())
+      .post(`/einvoices/${issued.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'Khach huy don' })
+      .expect(201);
+    expect(repeated.body.status).toBe('cancelled');
+
+    await request(app.getHttpServer())
+      .post('/einvoices/issue')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ saleId })
+      .expect(400);
+  });
+
+  it('rejects cancel from non-cancellable status', async () => {
+    await prisma.eInvoice.deleteMany();
+    const saleId = await createSyncedSale('e2e-einvoice-cancel-invalid');
+    const invoice = await prisma.eInvoice.create({
+      data: {
+        id: randomUUID(),
+        saleId,
+        status: 'failed',
+        provider: 'stub',
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/einvoices/${invoice.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'Khach huy don' })
+      .expect(400);
   });
 });

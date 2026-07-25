@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
+  CancelEInvoiceInput,
   EInvoiceAdapter,
   IssueEInvoiceInput,
   IssueEInvoiceResult,
@@ -21,5 +22,9 @@ export class StubEInvoiceAdapter implements EInvoiceAdapter {
       xmlPath: `stub://${num}.xml`,
       pdfPath: `stub://${num}.pdf`,
     };
+  }
+
+  async cancel(_input: CancelEInvoiceInput): Promise<void> {
+    return;
   }
 }

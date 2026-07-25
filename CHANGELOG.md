@@ -32,6 +32,7 @@
 
 - `EINVOICE_PROVIDER=stub|http` + `EINVOICE_HTTP_URL` / optional API key
 - Sale lines included in provider payload; Flutter copy updated
+- `POST /einvoices/:id/cancel` cancels issued/pending-sign HĐĐT only; Flutter adds a reason-confirmed cancel action.
 
 ### Phase 3 — VAT / GTGT
 

@@ -34,4 +34,13 @@ export class EInvoiceController {
   bySale(@Req() req: { user: AuthUser }, @Param('saleId') saleId: string) {
     return this.service.getBySale(req.user, saleId);
   }
+
+  @Post(':id/cancel')
+  cancel(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.cancel(req.user, id, body);
+  }
 }

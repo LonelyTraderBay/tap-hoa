@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
+  CancelEInvoiceInput,
   EInvoiceAdapter,
   IssueEInvoiceInput,
   IssueEInvoiceResult,
@@ -35,6 +36,11 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
       this.logger.error('EINVOICE_HTTP_URL missing for EINVOICE_PROVIDER=http');
       return;
     }
+    this.validateEndpoint(url, 'EINVOICE_HTTP_URL');
+    this.validateEndpoint(this.cancelUrl(url), 'EINVOICE_HTTP_CANCEL_URL');
+  }
+
+  private validateEndpoint(url: string, envName: string) {
     try {
       const parsed = new URL(url);
       const allowHttp =
@@ -42,18 +48,25 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
         parsed.hostname === '127.0.0.1' ||
         parsed.hostname === 'localhost';
       if (parsed.protocol !== 'https:' && !allowHttp) {
-        throw new Error('EINVOICE_HTTP_URL must be https');
+        throw new Error(`${envName} must be https`);
       }
       if (
         parsed.hostname === 'metadata' ||
         parsed.hostname.endsWith('.internal')
       ) {
-        throw new Error('EINVOICE_HTTP_URL host not allowlisted');
+        throw new Error(`${envName} host not allowlisted`);
       }
     } catch (e) {
       this.logger.error(`einvoice http config invalid: ${String(e)}`);
       throw e;
     }
+  }
+
+  private cancelUrl(issueUrl: string): string {
+    const configured = process.env.EINVOICE_HTTP_CANCEL_URL?.trim();
+    if (configured) return configured;
+    const derived = issueUrl.replace(/\/issue\/?$/i, '/cancel');
+    return derived === issueUrl ? `${issueUrl.replace(/\/$/, '')}/cancel` : derived;
   }
 
   private sleep(ms: number) {
@@ -184,6 +197,103 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
         }
         this.logger.error(
           `einvoice http transport failed: ${this.redact(String(err))}`,
+        );
+        throw new ServiceUnavailableException('einvoice_provider_unreachable');
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new ServiceUnavailableException('einvoice_provider_unreachable');
+  }
+
+  async cancel(input: CancelEInvoiceInput): Promise<void> {
+    const issueUrl = process.env.EINVOICE_HTTP_URL?.trim();
+    if (!issueUrl) {
+      throw new ServiceUnavailableException(
+        'EINVOICE_HTTP_URL is required when EINVOICE_PROVIDER=http',
+      );
+    }
+    const url = this.cancelUrl(issueUrl);
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      'Idempotency-Key': `cancel:${input.invoiceId}`,
+    };
+    const apiKey = process.env.EINVOICE_HTTP_API_KEY?.trim();
+    if (apiKey) {
+      headers.authorization = `Bearer ${apiKey}`;
+    }
+    const payload = JSON.stringify({
+      invoiceId: input.invoiceId,
+      providerRef: input.providerRef ?? null,
+      reason: input.reason,
+    });
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: payload,
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          this.logger.warn(
+            `einvoice cancel http ${res.status} attempt=${attempt}: ${this.redact(text)}`,
+          );
+          if (this.isRetryableStatus(res.status) && attempt < this.maxRetries) {
+            await this.sleep(200 * Math.pow(2, attempt));
+            continue;
+          }
+          throw new BadRequestException(
+            `einvoice_provider_cancel_error:${res.status}`,
+          );
+        }
+
+        const text = await res.text().catch(() => '');
+        if (text.trim()) {
+          let body: { status?: string };
+          try {
+            body = JSON.parse(text) as typeof body;
+          } catch {
+            throw new BadRequestException('einvoice_provider_invalid_json');
+          }
+          if (body.status && body.status !== 'cancelled') {
+            throw new BadRequestException(
+              `einvoice_provider_unknown_status:${body.status}`,
+            );
+          }
+        }
+        return;
+      } catch (err) {
+        clearTimeout(timer);
+        lastError = err;
+        const name = err instanceof Error ? err.name : '';
+        const retryable =
+          name === 'AbortError' ||
+          name === 'TimeoutError' ||
+          (err instanceof TypeError && /fetch/i.test(String(err)));
+        if (retryable && attempt < this.maxRetries) {
+          this.logger.warn(
+            `einvoice cancel http transport retry attempt=${attempt}: ${name}`,
+          );
+          await this.sleep(200 * Math.pow(2, attempt));
+          continue;
+        }
+        if (
+          err instanceof BadRequestException ||
+          err instanceof ServiceUnavailableException
+        ) {
+          throw err;
+        }
+        this.logger.error(
+          `einvoice cancel http transport failed: ${this.redact(String(err))}`,
         );
         throw new ServiceUnavailableException('einvoice_provider_unreachable');
       }

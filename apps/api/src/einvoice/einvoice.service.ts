@@ -52,6 +52,9 @@ export class EInvoiceService {
     if (sale.eInvoice?.status === EInvoiceStatus.issued) {
       return sale.eInvoice;
     }
+    if (sale.eInvoice?.status === EInvoiceStatus.cancelled) {
+      throw new BadRequestException('einvoice_cancelled');
+    }
 
     // Claim attempt row to reduce concurrent provider calls for same sale
     let claim = sale.eInvoice;
@@ -146,5 +149,60 @@ export class EInvoiceService {
       throw new ForbiddenException('store_forbidden');
     }
     return sale.eInvoice;
+  }
+
+  async cancel(
+    user: AuthUser,
+    id: string,
+    body: {
+      reason?: string;
+    },
+  ) {
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    const reason = body.reason?.trim();
+    if (!reason) {
+      throw new BadRequestException('reason required');
+    }
+
+    const invoice = await this.prisma.eInvoice.findUnique({
+      where: { id },
+      include: { sale: true },
+    });
+    if (!invoice) {
+      throw new NotFoundException('einvoice_not_found');
+    }
+    if (
+      user.role !== Role.owner &&
+      !user.storeIds.includes(invoice.sale.storeId)
+    ) {
+      throw new ForbiddenException('store_forbidden');
+    }
+
+    if (invoice.status === EInvoiceStatus.cancelled) {
+      return invoice;
+    }
+    if (
+      invoice.status !== EInvoiceStatus.issued &&
+      invoice.status !== EInvoiceStatus.pending_sign
+    ) {
+      throw new BadRequestException('einvoice_cancel_status_invalid');
+    }
+
+    await this.adapter.cancel({
+      invoiceId: invoice.id,
+      providerRef: invoice.providerRef,
+      reason,
+    });
+
+    return this.prisma.eInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: EInvoiceStatus.cancelled,
+        lastAttemptAt: new Date(),
+        errorMessage: null,
+      },
+    });
   }
 }

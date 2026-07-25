@@ -16,14 +16,24 @@ describe('Phase 3 e-invoice HTTP adapter e2e', () => {
   let storeId: string;
   let productId: string;
   let mock: Server;
-  let lastBody: unknown;
+  let lastIssueBody: unknown;
+  let lastCancelBody: unknown;
+  let lastCancelIdempotency: string | string[] | undefined;
 
   beforeAll(async () => {
     mock = createServer((req: IncomingMessage, res: ServerResponse) => {
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(Buffer.from(c)));
       req.on('end', () => {
-        lastBody = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        if (req.url?.endsWith('/cancel')) {
+          lastCancelBody = body;
+          lastCancelIdempotency = req.headers['idempotency-key'];
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ status: 'cancelled' }));
+          return;
+        }
+        lastIssueBody = body;
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -64,6 +74,7 @@ describe('Phase 3 e-invoice HTTP adapter e2e', () => {
   afterAll(async () => {
     delete process.env.EINVOICE_PROVIDER;
     delete process.env.EINVOICE_HTTP_URL;
+    delete process.env.EINVOICE_HTTP_CANCEL_URL;
     await app.close();
     await new Promise<void>((resolve, reject) =>
       mock.close((err) => (err ? reject(err) : resolve())),
@@ -142,10 +153,24 @@ describe('Phase 3 e-invoice HTTP adapter e2e', () => {
     expect(issued.body.provider).toBe('http');
     expect(issued.body.invoiceNumber).toBe('HTTP-INV-1');
     expect(issued.body.providerRef).toBe('mock-ref-1');
-    expect(lastBody).toMatchObject({
+    expect(lastIssueBody).toMatchObject({
       saleId,
       totalVnd: 15000,
       buyerTaxCode: '0123456789',
+    });
+
+    const cancelled = await request(app.getHttpServer())
+      .post(`/einvoices/${issued.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'Sai thong tin khach hang' })
+      .expect(201);
+
+    expect(cancelled.body.status).toBe('cancelled');
+    expect(lastCancelIdempotency).toBe(`cancel:${issued.body.id}`);
+    expect(lastCancelBody).toMatchObject({
+      invoiceId: issued.body.id,
+      providerRef: 'mock-ref-1',
+      reason: 'Sai thong tin khach hang',
     });
   });
 });

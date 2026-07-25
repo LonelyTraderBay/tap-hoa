@@ -21,7 +21,14 @@ export type IssueEInvoiceResult = {
   pdfPath?: string;
 };
 
+export type CancelEInvoiceInput = {
+  invoiceId: string;
+  providerRef?: string | null;
+  reason: string;
+};
+
 export interface EInvoiceAdapter {
   readonly providerName: string;
   issue(input: IssueEInvoiceInput): Promise<IssueEInvoiceResult>;
+  cancel(input: CancelEInvoiceInput): Promise<void>;
 }

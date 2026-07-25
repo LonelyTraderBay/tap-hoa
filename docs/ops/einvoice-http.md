@@ -18,6 +18,7 @@ commit real URLs, API keys, or `.env.production` to git.
 |-----|----------|---------|
 | `EINVOICE_PROVIDER` | Yes | `http` for real gateway; omit or `stub` for non-legal invoices |
 | `EINVOICE_HTTP_URL` | When `http` | HTTPS `POST` endpoint that accepts JSON (see spec) |
+| `EINVOICE_HTTP_CANCEL_URL` | Optional | Cancel endpoint; defaults to `EINVOICE_HTTP_URL` with `/issue` replaced by `/cancel` |
 | `EINVOICE_HTTP_API_KEY` | Optional | Sent as `Authorization: Bearer …` when set |
 | `EINVOICE_HTTP_TIMEOUT_MS` | Optional | Request timeout (default `15000`) |
 | `EINVOICE_HTTP_MAX_RETRIES` | Optional | Retries on 429/5xx and transport errors (default `2`) |
@@ -27,6 +28,7 @@ Example (placeholders only):
 ```env
 EINVOICE_PROVIDER=http
 EINVOICE_HTTP_URL=https://gateway.example.com/v1/issue
+EINVOICE_HTTP_CANCEL_URL=https://gateway.example.com/v1/cancel
 EINVOICE_HTTP_API_KEY=<secret-from-vault>
 EINVOICE_HTTP_TIMEOUT_MS=15000
 ```
@@ -47,6 +49,11 @@ Startup checks (HTTP mode):
 - Hosts `metadata` and `*.internal` are rejected.
 
 The adapter sends `Idempotency-Key: <saleId>` on every provider call.
+Cancel calls send `Idempotency-Key: cancel:<invoiceId>` and body:
+
+```json
+{ "invoiceId": "uuid", "providerRef": "ext-id", "reason": "customer request" }
+```
 
 ## Step 2 — Xuất 1 HĐ thử (Flutter + API verify)
 
