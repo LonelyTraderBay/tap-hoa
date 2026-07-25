@@ -479,18 +479,32 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
   bool get _periodLocked =>
       _locks.any((l) => l['periodYm']?.toString() == _periodYm);
 
-  String? _auditReason(Map<String, dynamic> row) {
+  List<String> _auditDetailLines(Map<String, dynamic> row) {
     final detailJson = row['detailJson']?.toString();
-    if (detailJson == null || detailJson.isEmpty) return null;
+    if (detailJson == null || detailJson.isEmpty) return const [];
     try {
       final detail = jsonDecode(detailJson);
-      if (detail is Map && detail['reason'] != null) {
-        return detail['reason'].toString();
+      if (detail is Map) {
+        final lines = <String>[];
+        if (detail['reason'] != null) {
+          lines.add('Lý do: ${detail['reason']}');
+        }
+        if (row['action'] == 'product_price_change') {
+          final oldPrice = detail['oldPriceVnd'];
+          final newPrice = detail['newPriceVnd'];
+          if (oldPrice != null && newPrice != null) {
+            lines.add('Giá: $oldPrice -> $newPrice VND');
+          }
+          if (detail['sku'] != null) {
+            lines.add('SKU: ${detail['sku']}');
+          }
+        }
+        return lines;
       }
     } catch (_) {
-      return null;
+      return const [];
     }
-    return null;
+    return const [];
   }
 
   String _auditActionLabel(String action) {
@@ -501,6 +515,8 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
         return 'Mở khóa';
       case 'journal_blocked_period_lock':
         return 'Chặn ghi sổ';
+      case 'product_price_change':
+        return 'Đổi giá SP';
       default:
         return action;
     }
@@ -532,7 +548,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
                     )
                   : null,
             ),
-        _sectionHeader('Nhật ký khóa sổ'),
+        _sectionHeader('Nhật ký kiểm toán'),
         if (_audit.isEmpty)
           const ListTile(title: Text('Chưa có nhật ký'))
         else
@@ -546,7 +562,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
               subtitle: Text(
                 [
                   row['at']?.toString() ?? '',
-                  if (_auditReason(row) != null) 'Lý do: ${_auditReason(row)}',
+                  ..._auditDetailLines(row),
                 ].where((v) => v.isNotEmpty).join('\n'),
               ),
             ),

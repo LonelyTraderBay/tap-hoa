@@ -26,6 +26,12 @@ import { seedChartOfAccounts } from './seed-accounts';
 export class LedgerService {
   private readonly logger = new Logger(LedgerService.name);
   private accountsReady = false;
+  private readonly defaultAuditActions = [
+    'period_lock',
+    'period_unlock',
+    'journal_blocked_period_lock',
+    'product_price_change',
+  ];
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -810,15 +816,31 @@ export class LedgerService {
     }
   }
 
-  async listAudit(user: AuthUser, limit = 50) {
+  async listAudit(
+    user: AuthUser,
+    filters: {
+      limit?: number;
+      action?: string;
+      entityType?: string;
+      entityId?: string;
+    } = {},
+  ) {
     this.assertLedgerAccess(user);
+    const limit = filters.limit ?? 50;
     const take = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
+    const where: Prisma.AuditLogWhereInput = {
+      action: filters.action
+        ? filters.action
+        : { in: this.defaultAuditActions },
+    };
+    if (filters.entityType) {
+      where.entityType = filters.entityType;
+    }
+    if (filters.entityId) {
+      where.entityId = filters.entityId;
+    }
     return this.prisma.auditLog.findMany({
-      where: {
-        action: {
-          in: ['period_lock', 'period_unlock', 'journal_blocked_period_lock'],
-        },
-      },
+      where,
       orderBy: { at: 'desc' },
       take,
     });

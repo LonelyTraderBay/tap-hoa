@@ -5,6 +5,8 @@
 ### Ops
 
 - Documented periodic `npm audit --omit=dev` tracking for `apps/api` (no `audit fix --force`; exceljs / firebase-admin transitive findings).
+- Product sync now audits `product_price_change` when an existing product price changes, exposed through ledger audit filters.
+- Sales are not silently deleted or voided; returns remain the supported correction path.
 
 ### POS
 

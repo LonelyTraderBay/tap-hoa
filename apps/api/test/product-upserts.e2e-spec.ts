@@ -87,6 +87,9 @@ describe('Product upserts sync', () => {
   });
 
   beforeEach(async () => {
+    await prisma.auditLog.deleteMany({
+      where: { action: 'product_price_change' },
+    });
     const testProducts = await prisma.product.findMany({
       where: { sku: { startsWith: 'NEW-' } },
       select: { id: true },
@@ -256,5 +259,79 @@ describe('Product upserts sync', () => {
       where: { productId: id, storeId: storeCh1 },
     });
     expect(stocks).toHaveLength(1);
+  });
+
+  it('audits product_price_change when sync changes price', async () => {
+    const login = await loginAsOwner(app);
+    const id = randomUUID();
+    const createPayload = makeProductPayload(id, storeCh1, {
+      basePriceVnd: 12000,
+    });
+
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'prod-price-1',
+        sales: [],
+        productUpserts: [createPayload],
+      })
+      .expect(201);
+
+    const updatePayload = {
+      ...createPayload,
+      basePriceVnd: 15000,
+      seedStock: undefined,
+    };
+    delete updatePayload.seedStock;
+
+    const update = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'prod-price-2',
+        sales: [],
+        productUpserts: [updatePayload],
+      })
+      .expect(201);
+    expect(update.body.acceptedProductUpsertIds).toContain(id);
+
+    const audits = await prisma.auditLog.findMany({
+      where: {
+        action: 'product_price_change',
+        entityType: 'product',
+        entityId: id,
+      },
+    });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      actorUserId: login.user.id,
+      action: 'product_price_change',
+      entityType: 'product',
+      entityId: id,
+    });
+    expect(JSON.parse(audits[0].detailJson ?? '{}')).toMatchObject({
+      oldPriceVnd: 12000,
+      newPriceVnd: 15000,
+      sku: createPayload.sku,
+      name: createPayload.name,
+      storeId: storeCh1,
+    });
+
+    const listed = await request(app.getHttpServer())
+      .get('/ledger/audit')
+      .query({
+        action: 'product_price_change',
+        entityType: 'product',
+        entityId: id,
+      })
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(200);
+    expect(listed.body).toHaveLength(1);
+    expect(listed.body[0]).toMatchObject({
+      action: 'product_price_change',
+      entityType: 'product',
+      entityId: id,
+    });
   });
 });

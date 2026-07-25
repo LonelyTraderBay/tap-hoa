@@ -121,9 +121,20 @@ export class LedgerController {
   }
 
   @Get('audit')
-  async audit(@Req() req: { user: AuthUser }, @Query('limit') limit?: string) {
+  async audit(
+    @Req() req: { user: AuthUser },
+    @Query('limit') limit?: string,
+    @Query('action') action?: string,
+    @Query('entityType') entityType?: string,
+    @Query('entityId') entityId?: string,
+  ) {
     try {
-      return await this.ledger.listAudit(req.user, limit ? Number(limit) : 50);
+      return await this.ledger.listAudit(req.user, {
+        limit: limit ? Number(limit) : 50,
+        action,
+        entityType,
+        entityId,
+      });
     } catch (e) {
       this.mapError(e);
     }
