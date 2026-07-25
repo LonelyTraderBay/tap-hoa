@@ -160,6 +160,7 @@ See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklis
 
 | Topic | Doc |
 |-------|-----|
+| **Operator checklist (A.2–A.5)** | `docs/ops/go-live-checklist.md` |
 | Deploy, migrate, backup, rollback | `docs/ops/production-deploy.md` |
 | Secrets + real owner account | `docs/ops/production-secrets.md` |
 | HĐĐT HTTP gateway / stub | `docs/ops/einvoice-http.md` |

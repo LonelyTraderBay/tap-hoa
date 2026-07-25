@@ -12,7 +12,7 @@
 | Phase 1–3 features + hardening | Done trên `main` (PR #17 merged) |
 | Wave 0 (merge hardening) | **Done** |
 | Wave 1 in-repo (Dockerfile, secrets/ops, HĐĐT checklist, Android signing, Windows pointer) | **Done** trên `main` @ `9dd1fad` |
-| `main` vs `origin/main` | Local **ahead 7** — chưa push |
+| `main` vs `origin/main` | **Synced** @ `c718984` (A.1 push done) |
 | Deploy VPS / JWT prod / owner thật / backup thật | **Chưa** (operator) |
 | Wave 2–5 | Chưa bắt đầu |
 
@@ -206,7 +206,7 @@ Một plan / một mục — không nhồi sprint go-live.
 
 1. [x] Hardening merged `main` (PR #17)
 2. [x] Wave 1 runbook + Docker + signing wiring trong repo
-3. [ ] `main` đã push `origin`
+3. [x] `main` đã push `origin`
 4. [ ] Prod: migrate + JWT + owner thật + backup restore thử
 5. [ ] POS prod bán + sync + đóng ca (≥ 1 máy; khuyến nghị 2 máy = Wave B.1)
 6. [ ] HĐĐT: gateway thử **hoặc** chấp nhận stub/off

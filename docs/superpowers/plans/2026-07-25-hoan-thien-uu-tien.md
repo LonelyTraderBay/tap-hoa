@@ -14,7 +14,7 @@
 | Hạng mục | Trạng thái |
 |----------|------------|
 | Phase 1–3 + hardening PR #17 | **Done** trên `main` |
-| Wave 0–1 (merge + ops in-repo) | **Done** local `main` @ `9dd1fad` (ahead `origin` — cần push) |
+| Wave 0–1 (merge + ops in-repo) | **Done** on `main` @ `c718984` (synced `origin/main`) |
 | Deploy VPS / secrets / backup thật | Chưa (operator) |
 | Wave 2–5 | Chưa |
 | **Kế hoạch còn lại** | `docs/superpowers/plans/2026-07-25-hoan-thien-con-lai.md` |
