@@ -375,7 +375,18 @@ export class StockOpsService {
     try {
       await this.prisma.$transaction(async (tx) => {
         for (const line of transfer.lines) {
-          const stock = await tx.productStoreStock.findUnique({
+          const sourceStock = await tx.productStoreStock.findUnique({
+            where: {
+              productId_storeId: {
+                productId: line.productId,
+                storeId: transfer.fromStoreId,
+              },
+            },
+          });
+          if (!sourceStock) {
+            throw new Error('stock_not_found');
+          }
+          const destStock = await tx.productStoreStock.findUnique({
             where: {
               productId_storeId: {
                 productId: line.productId,
@@ -383,7 +394,9 @@ export class StockOpsService {
               },
             },
           });
-          if (!stock) {
+          const oldQty = destStock ? Number(destStock.qty) : 0;
+          const oldAvg = destStock?.avgCostVnd ?? 0;
+          if (!destStock) {
             await tx.productStoreStock.create({
               data: {
                 productId: line.productId,
@@ -403,6 +416,21 @@ export class StockOpsService {
             docLineId: line.id,
             recordedById: user.userId,
             clientCreatedAt: actionAt,
+          });
+          const nextAvg = weightedAverageCost(
+            oldQty,
+            oldAvg,
+            Number(line.qty),
+            sourceStock.avgCostVnd,
+          );
+          await tx.productStoreStock.update({
+            where: {
+              productId_storeId: {
+                productId: line.productId,
+                storeId: transfer.toStoreId,
+              },
+            },
+            data: { avgCostVnd: nextAvg },
           });
         }
         await tx.stockTransfer.update({

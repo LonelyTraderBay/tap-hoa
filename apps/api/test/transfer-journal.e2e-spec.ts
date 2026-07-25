@@ -167,6 +167,11 @@ describe('Transfer journals', () => {
     expect(dr156).toBe(17500);
     expect(cr156).toBe(17500);
     expect(journal!.lines.some((l) => l.accountCode === '632')).toBe(false);
+    await expect(
+      prisma.productStoreStock.findUnique({
+        where: { productId_storeId: { productId, storeId: storeCh2 } },
+      }),
+    ).resolves.toMatchObject({ avgCostVnd: 4333 });
 
     await request(app.getHttpServer())
       .post('/sync/push')
@@ -185,6 +190,11 @@ describe('Transfer journals', () => {
         where: { sourceType: 'stock_transfer', sourceId: transferId },
       }),
     ).resolves.toBe(1);
+    await expect(
+      prisma.productStoreStock.findUnique({
+        where: { productId_storeId: { productId, storeId: storeCh2 } },
+      }),
+    ).resolves.toMatchObject({ avgCostVnd: 4333 });
   });
 
   it('blocks receive journal in a locked period and replays it on unlock', async () => {
