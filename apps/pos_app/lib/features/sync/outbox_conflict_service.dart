@@ -49,9 +49,9 @@ class OutboxConflictService {
     String? barcode,
   }) async {
     await _db.transaction(() async {
-      final entry = await (_db.select(_db.outboxEntries)
-            ..where((row) => row.id.equals(outboxRowId)))
-          .getSingle();
+      final entry = await (_db.select(
+        _db.outboxEntries,
+      )..where((row) => row.id.equals(outboxRowId))).getSingle();
       final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
       final productId = payload['id'] as String?;
       if (productId == null) {
@@ -61,8 +61,9 @@ class OutboxConflictService {
       payload['sku'] = sku;
       payload['barcode'] = barcode;
 
-      await (_db.update(_db.products)..where((row) => row.id.equals(productId)))
-          .write(
+      await (_db.update(
+        _db.products,
+      )..where((row) => row.id.equals(productId))).write(
         ProductsCompanion(
           sku: Value(sku),
           barcode: Value(barcode),
@@ -80,9 +81,9 @@ class OutboxConflictService {
     required String outboxRowId,
     required Map<String, String> productIdToQty,
   }) async {
-    final entry = await (_db.select(_db.outboxEntries)
-          ..where((row) => row.id.equals(outboxRowId)))
-        .getSingle();
+    final entry = await (_db.select(
+      _db.outboxEntries,
+    )..where((row) => row.id.equals(outboxRowId))).getSingle();
 
     switch (entry.entityType) {
       case 'sale':
@@ -127,12 +128,12 @@ class OutboxConflictService {
     await _db.transaction(() async {
       final lines = (payload['lines'] as List<dynamic>? ?? [])
           .cast<Map<String, dynamic>>();
-      var totalVnd = 0;
+      var lineSubtotalVnd = 0;
 
       for (final line in lines) {
         final productId = line['productId'] as String?;
         if (productId == null || !productIdToQty.containsKey(productId)) {
-          totalVnd += line['lineTotal'] as int? ?? 0;
+          lineSubtotalVnd += line['lineTotal'] as int? ?? 0;
           continue;
         }
 
@@ -141,14 +142,11 @@ class OutboxConflictService {
           throw StateError('invalid_qty');
         }
 
-        final unitPrice = line['unitPrice'] as int? ?? 0;
-        final lineTotal = (newQty * Decimal.fromInt(unitPrice))
-            .round()
-            .toBigInt()
-            .toInt();
+        final lineMath = _recomputeSaleLineTotal(line, newQty);
         line['qty'] = _formatQty(newQty);
-        line['lineTotal'] = lineTotal;
-        totalVnd += lineTotal;
+        line['discountVnd'] = lineMath.discountVnd;
+        line['lineTotal'] = lineMath.lineTotalVnd;
+        lineSubtotalVnd += lineMath.lineTotalVnd;
 
         final localLine =
             await (_db.select(_db.saleLinesLocal)..where(
@@ -165,12 +163,13 @@ class OutboxConflictService {
         final oldQty = Decimal.parse(localLine.qty);
         final delta = newQty - oldQty;
 
-        await (_db.update(_db.saleLinesLocal)
-              ..where((row) => row.id.equals(localLine.id)))
-            .write(
+        await (_db.update(
+          _db.saleLinesLocal,
+        )..where((row) => row.id.equals(localLine.id))).write(
           SaleLinesLocalCompanion(
             qty: Value(_formatQty(newQty)),
-            lineTotal: Value(lineTotal),
+            discountVnd: Value(lineMath.discountVnd),
+            lineTotal: Value(lineMath.lineTotalVnd),
           ),
         );
 
@@ -193,18 +192,20 @@ class OutboxConflictService {
                   stock.storeId.equals(storeId),
             ))
             .write(
-          ProductStocksCompanion(
-            qty: Value(_formatQty(stockQty)),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
+              ProductStocksCompanion(
+                qty: Value(_formatQty(stockQty)),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
       }
 
+      final totalVnd = _saleTotalVnd(payload, lineSubtotalVnd);
       payload['totalVnd'] = totalVnd;
       _rebalanceSalePayments(payload, totalVnd);
 
-      await (_db.update(_db.salesLocal)..where((row) => row.id.equals(saleId)))
-          .write(
+      await (_db.update(
+        _db.salesLocal,
+      )..where((row) => row.id.equals(saleId))).write(
         SalesLocalCompanion(
           totalVnd: Value(totalVnd),
           cashAmount: Value(payload['cashAmount'] as int? ?? 0),
@@ -264,9 +265,9 @@ class OutboxConflictService {
         final oldQty = Decimal.parse(localLine.qty);
         final delta = newQty - oldQty;
 
-        await (_db.update(_db.wastageVoucherLinesLocal)
-              ..where((row) => row.id.equals(localLine.id)))
-            .write(
+        await (_db.update(
+          _db.wastageVoucherLinesLocal,
+        )..where((row) => row.id.equals(localLine.id))).write(
           WastageVoucherLinesLocalCompanion(qty: Value(_formatQty(newQty))),
         );
 
@@ -290,11 +291,11 @@ class OutboxConflictService {
                   stock.storeId.equals(storeId),
             ))
             .write(
-          ProductStocksCompanion(
-            qty: Value(_formatQty(stockQty)),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
+              ProductStocksCompanion(
+                qty: Value(_formatQty(stockQty)),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
       }
 
       await _db.updateOutboxPayload(entry.id, jsonEncode(payload));
@@ -322,18 +323,17 @@ class OutboxConflictService {
       }
       line['qty'] = _formatQty(newQty);
       if (line.containsKey('unitPrice')) {
-        final unitPrice = line['unitPrice'] as int? ?? 0;
-        line['lineTotal'] = (newQty * Decimal.fromInt(unitPrice))
-            .round()
-            .toBigInt()
-            .toInt();
+        final lineMath = _recomputeSaleLineTotal(line, newQty);
+        line['discountVnd'] = lineMath.discountVnd;
+        line['lineTotal'] = lineMath.lineTotalVnd;
       }
     }
     if (entry.entityType == 'sale') {
-      final totalVnd = lines.fold<int>(
+      final lineSubtotalVnd = lines.fold<int>(
         0,
         (sum, line) => sum + (line['lineTotal'] as int? ?? 0),
       );
+      final totalVnd = _saleTotalVnd(payload, lineSubtotalVnd);
       payload['totalVnd'] = totalVnd;
       _rebalanceSalePayments(payload, totalVnd);
     }
@@ -361,5 +361,30 @@ class OutboxConflictService {
       return qty.truncate().toString();
     }
     return qty.toStringAsFixed(3);
+  }
+
+  ({int discountVnd, int lineTotalVnd}) _recomputeSaleLineTotal(
+    Map<String, dynamic> line,
+    Decimal qty,
+  ) {
+    final unitPrice = line['unitPrice'] as int? ?? 0;
+    final gross = (qty * Decimal.fromInt(unitPrice)).round().toBigInt().toInt();
+    final discountVnd = _clampVnd(line['discountVnd'] as int? ?? 0, gross);
+    return (discountVnd: discountVnd, lineTotalVnd: gross - discountVnd);
+  }
+
+  int _saleTotalVnd(Map<String, dynamic> payload, int lineSubtotalVnd) {
+    final discountVnd = _clampVnd(
+      payload['discountVnd'] as int? ?? 0,
+      lineSubtotalVnd,
+    );
+    payload['discountVnd'] = discountVnd;
+    return lineSubtotalVnd - discountVnd;
+  }
+
+  int _clampVnd(int value, int max) {
+    if (value < 0) return 0;
+    if (value > max) return max;
+    return value;
   }
 }

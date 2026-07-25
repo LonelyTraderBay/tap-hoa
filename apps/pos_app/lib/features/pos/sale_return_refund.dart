@@ -1,3 +1,5 @@
+import 'package:decimal/decimal.dart';
+
 /// Pure validation for sale-return refund channel split.
 class SaleReturnRefundSplit {
   const SaleReturnRefundSplit({
@@ -32,4 +34,15 @@ String? validateSaleReturnRefundSplit({
     return 'debt_credit_requires_customer';
   }
   return null;
+}
+
+int discountedReturnLineRefundVnd({
+  required Decimal soldQty,
+  required Decimal returnQty,
+  required int soldLineTotalVnd,
+}) {
+  if (soldQty <= Decimal.zero || returnQty <= Decimal.zero) {
+    return 0;
+  }
+  return (soldLineTotalVnd * returnQty.toDouble() / soldQty.toDouble()).round();
 }

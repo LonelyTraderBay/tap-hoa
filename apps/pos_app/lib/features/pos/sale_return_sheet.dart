@@ -71,24 +71,24 @@ class _SaleReturnSheetState extends State<_SaleReturnSheet> {
   Future<void> _loadSale() async {
     final id = _saleIdController.text.trim();
     if (id.isEmpty) return;
-    final sales = await (widget.db.select(widget.db.salesLocal)
-          ..where((t) => t.storeId.equals(widget.storeId)))
-        .get();
+    final sales = await (widget.db.select(
+      widget.db.salesLocal,
+    )..where((t) => t.storeId.equals(widget.storeId))).get();
     final sale = sales.where((s) => s.id.startsWith(id)).toList();
     if (sale.isEmpty) {
       setState(() => _error = 'Không tìm thấy đơn');
       return;
     }
     final match = sale.first;
-    final lines = await (widget.db.select(widget.db.saleLinesLocal)
-          ..where((t) => t.saleId.equals(match.id)))
-        .get();
+    final lines = await (widget.db.select(
+      widget.db.saleLinesLocal,
+    )..where((t) => t.saleId.equals(match.id))).get();
     final productIds = lines.map((l) => l.productId).toSet().toList();
     final products = productIds.isEmpty
         ? <Product>[]
-        : await (widget.db.select(widget.db.products)
-              ..where((t) => t.id.isIn(productIds)))
-            .get();
+        : await (widget.db.select(
+            widget.db.products,
+          )..where((t) => t.id.isIn(productIds))).get();
     final names = {for (final p in products) p.id: p.name};
     for (final c in _qtyControllers.values) {
       c.dispose();
@@ -118,7 +118,11 @@ class _SaleReturnSheetState extends State<_SaleReturnSheet> {
       final raw = _qtyControllers[line.productId]?.text.trim() ?? '0';
       final qty = Decimal.tryParse(raw) ?? Decimal.zero;
       if (qty <= Decimal.zero) continue;
-      total += (qty * Decimal.fromInt(line.unitPrice)).toDouble().round();
+      total += discountedReturnLineRefundVnd(
+        soldQty: Decimal.parse(line.qty),
+        returnQty: qty,
+        soldLineTotalVnd: line.lineTotal,
+      );
     }
     _lineRefundTotal = total;
     _cashController.text = total.toString();
@@ -136,8 +140,11 @@ class _SaleReturnSheetState extends State<_SaleReturnSheet> {
         final raw = _qtyControllers[line.productId]?.text.trim() ?? '0';
         final qty = Decimal.parse(raw);
         if (qty <= Decimal.zero) continue;
-        final refund =
-            (qty * Decimal.fromInt(line.unitPrice)).toDouble().round();
+        final refund = discountedReturnLineRefundVnd(
+          soldQty: Decimal.parse(line.qty),
+          returnQty: qty,
+          soldLineTotalVnd: line.lineTotal,
+        );
         total += refund;
         inputs.add(
           SaleReturnLineInput(
@@ -187,9 +194,9 @@ class _SaleReturnSheetState extends State<_SaleReturnSheet> {
       );
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã ghi đổi trả')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã ghi đổi trả')));
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -199,8 +206,7 @@ class _SaleReturnSheetState extends State<_SaleReturnSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final hasCustomer =
-        _customerId != null && _customerId!.trim().isNotEmpty;
+    final hasCustomer = _customerId != null && _customerId!.trim().isNotEmpty;
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -228,7 +234,9 @@ class _SaleReturnSheetState extends State<_SaleReturnSheet> {
                   labelText:
                       '${_productNames[line.productId] ?? line.productId} (đã bán ${line.qty})',
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 onChanged: (_) => setState(_recomputeRefundDefaults),
               ),
             ),
@@ -245,7 +253,9 @@ class _SaleReturnSheetState extends State<_SaleReturnSheet> {
                 controller: _transferController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(labelText: 'Hoàn chuyển khoản'),
+                decoration: const InputDecoration(
+                  labelText: 'Hoàn chuyển khoản',
+                ),
               ),
               TextField(
                 controller: _debtCreditController,

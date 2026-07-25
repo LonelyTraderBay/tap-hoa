@@ -34,8 +34,14 @@ void main() {
       expect(labelOutboxReason('credit_limit_exceeded'), 'Vượt hạn mức nợ');
       expect(labelOutboxReason('store_forbidden'), 'Không có quyền / cửa hàng');
       expect(labelOutboxReason('role_forbidden'), 'Không có quyền / cửa hàng');
-      expect(labelOutboxReason('shift_not_open'), 'Ca chưa mở / không tìm thấy ca');
-      expect(labelOutboxReason('shift_not_found'), 'Ca chưa mở / không tìm thấy ca');
+      expect(
+        labelOutboxReason('shift_not_open'),
+        'Ca chưa mở / không tìm thấy ca',
+      );
+      expect(
+        labelOutboxReason('shift_not_found'),
+        'Ca chưa mở / không tìm thấy ca',
+      );
       expect(labelOutboxReason('invalid_payload'), 'Dữ liệu không hợp lệ');
       expect(labelOutboxReason('invalid_qty'), 'Dữ liệu không hợp lệ');
     });
@@ -55,34 +61,40 @@ void main() {
 
   group('listErrors', () {
     test('returns only error rows newest first', () async {
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: 'err-old',
-          entityType: 'sale',
-          payloadJson: '{}',
-          createdAt: DateTime(2026, 1, 1),
-          status: const Value('error'),
-          lastError: const Value('insufficient_stock'),
-        ),
-      );
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: 'err-new',
-          entityType: 'sale',
-          payloadJson: '{}',
-          createdAt: DateTime(2026, 1, 2),
-          status: const Value('error'),
-          lastError: const Value('sku_conflict'),
-        ),
-      );
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: 'pending-1',
-          entityType: 'sale',
-          payloadJson: '{}',
-          createdAt: DateTime(2026, 1, 3),
-        ),
-      );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: 'err-old',
+              entityType: 'sale',
+              payloadJson: '{}',
+              createdAt: DateTime(2026, 1, 1),
+              status: const Value('error'),
+              lastError: const Value('insufficient_stock'),
+            ),
+          );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: 'err-new',
+              entityType: 'sale',
+              payloadJson: '{}',
+              createdAt: DateTime(2026, 1, 2),
+              status: const Value('error'),
+              lastError: const Value('sku_conflict'),
+            ),
+          );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: 'pending-1',
+              entityType: 'sale',
+              payloadJson: '{}',
+              createdAt: DateTime(2026, 1, 3),
+            ),
+          );
 
       final errors = await service.listErrors();
       expect(errors.map((e) => e.id), ['err-new', 'err-old']);
@@ -91,16 +103,18 @@ void main() {
 
   group('retry', () {
     Future<void> seedErrorOutbox(String outboxRowId) async {
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: outboxRowId,
-          entityType: 'sale',
-          payloadJson: jsonEncode({'id': 'sale-1'}),
-          createdAt: DateTime(2026),
-          status: const Value('error'),
-          lastError: const Value('insufficient_stock'),
-        ),
-      );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: outboxRowId,
+              entityType: 'sale',
+              payloadJson: jsonEncode({'id': 'sale-1'}),
+              createdAt: DateTime(2026),
+              status: const Value('error'),
+              lastError: const Value('insufficient_stock'),
+            ),
+          );
     }
 
     test('requeue clears error and calls worker tick', () async {
@@ -109,9 +123,9 @@ void main() {
 
       await service.retry(outboxRowId);
 
-      final row = await (db.select(db.outboxEntries)
-            ..where((r) => r.id.equals(outboxRowId)))
-          .getSingle();
+      final row = await (db.select(
+        db.outboxEntries,
+      )..where((r) => r.id.equals(outboxRowId))).getSingle();
       expect(row.status, 'pending');
       expect(row.lastError, isNull);
       verify(() => worker.tick()).called(1);
@@ -124,22 +138,27 @@ void main() {
       await service.retryAll();
 
       final rows = await db.select(db.outboxEntries).get();
-      expect(rows.every((r) => r.status == 'pending' && r.lastError == null), isTrue);
+      expect(
+        rows.every((r) => r.status == 'pending' && r.lastError == null),
+        isTrue,
+      );
       verify(() => worker.tick()).called(1);
     });
   });
 
   group('saveRawJson', () {
     test('rejects invalid JSON', () async {
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: 'outbox-raw',
-          entityType: 'sale',
-          payloadJson: '{}',
-          createdAt: DateTime(2026),
-          status: const Value('error'),
-        ),
-      );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: 'outbox-raw',
+              entityType: 'sale',
+              payloadJson: '{}',
+              createdAt: DateTime(2026),
+              status: const Value('error'),
+            ),
+          );
 
       await expectLater(
         service.saveRawJson('outbox-raw', 'not-json'),
@@ -153,23 +172,25 @@ void main() {
 
     test('saves valid object, requeues, and ticks', () async {
       const outboxRowId = 'outbox-raw-ok';
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: outboxRowId,
-          entityType: 'sale',
-          payloadJson: jsonEncode({'id': 'sale-1', 'totalVnd': 1000}),
-          createdAt: DateTime(2026),
-          status: const Value('error'),
-          lastError: const Value('invalid_payload'),
-        ),
-      );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: outboxRowId,
+              entityType: 'sale',
+              payloadJson: jsonEncode({'id': 'sale-1', 'totalVnd': 1000}),
+              createdAt: DateTime(2026),
+              status: const Value('error'),
+              lastError: const Value('invalid_payload'),
+            ),
+          );
 
       const newJson = '{"id":"sale-1","totalVnd":2000}';
       await service.saveRawJson(outboxRowId, newJson);
 
-      final row = await (db.select(db.outboxEntries)
-            ..where((r) => r.id.equals(outboxRowId)))
-          .getSingle();
+      final row = await (db.select(
+        db.outboxEntries,
+      )..where((r) => r.id.equals(outboxRowId))).getSingle();
       expect(row.payloadJson, newJson);
       expect(row.status, 'pending');
       expect(row.lastError, isNull);
@@ -181,32 +202,36 @@ void main() {
     test('updates payload and local product then requeues', () async {
       const productId = 'prod-1';
       const outboxRowId = 'outbox-prod-1';
-      await db.into(db.products).insert(
-        ProductsCompanion.insert(
-          id: productId,
-          sku: 'OLD-SKU',
-          barcode: const Value('111'),
-          name: 'Test',
-          unit: 'cái',
-          basePriceVnd: 10000,
-          updatedAt: DateTime(2026),
-        ),
-      );
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: outboxRowId,
-          entityType: 'product_upsert',
-          payloadJson: jsonEncode({
-            'id': productId,
-            'sku': 'OLD-SKU',
-            'barcode': '111',
-            'name': 'Test',
-          }),
-          createdAt: DateTime(2026),
-          status: const Value('error'),
-          lastError: const Value('sku_conflict'),
-        ),
-      );
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: productId,
+              sku: 'OLD-SKU',
+              barcode: const Value('111'),
+              name: 'Test',
+              unit: 'cái',
+              basePriceVnd: 10000,
+              updatedAt: DateTime(2026),
+            ),
+          );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: outboxRowId,
+              entityType: 'product_upsert',
+              payloadJson: jsonEncode({
+                'id': productId,
+                'sku': 'OLD-SKU',
+                'barcode': '111',
+                'name': 'Test',
+              }),
+              createdAt: DateTime(2026),
+              status: const Value('error'),
+              lastError: const Value('sku_conflict'),
+            ),
+          );
 
       await service.saveProductUpsertIdentity(
         outboxRowId: outboxRowId,
@@ -214,15 +239,15 @@ void main() {
         barcode: '222',
       );
 
-      final product = await (db.select(db.products)
-            ..where((p) => p.id.equals(productId)))
-          .getSingle();
+      final product = await (db.select(
+        db.products,
+      )..where((p) => p.id.equals(productId))).getSingle();
       expect(product.sku, 'NEW-SKU');
       expect(product.barcode, '222');
 
-      final outbox = await (db.select(db.outboxEntries)
-            ..where((r) => r.id.equals(outboxRowId)))
-          .getSingle();
+      final outbox = await (db.select(
+        db.outboxEntries,
+      )..where((r) => r.id.equals(outboxRowId))).getSingle();
       final payload = jsonDecode(outbox.payloadJson) as Map<String, dynamic>;
       expect(payload['sku'], 'NEW-SKU');
       expect(payload['barcode'], '222');
@@ -237,147 +262,265 @@ void main() {
       required String outboxRowId,
       String qty = '2',
       String stockQty = '8',
+      int lineDiscountVnd = 0,
+      int invoiceDiscountVnd = 0,
+      int lineTotalVnd = 20000,
+      int totalVnd = 20000,
     }) async {
-      await db.into(db.products).insert(
-        ProductsCompanion.insert(
-          id: 'p1',
-          sku: 'SKU-1',
-          name: 'Product',
-          unit: 'cái',
-          basePriceVnd: 10000,
-          updatedAt: DateTime(2026),
-        ),
-      );
-      await db.into(db.productStocks).insert(
-        ProductStocksCompanion.insert(
-          productId: 'p1',
-          storeId: 'store-1',
-          qty: stockQty,
-          minQty: '0',
-          updatedAt: DateTime(2026),
-        ),
-      );
-      await db.into(db.salesLocal).insert(
-        SalesLocalCompanion.insert(
-          id: saleId,
-          storeId: 'store-1',
-          shiftId: 'shift-1',
-          paymentMethod: 'cash',
-          totalVnd: 20000,
-          cashAmount: 20000,
-          transferAmount: 0,
-          debtAmount: 0,
-          clientCreatedAt: DateTime(2026),
-        ),
-      );
-      await db.into(db.saleLinesLocal).insert(
-        SaleLinesLocalCompanion.insert(
-          id: 'line-1',
-          saleId: saleId,
-          productId: 'p1',
-          qty: qty,
-          unitPrice: 10000,
-          lineTotal: 20000,
-        ),
-      );
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: outboxRowId,
-          entityType: 'sale',
-          payloadJson: jsonEncode({
-            'id': saleId,
-            'storeId': 'store-1',
-            'shiftId': 'shift-1',
-            'soldById': 'user-1',
-            'paymentMethod': 'cash',
-            'cashAmount': 20000,
-            'transferAmount': 0,
-            'debtAmount': 0,
-            'discountVnd': 0,
-            'totalVnd': 20000,
-            'clientCreatedAt': DateTime.utc(2026).toIso8601String(),
-            'lines': [
-              {
-                'productId': 'p1',
-                'qty': qty,
-                'unitPrice': 10000,
-                'lineTotal': 20000,
-              },
-            ],
-          }),
-          createdAt: DateTime(2026),
-          status: const Value('error'),
-          lastError: const Value('insufficient_stock'),
-        ),
-      );
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p1',
+              sku: 'SKU-1',
+              name: 'Product',
+              unit: 'cái',
+              basePriceVnd: 10000,
+              updatedAt: DateTime(2026),
+            ),
+          );
+      await db
+          .into(db.productStocks)
+          .insert(
+            ProductStocksCompanion.insert(
+              productId: 'p1',
+              storeId: 'store-1',
+              qty: stockQty,
+              minQty: '0',
+              updatedAt: DateTime(2026),
+            ),
+          );
+      await db
+          .into(db.salesLocal)
+          .insert(
+            SalesLocalCompanion.insert(
+              id: saleId,
+              storeId: 'store-1',
+              shiftId: 'shift-1',
+              paymentMethod: 'cash',
+              totalVnd: totalVnd,
+              cashAmount: totalVnd,
+              transferAmount: 0,
+              debtAmount: 0,
+              clientCreatedAt: DateTime(2026),
+            ),
+          );
+      await db
+          .into(db.saleLinesLocal)
+          .insert(
+            SaleLinesLocalCompanion.insert(
+              id: 'line-1',
+              saleId: saleId,
+              productId: 'p1',
+              qty: qty,
+              unitPrice: 10000,
+              discountVnd: Value(lineDiscountVnd),
+              lineTotal: lineTotalVnd,
+            ),
+          );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: outboxRowId,
+              entityType: 'sale',
+              payloadJson: jsonEncode({
+                'id': saleId,
+                'storeId': 'store-1',
+                'shiftId': 'shift-1',
+                'soldById': 'user-1',
+                'paymentMethod': 'cash',
+                'cashAmount': totalVnd,
+                'transferAmount': 0,
+                'debtAmount': 0,
+                'discountVnd': invoiceDiscountVnd,
+                'totalVnd': totalVnd,
+                'clientCreatedAt': DateTime.utc(2026).toIso8601String(),
+                'lines': [
+                  {
+                    'productId': 'p1',
+                    'qty': qty,
+                    'unitPrice': 10000,
+                    'discountVnd': lineDiscountVnd,
+                    'lineTotal': lineTotalVnd,
+                  },
+                ],
+              }),
+              createdAt: DateTime(2026),
+              status: const Value('error'),
+              lastError: const Value('insufficient_stock'),
+            ),
+          );
       return saleId;
     }
 
-    test('sale qty decrease updates line, stock, total, and requeues', () async {
-      const saleId = 'sale-qty';
-      const outboxRowId = 'outbox-sale-qty';
-      await seedSaleWithStock(saleId: saleId, outboxRowId: outboxRowId);
+    test(
+      'sale qty decrease updates line, stock, total, and requeues',
+      () async {
+        const saleId = 'sale-qty';
+        const outboxRowId = 'outbox-sale-qty';
+        await seedSaleWithStock(saleId: saleId, outboxRowId: outboxRowId);
 
-      final localSynced = await service.saveInsufficientStockQtys(
-        outboxRowId: outboxRowId,
-        productIdToQty: const {'p1': '1'},
-      );
+        final localSynced = await service.saveInsufficientStockQtys(
+          outboxRowId: outboxRowId,
+          productIdToQty: const {'p1': '1'},
+        );
 
-      expect(localSynced, isTrue);
+        expect(localSynced, isTrue);
 
-      final line = await (db.select(db.saleLinesLocal)
-            ..where((l) => l.saleId.equals(saleId) & l.productId.equals('p1')))
-          .getSingle();
-      expect(line.qty, '1');
-      expect(line.lineTotal, 10000);
+        final line =
+            await (db.select(db.saleLinesLocal)..where(
+                  (l) => l.saleId.equals(saleId) & l.productId.equals('p1'),
+                ))
+                .getSingle();
+        expect(line.qty, '1');
+        expect(line.lineTotal, 10000);
 
-      final stock = await (db.select(db.productStocks)
-            ..where(
-              (s) => s.productId.equals('p1') & s.storeId.equals('store-1'),
-            ))
-          .getSingle();
-      expect(Decimal.parse(stock.qty), Decimal.parse('9'));
+        final stock =
+            await (db.select(db.productStocks)..where(
+                  (s) => s.productId.equals('p1') & s.storeId.equals('store-1'),
+                ))
+                .getSingle();
+        expect(Decimal.parse(stock.qty), Decimal.parse('9'));
 
-      final sale = await (db.select(db.salesLocal)
-            ..where((s) => s.id.equals(saleId)))
-          .getSingle();
-      expect(sale.totalVnd, 10000);
-      expect(sale.cashAmount, 10000);
+        final sale = await (db.select(
+          db.salesLocal,
+        )..where((s) => s.id.equals(saleId))).getSingle();
+        expect(sale.totalVnd, 10000);
+        expect(sale.cashAmount, 10000);
 
-      final outbox = await (db.select(db.outboxEntries)
-            ..where((r) => r.id.equals(outboxRowId)))
-          .getSingle();
-      final payload = jsonDecode(outbox.payloadJson) as Map<String, dynamic>;
-      expect(payload['totalVnd'], 10000);
-      expect((payload['lines'] as List).single['qty'], '1');
-      expect(outbox.status, 'pending');
-      verify(() => worker.tick()).called(1);
-    });
+        final outbox = await (db.select(
+          db.outboxEntries,
+        )..where((r) => r.id.equals(outboxRowId))).getSingle();
+        final payload = jsonDecode(outbox.payloadJson) as Map<String, dynamic>;
+        expect(payload['totalVnd'], 10000);
+        expect((payload['lines'] as List).single['qty'], '1');
+        expect(outbox.status, 'pending');
+        verify(() => worker.tick()).called(1);
+      },
+    );
+
+    test(
+      'discounted sale retry keeps net line and invoice totals valid',
+      () async {
+        const saleId = 'sale-discounted';
+        const outboxRowId = 'outbox-sale-discounted';
+        await seedSaleWithStock(
+          saleId: saleId,
+          outboxRowId: outboxRowId,
+          lineDiscountVnd: 3000,
+          invoiceDiscountVnd: 2000,
+          lineTotalVnd: 17000,
+          totalVnd: 15000,
+        );
+
+        await service.saveInsufficientStockQtys(
+          outboxRowId: outboxRowId,
+          productIdToQty: const {'p1': '1'},
+        );
+
+        final line =
+            await (db.select(db.saleLinesLocal)..where(
+                  (l) => l.saleId.equals(saleId) & l.productId.equals('p1'),
+                ))
+                .getSingle();
+        expect(line.qty, '1');
+        expect(line.discountVnd, 3000);
+        expect(line.lineTotal, 7000);
+
+        final sale = await (db.select(
+          db.salesLocal,
+        )..where((s) => s.id.equals(saleId))).getSingle();
+        expect(sale.totalVnd, 5000);
+        expect(sale.cashAmount, 5000);
+
+        final outbox = await (db.select(
+          db.outboxEntries,
+        )..where((r) => r.id.equals(outboxRowId))).getSingle();
+        final payload = jsonDecode(outbox.payloadJson) as Map<String, dynamic>;
+        expect(payload['discountVnd'], 2000);
+        expect(payload['totalVnd'], 5000);
+        expect(payload['cashAmount'], 5000);
+
+        final payloadLine =
+            (payload['lines'] as List<dynamic>).single as Map<String, dynamic>;
+        expect(payloadLine['qty'], '1');
+        expect(payloadLine['discountVnd'], 3000);
+        expect(payloadLine['lineTotal'], 7000);
+      },
+    );
+
+    test(
+      'discounted sale retry clamps discounts after qty reduction',
+      () async {
+        const saleId = 'sale-discount-clamp';
+        const outboxRowId = 'outbox-sale-discount-clamp';
+        await seedSaleWithStock(
+          saleId: saleId,
+          outboxRowId: outboxRowId,
+          lineDiscountVnd: 12000,
+          invoiceDiscountVnd: 2000,
+          lineTotalVnd: 8000,
+          totalVnd: 6000,
+        );
+
+        await service.saveInsufficientStockQtys(
+          outboxRowId: outboxRowId,
+          productIdToQty: const {'p1': '1'},
+        );
+
+        final line =
+            await (db.select(db.saleLinesLocal)..where(
+                  (l) => l.saleId.equals(saleId) & l.productId.equals('p1'),
+                ))
+                .getSingle();
+        expect(line.discountVnd, 10000);
+        expect(line.lineTotal, 0);
+
+        final sale = await (db.select(
+          db.salesLocal,
+        )..where((s) => s.id.equals(saleId))).getSingle();
+        expect(sale.totalVnd, 0);
+        expect(sale.cashAmount, 0);
+
+        final outbox = await (db.select(
+          db.outboxEntries,
+        )..where((r) => r.id.equals(outboxRowId))).getSingle();
+        final payload = jsonDecode(outbox.payloadJson) as Map<String, dynamic>;
+        expect(payload['discountVnd'], 0);
+        expect(payload['totalVnd'], 0);
+
+        final payloadLine =
+            (payload['lines'] as List<dynamic>).single as Map<String, dynamic>;
+        expect(payloadLine['discountVnd'], 10000);
+        expect(payloadLine['lineTotal'], 0);
+      },
+    );
 
     test('throws use_raw_json for unsupported entity types', () async {
-      await db.into(db.outboxEntries).insert(
-        OutboxEntriesCompanion.insert(
-          id: 'outbox-transfer',
-          entityType: 'stock_transfer_create',
-          payloadJson: jsonEncode({
-            'id': 'xfer-1',
-            'lines': [
-              {'productId': 'p1', 'qty': '1'},
-            ],
-          }),
-          createdAt: DateTime(2026),
-          status: const Value('error'),
-        ),
-      );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: 'outbox-transfer',
+              entityType: 'stock_transfer_create',
+              payloadJson: jsonEncode({
+                'id': 'xfer-1',
+                'lines': [
+                  {'productId': 'p1', 'qty': '1'},
+                ],
+              }),
+              createdAt: DateTime(2026),
+              status: const Value('error'),
+            ),
+          );
 
       await expectLater(
         service.saveInsufficientStockQtys(
           outboxRowId: 'outbox-transfer',
           productIdToQty: const {'p1': '2'},
         ),
-        throwsA(
-          predicate<StateError>((e) => e.message == 'use_raw_json'),
-        ),
+        throwsA(predicate<StateError>((e) => e.message == 'use_raw_json')),
       );
     });
   });
