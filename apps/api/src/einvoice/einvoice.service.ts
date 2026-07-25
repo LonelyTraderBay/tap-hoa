@@ -37,7 +37,7 @@ export class EInvoiceService {
 
     const sale = await this.prisma.sale.findUnique({
       where: { id: body.saleId },
-      include: { eInvoice: true },
+      include: { eInvoice: true, lines: true },
     });
     if (!sale) {
       throw new NotFoundException('sale_not_found');
@@ -59,6 +59,12 @@ export class EInvoiceService {
       buyerTaxCode: body.buyerTaxCode,
       templateCode: body.templateCode,
       serial: body.serial,
+      lines: sale.lines.map((l) => ({
+        productId: l.productId,
+        qty: Number(l.qty),
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal,
+      })),
     });
 
     const status =

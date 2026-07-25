@@ -175,7 +175,7 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
               padding: const EdgeInsets.all(16),
               children: [
                 const Text(
-                  'Chọn đơn đã sync trong ngày (ICT). Stub provider — chưa gửi CQT.',
+                  'Chọn đơn đã sync trong ngày (ICT). Provider theo cấu hình server (stub hoặc HTTP gateway).',
                 ),
                 const SizedBox(height: 12),
                 if (_sales.isEmpty)
