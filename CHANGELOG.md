@@ -40,6 +40,12 @@
 - Sale lines included in provider payload; Flutter copy updated
 - `POST /einvoices/:id/cancel` cancels issued/pending-sign HĐĐT only; Flutter adds a reason-confirmed cancel action.
 
+### Wave 6 — HĐĐT gộp + điều chỉnh
+
+- `POST /einvoices/issue-batch` issues one HĐĐT for multiple synced same-customer sales.
+- `POST /einvoices/:id/adjust` creates a linked adjustment invoice via stub/HTTP providers.
+- Flutter HĐĐT screen supports same-customer multi-select and issued-invoice adjustment.
+
 ### Phase 3 — VAT / GTGT
 
 - Store flags: `vatEnabled`, `defaultVatRateBps`; product optional `vatRateBps`

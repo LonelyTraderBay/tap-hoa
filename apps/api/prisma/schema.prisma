@@ -85,6 +85,7 @@ enum EInvoiceStatus {
   issued
   failed
   cancelled
+  adjusted
 }
 
 model Store {
@@ -299,7 +300,8 @@ model Sale {
   lines          SaleLine[]
   debtLedger     DebtLedgerEntry?
   returns        SaleReturn[]
-  eInvoice       EInvoice?
+  eInvoices      EInvoice[]
+  eInvoiceLinks  EInvoiceSale[]
   @@index([storeId, clientCreatedAt])
 }
 
@@ -783,7 +785,7 @@ model SupplierPayment {
 
 model EInvoice {
   id              String         @id @default(uuid())
-  saleId          String         @unique
+  saleId          String
   status          EInvoiceStatus @default(draft)
   buyerTaxCode    String?
   templateCode    String?
@@ -797,8 +799,25 @@ model EInvoice {
   retryCount      Int            @default(0)
   lastAttemptAt   DateTime?
   issuedAt        DateTime?
+  adjustmentForId String?
+  adjustmentReason String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   sale            Sale           @relation(fields: [saleId], references: [id])
+  saleLinks       EInvoiceSale[]
+  adjustmentFor   EInvoice?      @relation("EInvoiceAdjustments", fields: [adjustmentForId], references: [id])
+  adjustments     EInvoice[]     @relation("EInvoiceAdjustments")
   @@index([status])
+  @@index([saleId])
+  @@index([adjustmentForId])
+}
+
+model EInvoiceSale {
+  invoiceId String
+  saleId    String
+  invoice   EInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sale      Sale     @relation(fields: [saleId], references: [id])
+
+  @@id([invoiceId, saleId])
+  @@index([saleId])
 }

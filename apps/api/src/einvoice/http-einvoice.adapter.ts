@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
+  AdjustEInvoiceInput,
   CancelEInvoiceInput,
   EInvoiceAdapter,
   IssueEInvoiceInput,
@@ -13,6 +14,14 @@ import {
 } from './einvoice.adapter';
 
 const ALLOWED_STATUSES = new Set(['issued', 'pending_sign', 'failed']);
+
+type ProviderIssueBody = {
+  providerRef?: string;
+  invoiceNumber?: string;
+  status?: string;
+  xmlPath?: string;
+  pdfPath?: string;
+};
 
 /**
  * Generic HTTP e-invoice gateway.
@@ -38,6 +47,7 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
     }
     this.validateEndpoint(url, 'EINVOICE_HTTP_URL');
     this.validateEndpoint(this.cancelUrl(url), 'EINVOICE_HTTP_CANCEL_URL');
+    this.validateEndpoint(this.adjustUrl(url), 'EINVOICE_HTTP_ADJUST_URL');
   }
 
   private validateEndpoint(url: string, envName: string) {
@@ -69,6 +79,13 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
     return derived === issueUrl ? `${issueUrl.replace(/\/$/, '')}/cancel` : derived;
   }
 
+  private adjustUrl(issueUrl: string): string {
+    const configured = process.env.EINVOICE_HTTP_ADJUST_URL?.trim();
+    if (configured) return configured;
+    const derived = issueUrl.replace(/\/issue\/?$/i, '/adjust');
+    return derived === issueUrl ? `${issueUrl.replace(/\/$/, '')}/adjust` : derived;
+  }
+
   private sleep(ms: number) {
     return new Promise((r) => setTimeout(r, ms));
   }
@@ -84,31 +101,41 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
     return status === 429 || status >= 500;
   }
 
-  async issue(input: IssueEInvoiceInput): Promise<IssueEInvoiceResult> {
-    const url = process.env.EINVOICE_HTTP_URL?.trim();
-    if (!url) {
-      throw new ServiceUnavailableException(
-        'EINVOICE_HTTP_URL is required when EINVOICE_PROVIDER=http',
+  private parseIssueBody(body: ProviderIssueBody): IssueEInvoiceResult {
+    if (!body.providerRef || !body.invoiceNumber) {
+      throw new BadRequestException('einvoice_provider_invalid_response');
+    }
+    if (body.xmlPath && !/^https?:\/\//i.test(body.xmlPath)) {
+      throw new BadRequestException('einvoice_provider_invalid_xml_url');
+    }
+    if (body.pdfPath && !/^https?:\/\//i.test(body.pdfPath)) {
+      throw new BadRequestException('einvoice_provider_invalid_pdf_url');
+    }
+    const rawStatus = body.status ?? 'issued';
+    if (!ALLOWED_STATUSES.has(rawStatus)) {
+      throw new BadRequestException(
+        `einvoice_provider_unknown_status:${rawStatus}`,
       );
     }
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      'Idempotency-Key': input.saleId,
-    };
-    const apiKey = process.env.EINVOICE_HTTP_API_KEY?.trim();
-    if (apiKey) {
-      headers.authorization = `Bearer ${apiKey}`;
+    if (rawStatus === 'failed') {
+      throw new BadRequestException('einvoice_provider_failed');
     }
-    const payload = JSON.stringify({
-      saleId: input.saleId,
-      totalVnd: input.totalVnd,
-      buyerTaxCode: input.buyerTaxCode ?? null,
-      templateCode: input.templateCode ?? null,
-      serial: input.serial ?? null,
-      lines: input.lines ?? [],
-    });
+    return {
+      provider: this.providerName,
+      providerRef: body.providerRef,
+      invoiceNumber: body.invoiceNumber,
+      status: rawStatus as 'issued' | 'pending_sign',
+      xmlPath: body.xmlPath,
+      pdfPath: body.pdfPath,
+    };
+  }
 
+  private async postForIssueResult(
+    url: string,
+    headers: Record<string, string>,
+    payload: string,
+    logPrefix: string,
+  ): Promise<IssueEInvoiceResult> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const controller = new AbortController();
@@ -125,7 +152,7 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
         if (!res.ok) {
           const text = await res.text().catch(() => '');
           this.logger.warn(
-            `einvoice http ${res.status} attempt=${attempt}: ${this.redact(text)}`,
+            `${logPrefix} http ${res.status} attempt=${attempt}: ${this.redact(text)}`,
           );
           if (this.isRetryableStatus(res.status) && attempt < this.maxRetries) {
             await this.sleep(200 * Math.pow(2, attempt));
@@ -136,44 +163,12 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
           );
         }
 
-        let body: {
-          providerRef?: string;
-          invoiceNumber?: string;
-          status?: string;
-          xmlPath?: string;
-          pdfPath?: string;
-        };
         try {
-          body = (await res.json()) as typeof body;
-        } catch {
+          return this.parseIssueBody((await res.json()) as ProviderIssueBody);
+        } catch (err) {
+          if (err instanceof BadRequestException) throw err;
           throw new BadRequestException('einvoice_provider_invalid_json');
         }
-        if (!body.providerRef || !body.invoiceNumber) {
-          throw new BadRequestException('einvoice_provider_invalid_response');
-        }
-        if (body.xmlPath && !/^https?:\/\//i.test(body.xmlPath)) {
-          throw new BadRequestException('einvoice_provider_invalid_xml_url');
-        }
-        if (body.pdfPath && !/^https?:\/\//i.test(body.pdfPath)) {
-          throw new BadRequestException('einvoice_provider_invalid_pdf_url');
-        }
-        const rawStatus = body.status ?? 'issued';
-        if (!ALLOWED_STATUSES.has(rawStatus)) {
-          throw new BadRequestException(
-            `einvoice_provider_unknown_status:${rawStatus}`,
-          );
-        }
-        if (rawStatus === 'failed') {
-          throw new BadRequestException('einvoice_provider_failed');
-        }
-        return {
-          provider: this.providerName,
-          providerRef: body.providerRef,
-          invoiceNumber: body.invoiceNumber,
-          status: rawStatus as 'issued' | 'pending_sign',
-          xmlPath: body.xmlPath,
-          pdfPath: body.pdfPath,
-        };
       } catch (err) {
         clearTimeout(timer);
         lastError = err;
@@ -184,7 +179,7 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
           (err instanceof TypeError && /fetch/i.test(String(err)));
         if (retryable && attempt < this.maxRetries) {
           this.logger.warn(
-            `einvoice http transport retry attempt=${attempt}: ${name}`,
+            `${logPrefix} http transport retry attempt=${attempt}: ${name}`,
           );
           await this.sleep(200 * Math.pow(2, attempt));
           continue;
@@ -196,7 +191,7 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
           throw err;
         }
         this.logger.error(
-          `einvoice http transport failed: ${this.redact(String(err))}`,
+          `${logPrefix} http transport failed: ${this.redact(String(err))}`,
         );
         throw new ServiceUnavailableException('einvoice_provider_unreachable');
       }
@@ -204,6 +199,38 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
     throw lastError instanceof Error
       ? lastError
       : new ServiceUnavailableException('einvoice_provider_unreachable');
+  }
+
+  async issue(input: IssueEInvoiceInput): Promise<IssueEInvoiceResult> {
+    const url = process.env.EINVOICE_HTTP_URL?.trim();
+    if (!url) {
+      throw new ServiceUnavailableException(
+        'EINVOICE_HTTP_URL is required when EINVOICE_PROVIDER=http',
+      );
+    }
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      'Idempotency-Key':
+        input.saleIds && input.saleIds.length > 1
+          ? `batch:${input.saleIds.join(',')}`
+          : input.saleId,
+    };
+    const apiKey = process.env.EINVOICE_HTTP_API_KEY?.trim();
+    if (apiKey) {
+      headers.authorization = `Bearer ${apiKey}`;
+    }
+    const payload = JSON.stringify({
+      saleId: input.saleId,
+      saleIds: input.saleIds ?? [input.saleId],
+      totalVnd: input.totalVnd,
+      buyerTaxCode: input.buyerTaxCode ?? null,
+      templateCode: input.templateCode ?? null,
+      serial: input.serial ?? null,
+      lines: input.lines ?? [],
+    });
+
+    return this.postForIssueResult(url, headers, payload, 'einvoice');
   }
 
   async cancel(input: CancelEInvoiceInput): Promise<void> {
@@ -301,5 +328,35 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
     throw lastError instanceof Error
       ? lastError
       : new ServiceUnavailableException('einvoice_provider_unreachable');
+  }
+
+  async adjust(input: AdjustEInvoiceInput): Promise<IssueEInvoiceResult> {
+    const issueUrl = process.env.EINVOICE_HTTP_URL?.trim();
+    if (!issueUrl) {
+      throw new ServiceUnavailableException(
+        'EINVOICE_HTTP_URL is required when EINVOICE_PROVIDER=http',
+      );
+    }
+    const url = this.adjustUrl(issueUrl);
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      'Idempotency-Key': `adjust:${input.invoiceId}`,
+    };
+    const apiKey = process.env.EINVOICE_HTTP_API_KEY?.trim();
+    if (apiKey) {
+      headers.authorization = `Bearer ${apiKey}`;
+    }
+    const payload = JSON.stringify({
+      invoiceId: input.invoiceId,
+      providerRef: input.providerRef ?? null,
+      originalInvoiceNumber: input.originalInvoiceNumber ?? null,
+      saleIds: input.saleIds,
+      totalVnd: input.totalVnd,
+      reason: input.reason,
+      lines: input.lines ?? [],
+    });
+
+    return this.postForIssueResult(url, headers, payload, 'einvoice adjust');
   }
 }
