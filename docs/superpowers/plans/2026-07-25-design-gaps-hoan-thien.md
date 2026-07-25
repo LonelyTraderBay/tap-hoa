@@ -10,6 +10,24 @@
 
 **Tech Stack:** Flutter 3 + Drift; NestJS 10 + Prisma + PostgreSQL; HĐĐT stub|http; WAC (không chuyển FIFO).
 
+**Trạng thái (2026-07-25, Waves 0–9 in-repo trên `feat/design-gaps-hoan-thien`):**
+
+| Hạng mục | Status |
+|----------|--------|
+| Wave 0 in-repo (checklist + ops docs) | **Done** |
+| Wave 0 VPS / smoke thật (A.2–A.5, B.1) | **Chưa** (operator) |
+| Wave 1 — POS giỏ + barcode | **Done** in-repo |
+| Wave 2 — Bán cân | **Done** in-repo |
+| Wave 3 — Transfer journals | **Done** in-repo |
+| Wave 4 — Sổ cái | **Done** in-repo |
+| Wave 5 — PO | **Done** in-repo |
+| Wave 5b — Đối chiếu sao kê NCC | **Deferred** (optional) |
+| Wave 6 — HĐĐT gộp + điều chỉnh | **Done** in-repo |
+| Wave 7 — Audit | **Done** in-repo |
+| Wave 8 — Báo cáo | **Done** in-repo |
+| Wave 9.1 Store CRUD / 9.2 push nợ lớn | **Done** in-repo |
+| Wave 9.3 camera / 9.4 tách quyền | **Skipped** |
+
 ## Global Constraints
 
 - Không nộp CQT; không SDK Viettel/MISA nếu HTTP gateway đủ (trừ Wave H khi operator yêu cầu).
@@ -61,6 +79,8 @@ Wave 0 operator có thể chạy **song song** mọi wave code.
 
 ## Wave 0 — Operator go-live (P0, không chặn code Wave 1)
 
+> **In-repo:** Done (checklist + ops docs). **Operator còn lại:** A.2–A.5 trên VPS, B.1 smoke 2 máy.
+
 **DoD:** API prod healthy; owner thật; backup restore thử; ≥1 máy POS bán+sync; khuyến nghị smoke 2 máy.
 
 Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production-deploy.md`, `smoke-multi-device.md`, `windows-prod.md`, `android-release.md`, `einvoice-http.md`.
@@ -87,9 +107,9 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 - Xóa dòng: confirm ngắn hoặc swipe/icon; cập nhật tổng + discount HĐ clamp
 - Không đụng checkout/outbox schema
 
-- [ ] UI sửa SL + xóa dòng
-- [ ] `flutter test` cart (+ analyze path)
-- [ ] Commit: `feat(pos): edit cart line qty and remove lines`
+- [x] UI sửa SL + xóa dòng
+- [x] `flutter test` cart (+ analyze path)
+- [x] Commit: `feat(pos): edit cart line qty and remove lines`
 
 ### Task 1.2: Tìm sản phẩm theo barcode
 
@@ -97,9 +117,9 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 - Modify: `pos_page.dart` `_matches` — thêm `product.barcode` (field Drift/API hiện có)
 - Optional: khi query khớp **đúng** 1 barcode → auto `add` vào giỏ (scanner keyboard wedge)
 
-- [ ] `_matches` gồm barcode (case-insensitive contains hoặc exact)
-- [ ] Exact barcode → add line (1 unit hoặc pack rule hiện có)
-- [ ] Commit: `feat(pos): search and scan products by barcode`
+- [x] `_matches` gồm barcode (case-insensitive contains hoặc exact)
+- [x] Exact barcode → add line (1 unit hoặc pack rule hiện có)
+- [x] Commit: `feat(pos): search and scan products by barcode`
 
 **Tick design:** §4.3 quét/tìm; §4.3 giỏ sửa SL/hủy dòng → ✅ (còn cân → Wave 2).
 
@@ -111,9 +131,9 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 
 **Files:** `pos_page.dart`, `cart.dart`, test weigh add.
 
-- [ ] Dialog nhập số lượng (kg) khi add SP cân
-- [ ] Chặn qty ≤ 0; half-up tiền theo pattern hiện có
-- [ ] Commit: `feat(pos): weigh-sale qty dialog for weighted products`
+- [x] Dialog nhập số lượng (kg) khi add SP cân
+- [x] Chặn qty ≤ 0; half-up tiền theo pattern hiện có
+- [x] Commit: `feat(pos): weigh-sale qty dialog for weighted products`
 
 **Tick:** §4.2/§4.3 bán theo cân → ✅.
 
@@ -132,10 +152,10 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 
 **Quyết định kế toán (ghi trong plan con):** thường Dr/Cr tồn giữa 2 store cùng TK `156` với `storeId` trên header, hoặc TK trung gian — **không** post COGS hai lần.
 
-- [ ] Plan con + CoA
-- [ ] Builder + `postFromStockTransfer` + hook
-- [ ] e2e PASS
-- [ ] CHANGELOG + tick deferred trong hardening docs
+- [x] Plan con + CoA
+- [x] Builder + `postFromStockTransfer` + hook
+- [x] e2e PASS
+- [x] CHANGELOG + tick deferred trong hardening docs
 
 **Tick:** chuyển kho đủ sổ; gap “transfer journals” → ✅.
 
@@ -156,9 +176,9 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 - Flutter `ledger_page.dart` tab/section **Sổ cái**
 - e2e `account-ledger.e2e-spec.ts`
 
-- [ ] API + e2e
-- [ ] Flutter UI chọn TK + kỳ
-- [ ] Commit: `feat(ledger): account ledger (sổ cái) by period`
+- [x] API + e2e
+- [x] Flutter UI chọn TK + kỳ
+- [x] Commit: `feat(ledger): account ledger (sổ cái) by period`
 
 **Tick:** §5.1 sổ cái → ✅.
 
@@ -176,10 +196,10 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 
 **Files:** Prisma migrate; Drift tables; `inventory_hub_page` / service; sync push types; e2e.
 
-- [ ] Plan con (status machine + partial receive)
-- [ ] Schema + sync + UI
-- [ ] e2e: PO → partial receive → AP tăng đúng
-- [ ] Vẫn cho nhập **không** PO
+- [x] Plan con (status machine + partial receive)
+- [x] Schema + sync + UI
+- [x] e2e: PO → partial receive → AP tăng đúng
+- [x] Vẫn cho nhập **không** PO
 
 **Tick:** §4.4 có/không đơn đặt hàng → ✅.
 
@@ -217,9 +237,9 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 
 **Files:** sync/product paths; `ledger` hoặc `audit` module; e2e tối thiểu 1 action.
 
-- [ ] Chốt: có cho void sale không? (khuyến nghị: **không void**, chỉ return — audit return đã có trên chứng từ)
-- [ ] Implement price_change + debt_adjust (nếu có UI)
-- [ ] Mở rộng `GET /ledger/audit` filter
+- [x] Chốt: có cho void sale không? (khuyến nghị: **không void**, chỉ return — audit return đã có trên chứng từ)
+- [x] Implement price_change + debt_adjust (nếu có UI)
+- [x] Mở rộng `GET /ledger/audit` filter
 
 **Tick:** §5.7 sửa giá / điều chỉnh nợ → ✅; xóa đơn → ✅ qua “không xóa im lặng + return”.
 
@@ -233,20 +253,20 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 | 8.2 | §4.5 / §4.7 công nợ **tổng** (owner) | Aggregate debt-aging không bắt buộc `storeId` (giống period reports) |
 | 8.3 | AR export | CSV công nợ phải thu từ Flutter hoặc API |
 
-- [ ] 8.1 e2e + UI
-- [ ] 8.2 e2e + UI
-- [ ] 8.3 CSV
+- [x] 8.1 e2e + UI
+- [x] 8.2 e2e + UI
+- [x] 8.3 CSV
 
 ---
 
 ## Wave 9 — Polish P3 (optional)
 
-| Task | Ghi chú |
-|------|---------|
-| 9.1 Store CRUD (owner) | Tạo/sửa mã cửa hàng — hiện chỉ seed/API hẹp |
-| 9.2 Push “nợ lớn” | Ngưỡng trên store + FCM (cần bật FCM — `docs/ops/fcm.md`) |
-| 9.3 Camera barcode | mobile_scanner — chỉ khi wedge/search chưa đủ |
-| 9.4 Tách quyền KT vs HĐĐT | Role mới hoặc permission flags — chỉ khi chủ yêu cầu |
+| Task | Ghi chú | Status |
+|------|---------|--------|
+| 9.1 Store CRUD (owner) | Tạo/sửa mã cửa hàng — hiện chỉ seed/API hẹp | **Done** in-repo |
+| 9.2 Push “nợ lớn” | Ngưỡng trên store + FCM (cần bật FCM — `docs/ops/fcm.md`) | **Done** in-repo |
+| 9.3 Camera barcode | mobile_scanner — chỉ khi wedge/search chưa đủ | **Skipped** |
+| 9.4 Tách quyền KT vs HĐĐT | Role mới hoặc permission flags — chỉ khi chủ yêu cầu | **Skipped** |
 
 ---
 
@@ -259,6 +279,8 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 
 ### Wave 5b (optional sau Wave 5): Đối chiếu sao kê NCC
 
+> **Status:** **Deferred** (optional — không chặn hoàn thiện design §4/§5).
+
 - Import CSV công nợ NCC / sao kê phải trả; match payment — mirror bank-recon patterns
 - Plan con riêng khi bắt đầu
 
@@ -268,12 +290,12 @@ Checklist: `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production
 
 Coi **đủ theo design vận hành** khi:
 
-1. [ ] Wave 0: prod + smoke (operator)
-2. [ ] Wave 1–2: POS giỏ + barcode + cân ✅
-3. [ ] Wave 3–4: transfer journal + sổ cái ✅
-4. [ ] Wave 5: PO (nếu quán đặt hàng NCC) — có thể trì hoãn nếu chỉ nhập thẳng
-5. [ ] Wave 6–7: nếu dùng HĐĐT/audit nặng
-6. [ ] Wave 8: báo cáo ca + nợ tổng
+1. [ ] Wave 0: prod + smoke (operator — in-repo Done)
+2. [x] Wave 1–2: POS giỏ + barcode + cân ✅
+3. [x] Wave 3–4: transfer journal + sổ cái ✅
+4. [x] Wave 5: PO (nếu quán đặt hàng NCC) — có thể trì hoãn nếu chỉ nhập thẳng
+5. [x] Wave 6–7: nếu dùng HĐĐT/audit nặng
+6. [x] Wave 8: báo cáo ca + nợ tổng
 
 **MVP quầy+sổ sau gap hiện tại:** xong **Wave 1 + 3 + 4** (+ Wave 0 operator).
 
