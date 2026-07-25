@@ -1,12 +1,19 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'vat_settings_sheet.dart';
 
 /// Read-only ledger views for owner (server-of-truth).
 class LedgerRepository {
   LedgerRepository({required Dio dio}) : _dio = dio;
 
   final Dio _dio;
+
+  Dio get dio => _dio;
 
   Future<List<Map<String, dynamic>>> journal({
     required String from,
@@ -59,6 +66,23 @@ class LedgerRepository {
     );
     return (res.data?['csv'] as String?) ?? '';
   }
+
+  Future<Map<String, dynamic>> periodVat(String periodYm) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/reports/period/vat',
+      queryParameters: {'periodYm': periodYm},
+    );
+    return res.data ?? {};
+  }
+
+  Future<List<int>> periodExportXlsx(String periodYm) async {
+    final res = await _dio.get<List<int>>(
+      '/reports/period/export.xlsx',
+      queryParameters: {'periodYm': periodYm},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? const [];
+  }
 }
 
 class LedgerHomePage extends StatefulWidget {
@@ -77,6 +101,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
   List<Map<String, dynamic>> _tbRows = [];
   List<Map<String, dynamic>> _locks = [];
   Map<String, dynamic>? _pnl;
+  Map<String, dynamic>? _vat;
   String? _error;
   bool _loading = true;
 
@@ -106,12 +131,14 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
       );
       final tb = await widget.repository.trialBalance(_periodYm);
       final pnl = await widget.repository.periodPnl(_periodYm);
+      final vat = await widget.repository.periodVat(_periodYm);
       final locks = await widget.repository.periodLocks();
       if (!mounted) return;
       setState(() {
         _entries = entries;
         _tbRows = ((tb['rows'] as List?) ?? []).cast<Map<String, dynamic>>();
         _pnl = pnl;
+        _vat = vat;
         _locks = locks;
         _loading = false;
       });
@@ -177,6 +204,31 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
     }
   }
 
+  Future<void> _exportExcel() async {
+    try {
+      final bytes = await widget.repository.periodExportXlsx(_periodYm);
+      if (bytes.isEmpty) {
+        throw Exception('empty_xlsx');
+      }
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}${Platform.pathSeparator}period-$_periodYm.xlsx';
+      await File(path).writeAsBytes(bytes, flush: true);
+      await Clipboard.setData(ClipboardData(text: path));
+      if (Platform.isWindows) {
+        await Process.start('explorer.exe', ['/select,', path]);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã tải Excel: $path')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xuất Excel thất bại: $e')),
+      );
+    }
+  }
+
   bool get _periodLocked =>
       _locks.any((l) => l['periodYm']?.toString() == _periodYm);
 
@@ -189,7 +241,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
             : 'Đã khóa: ${_locks.take(3).map((l) => l['periodYm']).join(', ')}');
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Column(
@@ -207,13 +259,29 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
               Tab(text: 'Nhật ký'),
               Tab(text: 'CĐPS'),
               Tab(text: 'KQKD'),
+              Tab(text: 'VAT'),
             ],
           ),
           actions: [
+            if (widget.isOwner)
+              IconButton(
+                tooltip: 'Cấu hình GTGT',
+                onPressed: () => showVatSettingsSheet(
+                  context,
+                  dio: widget.repository.dio,
+                  role: 'owner',
+                ),
+                icon: const Icon(Icons.percent_outlined),
+              ),
             IconButton(
               tooltip: 'Xuất CSV',
               onPressed: _exportCsv,
               icon: const Icon(Icons.download_outlined),
+            ),
+            IconButton(
+              tooltip: 'Xuất Excel',
+              onPressed: _exportExcel,
+              icon: const Icon(Icons.table_view_outlined),
             ),
             if (widget.isOwner)
               IconButton(
@@ -280,6 +348,26 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
                           ListTile(
                             title: const Text('Lãi ròng'),
                             trailing: Text('${_pnl?['netIncomeVnd'] ?? 0}'),
+                          ),
+                        ],
+                      ),
+                      ListView(
+                        children: [
+                          ListTile(
+                            title: const Text('GTGT đầu ra (3331)'),
+                            trailing: Text('${_vat?['outputVatVnd'] ?? 0}'),
+                          ),
+                          ListTile(
+                            title: const Text('GTGT đầu vào (1331)'),
+                            trailing: Text('${_vat?['inputVatVnd'] ?? 0}'),
+                          ),
+                          ListTile(
+                            title: const Text('GTGT phải nộp'),
+                            trailing: Text('${_vat?['netVatVnd'] ?? 0}'),
+                          ),
+                          ListTile(
+                            title: const Text('Doanh thu chịu thuế (511)'),
+                            trailing: Text('${_vat?['revenueBaseVnd'] ?? 0}'),
                           ),
                         ],
                       ),

@@ -138,12 +138,26 @@ export class LedgerService {
     }
   }
 
+  private async storeVatRateBps(
+    storeId: string,
+  ): Promise<number | null> {
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { vatEnabled: true, defaultVatRateBps: true },
+    });
+    if (!store?.vatEnabled || store.defaultVatRateBps <= 0) {
+      return null;
+    }
+    return store.defaultVatRateBps;
+  }
+
   async postFromSale(saleId: string, actorUserId?: string) {
     const sale = await this.prisma.sale.findUnique({
       where: { id: saleId },
       include: { lines: true },
     });
     if (!sale) return;
+    const vatRateBps = await this.storeVatRateBps(sale.storeId);
     const lines = buildSaleJournal({
       cashAmount: sale.cashAmount,
       transferAmount: sale.transferAmount,
@@ -153,6 +167,7 @@ export class LedgerService {
         qty: Number(l.qty),
         unitCostVnd: l.unitCostVnd,
       })),
+      vatRateBps,
     });
     await this.postEntry({
       storeId: sale.storeId,
@@ -207,13 +222,18 @@ export class LedgerService {
   async postFromPurchaseReceipt(receiptId: string, actorUserId?: string) {
     const row = await this.prisma.purchaseReceipt.findUnique({
       where: { id: receiptId },
-      include: { lines: true },
+      include: {
+        lines: { include: { product: { select: { vatRateBps: true } } } },
+      },
     });
     if (!row) return;
+    const storeVat = await this.storeVatRateBps(row.storeId);
     const lines = buildPurchaseJournal({
+      vatRateBps: storeVat,
       lines: row.lines.map((l) => ({
         qty: Number(l.qty),
         unitCostVnd: l.unitCostVnd,
+        vatRateBps: l.product.vatRateBps ?? storeVat,
       })),
     });
     await this.postEntry({
@@ -258,6 +278,7 @@ export class LedgerService {
     const costByProduct = new Map(
       row.originalSale.lines.map((l) => [l.productId, l.unitCostVnd] as const),
     );
+    const vatRateBps = await this.storeVatRateBps(row.storeId);
     const lines = buildSaleReturnJournal({
       cashRefundVnd: row.cashRefundVnd,
       transferRefundVnd: row.transferRefundVnd,
@@ -267,6 +288,7 @@ export class LedgerService {
         qty: Number(l.qty),
         unitCostVnd: costByProduct.get(l.productId) ?? null,
       })),
+      vatRateBps,
     });
     await this.postEntry({
       storeId: row.storeId,
