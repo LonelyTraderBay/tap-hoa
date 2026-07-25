@@ -142,6 +142,11 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 - API: set `FIREBASE_SERVICE_ACCOUNT` to a service-account JSON file path. Without it, push registration still works; sends are logged/skipped.
 - POS: replace `apps/pos_app/lib/firebase_options.dart` via `flutterfire configure`. Without real options, the app runs and skips FCM.
 
+### Optional e-invoice HTTP gateway
+
+- Default: `EINVOICE_PROVIDER=stub` (local / e2e).
+- Production-style: `EINVOICE_PROVIDER=http`, `EINVOICE_HTTP_URL=https://…/issue`, optional `EINVOICE_HTTP_API_KEY`. See `docs/superpowers/specs/2026-07-25-phase3-einvoice-http-design.md`.
+
 ## Out of scope (this MVP)
 
 See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist.  

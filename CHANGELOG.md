@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Phase 3 — HĐĐT HTTP
+
+- `EINVOICE_PROVIDER=stub|http` + `EINVOICE_HTTP_URL` / optional API key
+- Sale lines included in provider payload; Flutter copy updated
+
 ### Phase 3 — VAT / GTGT
 
 - Store flags: `vatEnabled`, `defaultVatRateBps`; product optional `vatRateBps`

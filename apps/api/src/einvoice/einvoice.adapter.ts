@@ -4,6 +4,12 @@ export type IssueEInvoiceInput = {
   buyerTaxCode?: string | null;
   templateCode?: string | null;
   serial?: string | null;
+  lines?: {
+    productId: string;
+    qty: number;
+    unitPrice: number;
+    lineTotal: number;
+  }[];
 };
 
 export type IssueEInvoiceResult = {
