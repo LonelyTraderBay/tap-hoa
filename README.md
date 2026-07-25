@@ -147,7 +147,7 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 ### Optional e-invoice HTTP gateway
 
 - Default: `EINVOICE_PROVIDER=stub` (local / e2e).
-- Production-style: `EINVOICE_PROVIDER=http`, `EINVOICE_HTTP_URL=https://…/issue`, optional `EINVOICE_HTTP_API_KEY`. See `docs/superpowers/specs/2026-07-25-phase3-einvoice-http-design.md`.
+- Production-style: `EINVOICE_PROVIDER=http`, `EINVOICE_HTTP_URL=https://…/issue`, optional `EINVOICE_HTTP_API_KEY`. Operator checklist: `docs/ops/einvoice-http.md`; adapter spec: `docs/superpowers/specs/2026-07-25-phase3-einvoice-http-design.md`.
 
 ## Out of scope (this MVP)
 
@@ -158,6 +158,7 @@ See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklis
 
 - Production deploy/backup/rollback runbook: `docs/ops/production-deploy.md`
 - Production secrets + real owner account: `docs/ops/production-secrets.md`
+- HĐĐT HTTP gateway / stub mode: `docs/ops/einvoice-http.md`
 - Host choice for Wave 1: Docker Compose (`apps/api/Dockerfile`, `apps/api/docker-compose.prod.yml`); live VPS execution is an operator follow-up when credentials are available.
 
 Short path:

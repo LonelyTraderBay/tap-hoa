@@ -5,8 +5,10 @@ This repository contains deploy artifacts only; a live VPS deployment remains an
 operator follow-up when host credentials are available. Never commit real
 production secrets, passwords, API keys, or backup files.
 
-See also: `docs/ops/production-secrets.md` for `JWT_SECRET`, e-invoice keys, and
-the real owner-account creation flow.
+See also:
+
+- `docs/ops/production-secrets.md` — `JWT_SECRET`, e-invoice keys, owner account
+- `docs/ops/einvoice-http.md` — HĐĐT HTTP gateway vs stub operator checklist
 
 ## 1. Host choice
 
@@ -37,11 +39,12 @@ DATABASE_URL=postgresql://tap_hoa_app:<strong-postgres-password>@db:5432/tap_hoa
 
 JWT_SECRET=<strong-random-secret>
 
-# Optional for real e-invoice issuance:
+# Optional for real e-invoice issuance (see docs/ops/einvoice-http.md):
 # EINVOICE_PROVIDER=http
 # EINVOICE_HTTP_URL=https://...
 # EINVOICE_HTTP_API_KEY=<secret>
 # EINVOICE_HTTP_TIMEOUT_MS=15000
+# Default / no gateway: EINVOICE_PROVIDER=stub (chưa HĐĐT thật)
 
 # Optional FCM:
 # FIREBASE_SERVICE_ACCOUNT=/run/secrets/tap-hoa-firebase.json
