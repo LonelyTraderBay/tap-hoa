@@ -1,6 +1,6 @@
 # Hoàn thiện go-live — Kế hoạch theo thứ tự ưu tiên
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement **một wave tại một thời điểm**. Steps dùng checkbox (`- [ ]`).  
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement **một wave tại một thời điểm**. Steps dùng checkbox (`- [ ]`).
 > Wave có feature code lớn (Wastage journal, Audit UI, …) → tách plan riêng trước khi code; wave này là **master index + chi tiết Wave 0–1**.
 
 **Goal:** Đưa tap-hoa từ trạng thái “Phase 1–3 feature Done + hardening PASS trên nhánh” sang **sẵn sàng mở quán thật** (API prod, POS ký release, HĐĐT/gateway nếu cần, sổ không lỗ chứng từ vận hành chính).
@@ -198,9 +198,9 @@ Giữ ≥ 7 bản; thử restore 1 lần trên DB staging. Ghi path backup vào 
 
 - [ ] **Step 4: Rollback drill (15 phút)**
 
-1. Snapshot DB trước migrate.  
-2. Giả lập lỗi → restore snapshot.  
-3. Xác nhận app version pin về commit pre-hardening nếu cần.  
+1. Snapshot DB trước migrate.
+2. Giả lập lỗi → restore snapshot.
+3. Xác nhận app version pin về commit pre-hardening nếu cần.
 Không dùng `migrate resolve` tùy tiện trên prod (đã ghi trong README).
 
 ### Task 1.3: Cấu hình HĐĐT HTTP (chỉ nếu cần HĐ hợp lệ ngày 1)
@@ -382,4 +382,3 @@ Coi là **đủ mở quán** khi:
 | Nộp CQT / SDK vendor / Phase 4 lớn | Ngoài scope |
 
 Không còn placeholder TBD trong các step Wave 0–2; Wave 3–5 cố ý yêu cầu plan con trước khi code.
-)

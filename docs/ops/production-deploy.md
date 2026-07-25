@@ -34,6 +34,8 @@ NODE_ENV=production
 PORT=3000
 API_PORT=3000
 
+`API_PORT` in `docker-compose.prod.yml` is resolved by Compose from the host (`.env` beside the compose file, shell export, or `--env-file`), not only from variables inside `.env.production` loaded into the container.
+
 POSTGRES_DB=tap_hoa
 POSTGRES_USER=tap_hoa_app
 POSTGRES_PASSWORD=<strong-postgres-password>
@@ -73,9 +75,12 @@ Create the real owner account after migrations:
 
 ```sh
 cd apps/api
-OWNER_PHONE="<real owner phone>" \
-OWNER_PASSWORD="<strong one-time password>" \
-docker compose -f docker-compose.prod.yml run --rm api npm run create-owner
+export OWNER_PHONE="<real owner phone>"
+export OWNER_PASSWORD="<strong one-time password>"
+docker compose -f docker-compose.prod.yml run --rm \
+  -e OWNER_PHONE="$OWNER_PHONE" \
+  -e OWNER_PASSWORD="$OWNER_PASSWORD" \
+  api npm run create-owner
 ```
 
 Then disable or rotate any seed account as described in
