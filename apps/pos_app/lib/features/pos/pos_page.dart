@@ -30,6 +30,7 @@ import '../products/product_repository.dart';
 import '../products/product_service.dart';
 import '../push/push_service.dart';
 import '../shifts/shift_repository.dart';
+import '../stores/store_management_page.dart';
 import 'cart.dart';
 import 'checkout_service.dart';
 import 'payment_sheet.dart';
@@ -699,6 +700,21 @@ class _PosPageState extends State<PosPage> {
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cấu hình in',
           ),
+          if (widget.role == 'owner')
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => StoreManagementPage(
+                      db: widget.database,
+                      dio: widget.dayReportRepository.dio,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.store_mall_directory_outlined),
+              tooltip: 'Cửa hàng',
+            ),
           if (widget.role == 'owner')
             IconButton(
               onPressed: () {

@@ -123,6 +123,7 @@ class StoresLocal extends Table {
   TextColumn get name => text()();
   BoolColumn get active => boolean().withDefault(const Constant(true))();
   IntColumn get debtOverdueDays => integer().withDefault(const Constant(30))();
+  IntColumn get largeDebtThresholdVnd => integer().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

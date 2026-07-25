@@ -1,11 +1,19 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
+
+type StoreMutationData = {
+  code?: string;
+  name?: string;
+  debtOverdueDays?: number;
+  largeDebtThresholdVnd?: number | null;
+};
 
 @Injectable()
 export class StoresService {
@@ -15,9 +23,12 @@ export class StoresService {
     id: true,
     code: true,
     name: true,
+    active: true,
     debtOverdueDays: true,
+    largeDebtThresholdVnd: true,
     vatEnabled: true,
     defaultVatRateBps: true,
+    updatedAt: true,
   } as const;
 
   async findForUser(role: Role, storeIds: string[]) {
@@ -35,12 +46,73 @@ export class StoresService {
     });
   }
 
+  private assertOwner(user: AuthUser) {
+    if (user.role !== Role.owner) {
+      throw new ForbiddenException('Only owner');
+    }
+  }
+
   private assertStoreManage(user: AuthUser, storeId: string) {
     if (user.role !== Role.owner && user.role !== Role.store_manager) {
       throw new ForbiddenException('Only owner or store_manager');
     }
     if (user.role !== Role.owner && !user.storeIds.includes(storeId)) {
       throw new ForbiddenException('No access to this store');
+    }
+  }
+
+  async create(user: AuthUser, data: StoreMutationData) {
+    this.assertOwner(user);
+    if (!data.code || !data.name) {
+      throw new BadRequestException('code and name are required');
+    }
+    try {
+      return await this.prisma.store.create({
+        data: {
+          code: data.code,
+          name: data.name,
+          ...(data.debtOverdueDays !== undefined
+            ? { debtOverdueDays: data.debtOverdueDays }
+            : {}),
+          ...(data.largeDebtThresholdVnd !== undefined
+            ? { largeDebtThresholdVnd: data.largeDebtThresholdVnd }
+            : {}),
+        },
+        select: this.storeSelect,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('Store code already exists');
+      }
+      throw error;
+    }
+  }
+
+  async update(user: AuthUser, storeId: string, data: StoreMutationData) {
+    this.assertOwner(user);
+    try {
+      return await this.prisma.store.update({
+        where: { id: storeId },
+        data,
+        select: this.storeSelect,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('Store code already exists');
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new NotFoundException('Store not found');
+      }
+      throw error;
     }
   }
 

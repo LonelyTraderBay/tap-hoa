@@ -73,6 +73,9 @@ class PullCatalog {
               name: store['name'] as String,
               active: Value(store['active'] as bool? ?? true),
               debtOverdueDays: Value(store['debtOverdueDays'] as int? ?? 30),
+              largeDebtThresholdVnd: Value(
+                store['largeDebtThresholdVnd'] as int?,
+              ),
               updatedAt: DateTime.parse(store['updatedAt'] as String),
             ),
           );

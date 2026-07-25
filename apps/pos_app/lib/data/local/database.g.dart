@@ -5417,6 +5417,16 @@ class $StoresLocalTable extends StoresLocal
     requiredDuringInsert: false,
     defaultValue: const Constant(30),
   );
+  static const VerificationMeta _largeDebtThresholdVndMeta =
+      const VerificationMeta('largeDebtThresholdVnd');
+  @override
+  late final GeneratedColumn<int> largeDebtThresholdVnd = GeneratedColumn<int>(
+    'large_debt_threshold_vnd',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -5435,6 +5445,7 @@ class $StoresLocalTable extends StoresLocal
     name,
     active,
     debtOverdueDays,
+    largeDebtThresholdVnd,
     updatedAt,
   ];
   @override
@@ -5485,6 +5496,15 @@ class $StoresLocalTable extends StoresLocal
         ),
       );
     }
+    if (data.containsKey('large_debt_threshold_vnd')) {
+      context.handle(
+        _largeDebtThresholdVndMeta,
+        largeDebtThresholdVnd.isAcceptableOrUnknown(
+          data['large_debt_threshold_vnd']!,
+          _largeDebtThresholdVndMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -5522,6 +5542,10 @@ class $StoresLocalTable extends StoresLocal
         DriftSqlType.int,
         data['${effectivePrefix}debt_overdue_days'],
       )!,
+      largeDebtThresholdVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}large_debt_threshold_vnd'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -5541,6 +5565,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
   final String name;
   final bool active;
   final int debtOverdueDays;
+  final int? largeDebtThresholdVnd;
   final DateTime updatedAt;
   const StoresLocalData({
     required this.id,
@@ -5548,6 +5573,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     required this.name,
     required this.active,
     required this.debtOverdueDays,
+    this.largeDebtThresholdVnd,
     required this.updatedAt,
   });
   @override
@@ -5558,6 +5584,9 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     map['name'] = Variable<String>(name);
     map['active'] = Variable<bool>(active);
     map['debt_overdue_days'] = Variable<int>(debtOverdueDays);
+    if (!nullToAbsent || largeDebtThresholdVnd != null) {
+      map['large_debt_threshold_vnd'] = Variable<int>(largeDebtThresholdVnd);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -5569,6 +5598,9 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       name: Value(name),
       active: Value(active),
       debtOverdueDays: Value(debtOverdueDays),
+      largeDebtThresholdVnd: largeDebtThresholdVnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(largeDebtThresholdVnd),
       updatedAt: Value(updatedAt),
     );
   }
@@ -5584,6 +5616,9 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       name: serializer.fromJson<String>(json['name']),
       active: serializer.fromJson<bool>(json['active']),
       debtOverdueDays: serializer.fromJson<int>(json['debtOverdueDays']),
+      largeDebtThresholdVnd: serializer.fromJson<int?>(
+        json['largeDebtThresholdVnd'],
+      ),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -5596,6 +5631,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       'name': serializer.toJson<String>(name),
       'active': serializer.toJson<bool>(active),
       'debtOverdueDays': serializer.toJson<int>(debtOverdueDays),
+      'largeDebtThresholdVnd': serializer.toJson<int?>(largeDebtThresholdVnd),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -5606,6 +5642,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     String? name,
     bool? active,
     int? debtOverdueDays,
+    Value<int?> largeDebtThresholdVnd = const Value.absent(),
     DateTime? updatedAt,
   }) => StoresLocalData(
     id: id ?? this.id,
@@ -5613,6 +5650,9 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     name: name ?? this.name,
     active: active ?? this.active,
     debtOverdueDays: debtOverdueDays ?? this.debtOverdueDays,
+    largeDebtThresholdVnd: largeDebtThresholdVnd.present
+        ? largeDebtThresholdVnd.value
+        : this.largeDebtThresholdVnd,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   StoresLocalData copyWithCompanion(StoresLocalCompanion data) {
@@ -5624,6 +5664,9 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       debtOverdueDays: data.debtOverdueDays.present
           ? data.debtOverdueDays.value
           : this.debtOverdueDays,
+      largeDebtThresholdVnd: data.largeDebtThresholdVnd.present
+          ? data.largeDebtThresholdVnd.value
+          : this.largeDebtThresholdVnd,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -5636,14 +5679,22 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
           ..write('name: $name, ')
           ..write('active: $active, ')
           ..write('debtOverdueDays: $debtOverdueDays, ')
+          ..write('largeDebtThresholdVnd: $largeDebtThresholdVnd, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, code, name, active, debtOverdueDays, updatedAt);
+  int get hashCode => Object.hash(
+    id,
+    code,
+    name,
+    active,
+    debtOverdueDays,
+    largeDebtThresholdVnd,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5653,6 +5704,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
           other.name == this.name &&
           other.active == this.active &&
           other.debtOverdueDays == this.debtOverdueDays &&
+          other.largeDebtThresholdVnd == this.largeDebtThresholdVnd &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -5662,6 +5714,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
   final Value<String> name;
   final Value<bool> active;
   final Value<int> debtOverdueDays;
+  final Value<int?> largeDebtThresholdVnd;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const StoresLocalCompanion({
@@ -5670,6 +5723,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     this.name = const Value.absent(),
     this.active = const Value.absent(),
     this.debtOverdueDays = const Value.absent(),
+    this.largeDebtThresholdVnd = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -5679,6 +5733,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     required String name,
     this.active = const Value.absent(),
     this.debtOverdueDays = const Value.absent(),
+    this.largeDebtThresholdVnd = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -5691,6 +5746,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     Expression<String>? name,
     Expression<bool>? active,
     Expression<int>? debtOverdueDays,
+    Expression<int>? largeDebtThresholdVnd,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -5700,6 +5756,8 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
       if (name != null) 'name': name,
       if (active != null) 'active': active,
       if (debtOverdueDays != null) 'debt_overdue_days': debtOverdueDays,
+      if (largeDebtThresholdVnd != null)
+        'large_debt_threshold_vnd': largeDebtThresholdVnd,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -5711,6 +5769,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     Value<String>? name,
     Value<bool>? active,
     Value<int>? debtOverdueDays,
+    Value<int?>? largeDebtThresholdVnd,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -5720,6 +5779,8 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
       name: name ?? this.name,
       active: active ?? this.active,
       debtOverdueDays: debtOverdueDays ?? this.debtOverdueDays,
+      largeDebtThresholdVnd:
+          largeDebtThresholdVnd ?? this.largeDebtThresholdVnd,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -5743,6 +5804,11 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     if (debtOverdueDays.present) {
       map['debt_overdue_days'] = Variable<int>(debtOverdueDays.value);
     }
+    if (largeDebtThresholdVnd.present) {
+      map['large_debt_threshold_vnd'] = Variable<int>(
+        largeDebtThresholdVnd.value,
+      );
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -5760,6 +5826,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
           ..write('name: $name, ')
           ..write('active: $active, ')
           ..write('debtOverdueDays: $debtOverdueDays, ')
+          ..write('largeDebtThresholdVnd: $largeDebtThresholdVnd, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -16733,6 +16800,7 @@ typedef $$StoresLocalTableCreateCompanionBuilder =
       required String name,
       Value<bool> active,
       Value<int> debtOverdueDays,
+      Value<int?> largeDebtThresholdVnd,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -16743,6 +16811,7 @@ typedef $$StoresLocalTableUpdateCompanionBuilder =
       Value<String> name,
       Value<bool> active,
       Value<int> debtOverdueDays,
+      Value<int?> largeDebtThresholdVnd,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -16778,6 +16847,11 @@ class $$StoresLocalTableFilterComposer
 
   ColumnFilters<int> get debtOverdueDays => $composableBuilder(
     column: $table.debtOverdueDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get largeDebtThresholdVnd => $composableBuilder(
+    column: $table.largeDebtThresholdVnd,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16821,6 +16895,11 @@ class $$StoresLocalTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get largeDebtThresholdVnd => $composableBuilder(
+    column: $table.largeDebtThresholdVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -16850,6 +16929,11 @@ class $$StoresLocalTableAnnotationComposer
 
   GeneratedColumn<int> get debtOverdueDays => $composableBuilder(
     column: $table.debtOverdueDays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get largeDebtThresholdVnd => $composableBuilder(
+    column: $table.largeDebtThresholdVnd,
     builder: (column) => column,
   );
 
@@ -16893,6 +16977,7 @@ class $$StoresLocalTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<bool> active = const Value.absent(),
                 Value<int> debtOverdueDays = const Value.absent(),
+                Value<int?> largeDebtThresholdVnd = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => StoresLocalCompanion(
@@ -16901,6 +16986,7 @@ class $$StoresLocalTableTableManager
                 name: name,
                 active: active,
                 debtOverdueDays: debtOverdueDays,
+                largeDebtThresholdVnd: largeDebtThresholdVnd,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -16911,6 +16997,7 @@ class $$StoresLocalTableTableManager
                 required String name,
                 Value<bool> active = const Value.absent(),
                 Value<int> debtOverdueDays = const Value.absent(),
+                Value<int?> largeDebtThresholdVnd = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => StoresLocalCompanion.insert(
@@ -16919,6 +17006,7 @@ class $$StoresLocalTableTableManager
                 name: name,
                 active: active,
                 debtOverdueDays: debtOverdueDays,
+                largeDebtThresholdVnd: largeDebtThresholdVnd,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

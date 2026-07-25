@@ -21,6 +21,7 @@ import {
   PushShiftOpenDto,
   PushSyncDto,
 } from './dto/push-sale.dto';
+import { crossesLargeDebtThreshold } from './large-debt-threshold';
 import { StockOpsService } from './stock-ops.service';
 import { SaleReturnsService } from './sale-returns.service';
 
@@ -34,6 +35,14 @@ export type ClosedShiftSnapshot = {
   closingCash: number;
   closedAt: string;
   note: string | null;
+};
+
+type LargeDebtAlert = {
+  storeId: string;
+  customerId: string;
+  customerName: string;
+  balanceVnd: number;
+  thresholdVnd: number;
 };
 
 @Injectable()
@@ -147,6 +156,7 @@ export class SyncService {
             name: store.name,
             active: store.active,
             debtOverdueDays: store.debtOverdueDays,
+            largeDebtThresholdVnd: store.largeDebtThresholdVnd,
             updatedAt: store.updatedAt.toISOString(),
           }
         : null,
@@ -910,11 +920,16 @@ export class SyncService {
       }
     }
 
+    let largeDebtAlert: LargeDebtAlert | null = null;
     try {
       await this.prisma.$transaction(async (tx) => {
         const storeVatRow = await tx.store.findUnique({
           where: { id: sale.storeId },
-          select: { vatEnabled: true, defaultVatRateBps: true },
+          select: {
+            vatEnabled: true,
+            defaultVatRateBps: true,
+            largeDebtThresholdVnd: true,
+          },
         });
         const storeVat =
           storeVatRow?.vatEnabled && storeVatRow.defaultVatRateBps > 0
@@ -1092,13 +1107,30 @@ export class SyncService {
         });
 
         if (sale.debtAmount > 0 && sale.customerId) {
-          await tx.customer.update({
+          const previous = await tx.customer.findUniqueOrThrow({
+            where: { id: sale.customerId },
+            select: { name: true, balanceVnd: true },
+          });
+          const updated = await tx.customer.update({
             where: { id: sale.customerId },
             data: { balanceVnd: { increment: sale.debtAmount } },
           });
-          const updated = await tx.customer.findUniqueOrThrow({
-            where: { id: sale.customerId },
-          });
+          const threshold = storeVatRow?.largeDebtThresholdVnd ?? null;
+          if (
+            crossesLargeDebtThreshold({
+              thresholdVnd: threshold,
+              previousBalanceVnd: previous.balanceVnd,
+              nextBalanceVnd: updated.balanceVnd,
+            })
+          ) {
+            largeDebtAlert = {
+              storeId: sale.storeId,
+              customerId: sale.customerId,
+              customerName: previous.name,
+              balanceVnd: updated.balanceVnd,
+              thresholdVnd: threshold!,
+            };
+          }
           await tx.debtLedgerEntry.create({
             data: {
               id: randomUUID(),
@@ -1133,6 +1165,9 @@ export class SyncService {
           actorUserId: user.userId,
         },
       );
+      if (largeDebtAlert) {
+        void this.notifyLargeDebt(largeDebtAlert);
+      }
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {
@@ -1157,6 +1192,20 @@ export class SyncService {
       }
       throw error;
     }
+  }
+
+  private notifyLargeDebt(alert: LargeDebtAlert) {
+    return this.devicesService.notifyStoreManagers(alert.storeId, {
+      title: 'Nợ lớn',
+      body: `${alert.customerName}: ${alert.balanceVnd.toLocaleString('vi-VN')}đ (ngưỡng ${alert.thresholdVnd.toLocaleString('vi-VN')}đ)`,
+      data: {
+        type: 'large_debt',
+        storeId: alert.storeId,
+        customerId: alert.customerId,
+        balanceVnd: String(alert.balanceVnd),
+        thresholdVnd: String(alert.thresholdVnd),
+      },
+    });
   }
 
   private async ensureDebtCustomer(

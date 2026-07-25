@@ -94,6 +94,7 @@ model Store {
   name              String
   active            Boolean  @default(true)
   debtOverdueDays   Int      @default(30)
+  largeDebtThresholdVnd Int?
   vatEnabled        Boolean  @default(false)
   defaultVatRateBps Int      @default(1000)
   createdAt         DateTime @default(now())
