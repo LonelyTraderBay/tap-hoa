@@ -865,6 +865,14 @@ export class StockOpsService {
           });
         }
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromWastage(dto.id, user.userId),
+        {
+          sourceType: 'wastage',
+          sourceId: dto.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error) {

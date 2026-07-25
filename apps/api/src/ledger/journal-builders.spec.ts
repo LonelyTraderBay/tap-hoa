@@ -6,6 +6,7 @@ import {
   buildSaleJournal,
   buildSaleReturnJournal,
   buildStocktakeJournal,
+  buildWastageJournal,
   computeSaleLineVatSnapshots,
   periodYmFromDate,
   splitInclusiveVat,
@@ -75,6 +76,40 @@ describe('journal-builders', () => {
         lines: [{ varianceQty: 5, avgCostVnd: null }],
       }),
     ).toEqual([]);
+  });
+
+  it('buildWastageJournal posts wastage at WAC', () => {
+    const lines = buildWastageJournal({
+      lines: [
+        { qty: 2, avgCostVnd: 8000 },
+        { qty: 1.5, avgCostVnd: 10000 },
+        { qty: 1, avgCostVnd: null },
+        { qty: 1, avgCostVnd: 0 },
+      ],
+    });
+    expect(() => assertBalanced(lines)).not.toThrow();
+    expect(lines.find((l) => l.accountCode === '642')?.debitVnd).toBe(31000);
+    expect(lines.find((l) => l.accountCode === '156')?.creditVnd).toBe(31000);
+  });
+
+  it('buildWastageJournal returns empty when no costed lines', () => {
+    expect(
+      buildWastageJournal({
+        lines: [
+          { qty: 1, avgCostVnd: null },
+          { qty: 1, avgCostVnd: 0 },
+          { qty: 1, avgCostVnd: -1000 },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('buildWastageJournal rounds each costed line', () => {
+    const lines = buildWastageJournal({
+      lines: [{ qty: 0.333, avgCostVnd: 1000 }],
+    });
+    expect(lines.find((l) => l.accountCode === '642')?.debitVnd).toBe(333);
+    expect(lines.find((l) => l.accountCode === '156')?.creditVnd).toBe(333);
   });
 
   it('splitInclusiveVat 110k @ 10%', () => {

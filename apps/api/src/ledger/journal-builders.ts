@@ -501,3 +501,22 @@ export function buildStocktakeJournal(input: {
   assertBalanced(out);
   return out;
 }
+
+/** Wastage decreases inventory at WAC: Dr 642 / Cr 156. */
+export function buildWastageJournal(input: {
+  lines: { qty: number; avgCostVnd: number | null }[];
+}): JournalLineDraft[] {
+  let total = 0;
+  for (const line of input.lines) {
+    if (line.avgCostVnd == null || line.avgCostVnd <= 0) continue;
+    total += Math.round(line.qty * line.avgCostVnd);
+  }
+  if (total <= 0) {
+    return [];
+  }
+  const out: JournalLineDraft[] = [];
+  pushDr(out, '642', total);
+  pushCr(out, '156', total);
+  assertBalanced(out);
+  return out;
+}

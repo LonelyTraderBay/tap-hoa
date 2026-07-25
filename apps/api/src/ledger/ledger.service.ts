@@ -14,6 +14,7 @@ import {
   buildSaleReturnJournal,
   buildStocktakeJournal,
   buildSupplierPaymentJournal,
+  buildWastageJournal,
   computeSaleLineVatSnapshots,
   periodYmFromDate,
   splitInclusiveVat,
@@ -433,6 +434,39 @@ export class LedgerService {
     await this.postEntry({
       storeId: row.storeId,
       sourceType: 'stocktake',
+      sourceId: row.id,
+      postedAt: row.clientCreatedAt,
+      memo: row.note ?? undefined,
+      lines,
+      actorUserId,
+    });
+  }
+
+  async postFromWastage(wastageId: string, actorUserId?: string) {
+    const row = await this.prisma.wastageVoucher.findUnique({
+      where: { id: wastageId },
+      include: { lines: true },
+    });
+    if (!row) return;
+    const costLines: { qty: number; avgCostVnd: number | null }[] = [];
+    for (const line of row.lines) {
+      const stock = await this.prisma.productStoreStock.findUnique({
+        where: {
+          productId_storeId: {
+            productId: line.productId,
+            storeId: row.storeId,
+          },
+        },
+      });
+      costLines.push({
+        qty: Number(line.qty),
+        avgCostVnd: stock?.avgCostVnd ?? null,
+      });
+    }
+    const lines = buildWastageJournal({ lines: costLines });
+    await this.postEntry({
+      storeId: row.storeId,
+      sourceType: 'wastage',
       sourceId: row.id,
       postedAt: row.clientCreatedAt,
       memo: row.note ?? undefined,
