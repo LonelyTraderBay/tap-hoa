@@ -129,6 +129,12 @@ class OutboxConflictService {
       final lines = (payload['lines'] as List<dynamic>? ?? [])
           .cast<Map<String, dynamic>>();
       var lineSubtotalVnd = 0;
+      final localSale = await (_db.select(
+        _db.salesLocal,
+      )..where((row) => row.id.equals(saleId))).getSingleOrNull();
+      if (localSale == null) {
+        localSynced = false;
+      }
 
       for (final line in lines) {
         final productId = line['productId'] as String?;
@@ -203,22 +209,107 @@ class OutboxConflictService {
       payload['totalVnd'] = totalVnd;
       _rebalanceSalePayments(payload, totalVnd);
 
-      await (_db.update(
-        _db.salesLocal,
-      )..where((row) => row.id.equals(saleId))).write(
-        SalesLocalCompanion(
-          totalVnd: Value(totalVnd),
-          cashAmount: Value(payload['cashAmount'] as int? ?? 0),
-          transferAmount: Value(payload['transferAmount'] as int? ?? 0),
-          debtAmount: Value(payload['debtAmount'] as int? ?? 0),
-        ),
-      );
+      if (localSale != null) {
+        final newDebtAmount = payload['debtAmount'] as int? ?? 0;
+        await (_db.update(
+          _db.salesLocal,
+        )..where((row) => row.id.equals(saleId))).write(
+          SalesLocalCompanion(
+            paymentMethod: Value(
+              payload['paymentMethod'] as String? ?? localSale.paymentMethod,
+            ),
+            totalVnd: Value(totalVnd),
+            cashAmount: Value(payload['cashAmount'] as int? ?? 0),
+            transferAmount: Value(payload['transferAmount'] as int? ?? 0),
+            debtAmount: Value(newDebtAmount),
+          ),
+        );
+
+        final debtSynced = await _reconcileSaleDebtRepair(
+          localSale: localSale,
+          newDebtAmount: newDebtAmount,
+          newCustomerId:
+              payload['customerId'] as String? ?? localSale.customerId,
+        );
+        if (!debtSynced) {
+          localSynced = false;
+        }
+      }
 
       await _db.updateOutboxPayload(entry.id, jsonEncode(payload));
       await _db.requeueOutbox(entry.id);
     });
     await _worker.tick();
     return localSynced;
+  }
+
+  Future<bool> _reconcileSaleDebtRepair({
+    required SalesLocalData localSale,
+    required int newDebtAmount,
+    required String? newCustomerId,
+  }) async {
+    final oldDebtAmount = localSale.debtAmount;
+    if (oldDebtAmount == newDebtAmount) {
+      return true;
+    }
+
+    final customerId = newCustomerId ?? localSale.customerId;
+    if (customerId == null || customerId.isEmpty) {
+      return false;
+    }
+
+    final customer = await (_db.select(
+      _db.customersLocal,
+    )..where((row) => row.id.equals(customerId))).getSingleOrNull();
+    if (customer == null) {
+      return false;
+    }
+
+    final debtRow =
+        await (_db.select(_db.debtLedgerLocal)..where(
+              (row) =>
+                  row.saleId.equals(localSale.id) &
+                  row.type.equals('sale_debt'),
+            ))
+            .getSingleOrNull();
+    if (newDebtAmount > 0 && debtRow == null) {
+      return false;
+    }
+
+    final now = DateTime.now();
+    final newBalance = (customer.balanceVnd + newDebtAmount - oldDebtAmount)
+        .clamp(0, 1 << 62)
+        .toInt();
+
+    await (_db.update(
+      _db.customersLocal,
+    )..where((row) => row.id.equals(customerId))).write(
+      CustomersLocalCompanion(
+        balanceVnd: Value(newBalance),
+        updatedAt: Value(now),
+      ),
+    );
+
+    if (newDebtAmount <= 0) {
+      await (_db.delete(_db.debtLedgerLocal)..where(
+            (row) =>
+                row.saleId.equals(localSale.id) & row.type.equals('sale_debt'),
+          ))
+          .go();
+      return debtRow != null || oldDebtAmount <= 0;
+    }
+
+    await (_db.update(
+      _db.debtLedgerLocal,
+    )..where((row) => row.id.equals(debtRow!.id))).write(
+      DebtLedgerLocalCompanion(
+        customerId: Value(customerId),
+        amountVnd: Value(newDebtAmount),
+        balanceAfterVnd: Value(newBalance),
+        updatedAt: Value(now),
+      ),
+    );
+    return true;
   }
 
   Future<bool> _saveWastageQtys(
@@ -350,9 +441,7 @@ class OutboxConflictService {
       payload['cashAmount'] = totalVnd;
       payload['transferAmount'] = 0;
       payload['debtAmount'] = 0;
-      if (totalVnd == 0) {
-        payload['paymentMethod'] = 'cash';
-      }
+      payload['paymentMethod'] = 'cash';
     }
   }
 

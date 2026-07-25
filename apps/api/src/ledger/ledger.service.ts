@@ -586,6 +586,10 @@ export class LedgerService {
       throw new Error('invalid_reason');
     }
     await this.prisma.periodLock.deleteMany({ where: { periodYm } });
+    const replayed = await this.replayBlockedPeriodJournals(
+      periodYm,
+      user.userId,
+    );
     await this.writeAudit({
       actorUserId: user.userId,
       action: 'period_unlock',
@@ -593,7 +597,96 @@ export class LedgerService {
       entityId: periodYm,
       detail: { reason: trimmedReason },
     });
-    return { unlocked: true, periodYm };
+    return { unlocked: true, periodYm, replayed };
+  }
+
+  private async replayBlockedPeriodJournals(
+    periodYm: string,
+    actorUserId?: string,
+  ): Promise<number> {
+    const rows = await this.prisma.auditLog.findMany({
+      where: {
+        action: 'journal_blocked_period_lock',
+        detailJson: { contains: periodYm },
+      },
+      distinct: ['entityType', 'entityId'],
+      select: { entityType: true, entityId: true, detailJson: true },
+    });
+    let replayed = 0;
+    for (const row of rows) {
+      if (
+        !row.entityId ||
+        !this.auditDetailMatchesPeriod(row.detailJson, periodYm)
+      ) {
+        continue;
+      }
+      try {
+        const handled = await this.replayJournalSource(
+          row.entityType,
+          row.entityId,
+          actorUserId,
+        );
+        if (handled) {
+          replayed += 1;
+        }
+      } catch (e) {
+        this.logger.error(
+          `ledger replay failed ${row.entityType}/${row.entityId}: ${e}`,
+        );
+      }
+    }
+    return replayed;
+  }
+
+  private auditDetailMatchesPeriod(
+    detailJson: string | null,
+    periodYm: string,
+  ): boolean {
+    if (!detailJson) return false;
+    try {
+      const detail = JSON.parse(detailJson) as { periodYm?: unknown };
+      return detail.periodYm === periodYm;
+    } catch {
+      return false;
+    }
+  }
+
+  private async replayJournalSource(
+    sourceType: string,
+    sourceId: string,
+    actorUserId?: string,
+  ): Promise<boolean> {
+    switch (sourceType) {
+      case 'sale':
+        await this.postFromSale(sourceId, actorUserId);
+        return true;
+      case 'debt_payment':
+        await this.postFromDebtPayment(sourceId, actorUserId);
+        return true;
+      case 'cash_voucher':
+        await this.postFromCashVoucher(sourceId, actorUserId);
+        return true;
+      case 'purchase_receipt':
+        await this.postFromPurchaseReceipt(sourceId, actorUserId);
+        return true;
+      case 'supplier_payment':
+        await this.postFromSupplierPayment(sourceId, actorUserId);
+        return true;
+      case 'supplier_return':
+        await this.postFromSupplierReturn(sourceId, actorUserId);
+        return true;
+      case 'sale_return':
+        await this.postFromSaleReturn(sourceId, actorUserId);
+        return true;
+      case 'stocktake':
+        await this.postFromStocktake(sourceId, actorUserId);
+        return true;
+      case 'wastage':
+        await this.postFromWastage(sourceId, actorUserId);
+        return true;
+      default:
+        return false;
+    }
   }
 
   async listAudit(user: AuthUser, limit = 50) {

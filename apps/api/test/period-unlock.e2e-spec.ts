@@ -209,11 +209,18 @@ describe('Period unlock e2e', () => {
       .send({ reason: '  Owner reviewed closeout  ' })
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual({ unlocked: true, periodYm });
+        expect(body).toEqual({ unlocked: true, periodYm, replayed: 1 });
       });
     await expect(
       prisma.periodLock.findUnique({ where: { periodYm } }),
     ).resolves.toBeNull();
+
+    const replayedBlockedSale = await prisma.journalEntry.findUnique({
+      where: {
+        sourceType_sourceId: { sourceType: 'sale', sourceId: blockedSaleId },
+      },
+    });
+    expect(replayedBlockedSale?.periodYm).toBe(periodYm);
 
     const postedSaleId = randomUUID();
     await pushSale({ saleId: postedSaleId, shiftId: shift.id, at });

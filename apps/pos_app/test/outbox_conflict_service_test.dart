@@ -451,6 +451,110 @@ void main() {
     );
 
     test(
+      'debt sale retry collapse to cash removes local debt and balance',
+      () async {
+        const saleId = 'sale-debt-collapse';
+        const outboxRowId = 'outbox-sale-debt-collapse';
+        const customerId = 'customer-debt-collapse';
+        await seedSaleWithStock(saleId: saleId, outboxRowId: outboxRowId);
+        await db
+            .into(db.customersLocal)
+            .insert(
+              CustomersLocalCompanion.insert(
+                id: customerId,
+                name: 'Debt customer',
+                balanceVnd: const Value(20000),
+                updatedAt: DateTime(2026),
+              ),
+            );
+        await (db.update(
+          db.salesLocal,
+        )..where((s) => s.id.equals(saleId))).write(
+          const SalesLocalCompanion(
+            paymentMethod: Value('debt'),
+            cashAmount: Value(0),
+            debtAmount: Value(20000),
+            customerId: Value(customerId),
+          ),
+        );
+        await db
+            .into(db.debtLedgerLocal)
+            .insert(
+              DebtLedgerLocalCompanion.insert(
+                id: 'debt-ledger-sale-collapse',
+                storeId: 'store-1',
+                customerId: customerId,
+                type: 'sale_debt',
+                amountVnd: 20000,
+                balanceAfterVnd: 20000,
+                saleId: const Value(saleId),
+                shiftId: const Value('shift-1'),
+                recordedById: 'user-1',
+                clientCreatedAt: DateTime(2026),
+                updatedAt: DateTime(2026),
+              ),
+            );
+        await db.updateOutboxPayload(
+          outboxRowId,
+          jsonEncode({
+            'id': saleId,
+            'storeId': 'store-1',
+            'shiftId': 'shift-1',
+            'soldById': 'user-1',
+            'paymentMethod': 'debt',
+            'cashAmount': 0,
+            'transferAmount': 0,
+            'debtAmount': 20000,
+            'discountVnd': 0,
+            'totalVnd': 20000,
+            'customerId': customerId,
+            'clientCreatedAt': DateTime.utc(2026).toIso8601String(),
+            'lines': [
+              {
+                'productId': 'p1',
+                'qty': '2',
+                'unitPrice': 10000,
+                'discountVnd': 0,
+                'lineTotal': 20000,
+              },
+            ],
+          }),
+        );
+
+        final localSynced = await service.saveInsufficientStockQtys(
+          outboxRowId: outboxRowId,
+          productIdToQty: const {'p1': '1'},
+        );
+
+        expect(localSynced, isTrue);
+        final sale = await (db.select(
+          db.salesLocal,
+        )..where((s) => s.id.equals(saleId))).getSingle();
+        expect(sale.paymentMethod, 'cash');
+        expect(sale.totalVnd, 10000);
+        expect(sale.cashAmount, 10000);
+        expect(sale.debtAmount, 0);
+
+        final customer = await (db.select(
+          db.customersLocal,
+        )..where((c) => c.id.equals(customerId))).getSingle();
+        expect(customer.balanceVnd, 0);
+        final debtRows = await (db.select(
+          db.debtLedgerLocal,
+        )..where((d) => d.saleId.equals(saleId))).get();
+        expect(debtRows, isEmpty);
+
+        final outbox = await (db.select(
+          db.outboxEntries,
+        )..where((r) => r.id.equals(outboxRowId))).getSingle();
+        final payload = jsonDecode(outbox.payloadJson) as Map<String, dynamic>;
+        expect(payload['paymentMethod'], 'cash');
+        expect(payload['cashAmount'], 10000);
+        expect(payload['debtAmount'], 0);
+      },
+    );
+
+    test(
       'discounted sale retry clamps discounts after qty reduction',
       () async {
         const saleId = 'sale-discount-clamp';
