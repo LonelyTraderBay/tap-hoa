@@ -3057,6 +3057,18 @@ class $SaleLinesLocalTable extends SaleLinesLocal
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _discountVndMeta = const VerificationMeta(
+    'discountVnd',
+  );
+  @override
+  late final GeneratedColumn<int> discountVnd = GeneratedColumn<int>(
+    'discount_vnd',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _lineTotalMeta = const VerificationMeta(
     'lineTotal',
   );
@@ -3086,6 +3098,7 @@ class $SaleLinesLocalTable extends SaleLinesLocal
     productId,
     qty,
     unitPrice,
+    discountVnd,
     lineTotal,
     unitCostVnd,
   ];
@@ -3138,6 +3151,15 @@ class $SaleLinesLocalTable extends SaleLinesLocal
     } else if (isInserting) {
       context.missing(_unitPriceMeta);
     }
+    if (data.containsKey('discount_vnd')) {
+      context.handle(
+        _discountVndMeta,
+        discountVnd.isAcceptableOrUnknown(
+          data['discount_vnd']!,
+          _discountVndMeta,
+        ),
+      );
+    }
     if (data.containsKey('line_total')) {
       context.handle(
         _lineTotalMeta,
@@ -3184,6 +3206,10 @@ class $SaleLinesLocalTable extends SaleLinesLocal
         DriftSqlType.int,
         data['${effectivePrefix}unit_price'],
       )!,
+      discountVnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}discount_vnd'],
+      )!,
       lineTotal: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}line_total'],
@@ -3208,6 +3234,7 @@ class SaleLinesLocalData extends DataClass
   final String productId;
   final String qty;
   final int unitPrice;
+  final int discountVnd;
   final int lineTotal;
   final int? unitCostVnd;
   const SaleLinesLocalData({
@@ -3216,6 +3243,7 @@ class SaleLinesLocalData extends DataClass
     required this.productId,
     required this.qty,
     required this.unitPrice,
+    required this.discountVnd,
     required this.lineTotal,
     this.unitCostVnd,
   });
@@ -3227,6 +3255,7 @@ class SaleLinesLocalData extends DataClass
     map['product_id'] = Variable<String>(productId);
     map['qty'] = Variable<String>(qty);
     map['unit_price'] = Variable<int>(unitPrice);
+    map['discount_vnd'] = Variable<int>(discountVnd);
     map['line_total'] = Variable<int>(lineTotal);
     if (!nullToAbsent || unitCostVnd != null) {
       map['unit_cost_vnd'] = Variable<int>(unitCostVnd);
@@ -3241,6 +3270,7 @@ class SaleLinesLocalData extends DataClass
       productId: Value(productId),
       qty: Value(qty),
       unitPrice: Value(unitPrice),
+      discountVnd: Value(discountVnd),
       lineTotal: Value(lineTotal),
       unitCostVnd: unitCostVnd == null && nullToAbsent
           ? const Value.absent()
@@ -3259,6 +3289,7 @@ class SaleLinesLocalData extends DataClass
       productId: serializer.fromJson<String>(json['productId']),
       qty: serializer.fromJson<String>(json['qty']),
       unitPrice: serializer.fromJson<int>(json['unitPrice']),
+      discountVnd: serializer.fromJson<int>(json['discountVnd']),
       lineTotal: serializer.fromJson<int>(json['lineTotal']),
       unitCostVnd: serializer.fromJson<int?>(json['unitCostVnd']),
     );
@@ -3272,6 +3303,7 @@ class SaleLinesLocalData extends DataClass
       'productId': serializer.toJson<String>(productId),
       'qty': serializer.toJson<String>(qty),
       'unitPrice': serializer.toJson<int>(unitPrice),
+      'discountVnd': serializer.toJson<int>(discountVnd),
       'lineTotal': serializer.toJson<int>(lineTotal),
       'unitCostVnd': serializer.toJson<int?>(unitCostVnd),
     };
@@ -3283,6 +3315,7 @@ class SaleLinesLocalData extends DataClass
     String? productId,
     String? qty,
     int? unitPrice,
+    int? discountVnd,
     int? lineTotal,
     Value<int?> unitCostVnd = const Value.absent(),
   }) => SaleLinesLocalData(
@@ -3291,6 +3324,7 @@ class SaleLinesLocalData extends DataClass
     productId: productId ?? this.productId,
     qty: qty ?? this.qty,
     unitPrice: unitPrice ?? this.unitPrice,
+    discountVnd: discountVnd ?? this.discountVnd,
     lineTotal: lineTotal ?? this.lineTotal,
     unitCostVnd: unitCostVnd.present ? unitCostVnd.value : this.unitCostVnd,
   );
@@ -3301,6 +3335,9 @@ class SaleLinesLocalData extends DataClass
       productId: data.productId.present ? data.productId.value : this.productId,
       qty: data.qty.present ? data.qty.value : this.qty,
       unitPrice: data.unitPrice.present ? data.unitPrice.value : this.unitPrice,
+      discountVnd: data.discountVnd.present
+          ? data.discountVnd.value
+          : this.discountVnd,
       lineTotal: data.lineTotal.present ? data.lineTotal.value : this.lineTotal,
       unitCostVnd: data.unitCostVnd.present
           ? data.unitCostVnd.value
@@ -3316,6 +3353,7 @@ class SaleLinesLocalData extends DataClass
           ..write('productId: $productId, ')
           ..write('qty: $qty, ')
           ..write('unitPrice: $unitPrice, ')
+          ..write('discountVnd: $discountVnd, ')
           ..write('lineTotal: $lineTotal, ')
           ..write('unitCostVnd: $unitCostVnd')
           ..write(')'))
@@ -3329,6 +3367,7 @@ class SaleLinesLocalData extends DataClass
     productId,
     qty,
     unitPrice,
+    discountVnd,
     lineTotal,
     unitCostVnd,
   );
@@ -3341,6 +3380,7 @@ class SaleLinesLocalData extends DataClass
           other.productId == this.productId &&
           other.qty == this.qty &&
           other.unitPrice == this.unitPrice &&
+          other.discountVnd == this.discountVnd &&
           other.lineTotal == this.lineTotal &&
           other.unitCostVnd == this.unitCostVnd);
 }
@@ -3351,6 +3391,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
   final Value<String> productId;
   final Value<String> qty;
   final Value<int> unitPrice;
+  final Value<int> discountVnd;
   final Value<int> lineTotal;
   final Value<int?> unitCostVnd;
   final Value<int> rowid;
@@ -3360,6 +3401,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     this.productId = const Value.absent(),
     this.qty = const Value.absent(),
     this.unitPrice = const Value.absent(),
+    this.discountVnd = const Value.absent(),
     this.lineTotal = const Value.absent(),
     this.unitCostVnd = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3370,6 +3412,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     required String productId,
     required String qty,
     required int unitPrice,
+    this.discountVnd = const Value.absent(),
     required int lineTotal,
     this.unitCostVnd = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3385,6 +3428,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     Expression<String>? productId,
     Expression<String>? qty,
     Expression<int>? unitPrice,
+    Expression<int>? discountVnd,
     Expression<int>? lineTotal,
     Expression<int>? unitCostVnd,
     Expression<int>? rowid,
@@ -3395,6 +3439,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
       if (productId != null) 'product_id': productId,
       if (qty != null) 'qty': qty,
       if (unitPrice != null) 'unit_price': unitPrice,
+      if (discountVnd != null) 'discount_vnd': discountVnd,
       if (lineTotal != null) 'line_total': lineTotal,
       if (unitCostVnd != null) 'unit_cost_vnd': unitCostVnd,
       if (rowid != null) 'rowid': rowid,
@@ -3407,6 +3452,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     Value<String>? productId,
     Value<String>? qty,
     Value<int>? unitPrice,
+    Value<int>? discountVnd,
     Value<int>? lineTotal,
     Value<int?>? unitCostVnd,
     Value<int>? rowid,
@@ -3417,6 +3463,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
       productId: productId ?? this.productId,
       qty: qty ?? this.qty,
       unitPrice: unitPrice ?? this.unitPrice,
+      discountVnd: discountVnd ?? this.discountVnd,
       lineTotal: lineTotal ?? this.lineTotal,
       unitCostVnd: unitCostVnd ?? this.unitCostVnd,
       rowid: rowid ?? this.rowid,
@@ -3441,6 +3488,9 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
     if (unitPrice.present) {
       map['unit_price'] = Variable<int>(unitPrice.value);
     }
+    if (discountVnd.present) {
+      map['discount_vnd'] = Variable<int>(discountVnd.value);
+    }
     if (lineTotal.present) {
       map['line_total'] = Variable<int>(lineTotal.value);
     }
@@ -3461,6 +3511,7 @@ class SaleLinesLocalCompanion extends UpdateCompanion<SaleLinesLocalData> {
           ..write('productId: $productId, ')
           ..write('qty: $qty, ')
           ..write('unitPrice: $unitPrice, ')
+          ..write('discountVnd: $discountVnd, ')
           ..write('lineTotal: $lineTotal, ')
           ..write('unitCostVnd: $unitCostVnd, ')
           ..write('rowid: $rowid')
@@ -14216,6 +14267,7 @@ typedef $$SaleLinesLocalTableCreateCompanionBuilder =
       required String productId,
       required String qty,
       required int unitPrice,
+      Value<int> discountVnd,
       required int lineTotal,
       Value<int?> unitCostVnd,
       Value<int> rowid,
@@ -14227,6 +14279,7 @@ typedef $$SaleLinesLocalTableUpdateCompanionBuilder =
       Value<String> productId,
       Value<String> qty,
       Value<int> unitPrice,
+      Value<int> discountVnd,
       Value<int> lineTotal,
       Value<int?> unitCostVnd,
       Value<int> rowid,
@@ -14263,6 +14316,11 @@ class $$SaleLinesLocalTableFilterComposer
 
   ColumnFilters<int> get unitPrice => $composableBuilder(
     column: $table.unitPrice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get discountVnd => $composableBuilder(
+    column: $table.discountVnd,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14311,6 +14369,11 @@ class $$SaleLinesLocalTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get discountVnd => $composableBuilder(
+    column: $table.discountVnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get lineTotal => $composableBuilder(
     column: $table.lineTotal,
     builder: (column) => ColumnOrderings(column),
@@ -14345,6 +14408,11 @@ class $$SaleLinesLocalTableAnnotationComposer
 
   GeneratedColumn<int> get unitPrice =>
       $composableBuilder(column: $table.unitPrice, builder: (column) => column);
+
+  GeneratedColumn<int> get discountVnd => $composableBuilder(
+    column: $table.discountVnd,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get lineTotal =>
       $composableBuilder(column: $table.lineTotal, builder: (column) => column);
@@ -14397,6 +14465,7 @@ class $$SaleLinesLocalTableTableManager
                 Value<String> productId = const Value.absent(),
                 Value<String> qty = const Value.absent(),
                 Value<int> unitPrice = const Value.absent(),
+                Value<int> discountVnd = const Value.absent(),
                 Value<int> lineTotal = const Value.absent(),
                 Value<int?> unitCostVnd = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -14406,6 +14475,7 @@ class $$SaleLinesLocalTableTableManager
                 productId: productId,
                 qty: qty,
                 unitPrice: unitPrice,
+                discountVnd: discountVnd,
                 lineTotal: lineTotal,
                 unitCostVnd: unitCostVnd,
                 rowid: rowid,
@@ -14417,6 +14487,7 @@ class $$SaleLinesLocalTableTableManager
                 required String productId,
                 required String qty,
                 required int unitPrice,
+                Value<int> discountVnd = const Value.absent(),
                 required int lineTotal,
                 Value<int?> unitCostVnd = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -14426,6 +14497,7 @@ class $$SaleLinesLocalTableTableManager
                 productId: productId,
                 qty: qty,
                 unitPrice: unitPrice,
+                discountVnd: discountVnd,
                 lineTotal: lineTotal,
                 unitCostVnd: unitCostVnd,
                 rowid: rowid,

@@ -18,6 +18,40 @@ void main() {
     expect(cart.totalVnd, 18000);
   });
 
+  test('line discounts apply before invoice discount', () {
+    final cart = Cart();
+    cart.add(
+      CartLine(
+        productId: 'p1',
+        name: 'Sting',
+        unitPrice: 10000,
+        qty: Decimal.parse('2'),
+        discountVnd: 3000,
+      ),
+    );
+    expect(cart.lines.single.grossTotalVnd, 20000);
+    expect(cart.lines.single.lineTotal, 17000);
+    expect(cart.subtotalVnd, 17000);
+    cart.discountVnd = 2000;
+    expect(cart.totalVnd, 15000);
+  });
+
+  test('line discount is clamped to rounded gross total', () {
+    final cart = Cart();
+    cart.add(
+      CartLine(
+        productId: 'p1',
+        name: 'Weighted',
+        unitPrice: 15500,
+        qty: Decimal.parse('0.333'),
+        discountVnd: 6000,
+      ),
+    );
+    expect(cart.lines.single.grossTotalVnd, 5162);
+    expect(cart.lines.single.discountVnd, 5162);
+    expect(cart.lines.single.lineTotal, 0);
+  });
+
   test('weighted qty', () {
     final cart = Cart();
     cart.add(
@@ -64,6 +98,7 @@ void main() {
     expect(draft.discountVnd, 500);
     expect(draft.totalVnd, 12000);
     expect(draft.lines.single.qty, '0.500');
+    expect(draft.lines.single.discountVnd, 0);
     expect(draft.lines.single.lineTotal, 12500);
   });
 }

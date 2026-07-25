@@ -2,6 +2,7 @@ export type PushSaleLineDto = {
   productId: string;
   qty: string;
   unitPrice: number;
+  discountVnd?: number;
   lineTotal: number;
 };
 

@@ -77,7 +77,7 @@ export type SaleVatLineInput = {
 };
 
 /**
- * Allocate sale discount across gross lines by proportion; remainder to last line.
+ * Allocate invoice discount across line nets by proportion; remainder to last line.
  */
 export function allocateSaleDiscount(
   lineTotals: number[],
@@ -103,7 +103,7 @@ export function allocateSaleDiscount(
 
 /**
  * @param vatRateBps store default when VAT on; null = no VAT split (legacy)
- * Per-line rates via lines[].vatRateBps; discount allocated by gross lineTotal.
+ * Per-line rates via lines[].vatRateBps; invoice discount allocated by lineTotal.
  */
 export function buildSaleJournal(input: {
   cashAmount: number;
@@ -438,7 +438,7 @@ export function buildSaleReturnJournal(input: {
   return out;
 }
 
-/** Compute per-line VAT snapshots for a sale (after discount allocation). */
+/** Compute per-line VAT snapshots after line discounts and invoice allocation. */
 export function computeSaleLineVatSnapshots(input: {
   lines: { lineTotal: number; vatRateBps?: number | null }[];
   discountVnd: number;

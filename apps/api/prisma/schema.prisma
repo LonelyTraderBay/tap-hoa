@@ -298,6 +298,7 @@ model SaleLine {
   productId   String
   qty         Decimal @db.Decimal(18, 3)
   unitPrice   Int
+  discountVnd Int     @default(0)
   lineTotal   Int
   unitCostVnd Int?
   /** Snapshot at sale time: Product.vatRateBps ?? Store.default when VAT on. */

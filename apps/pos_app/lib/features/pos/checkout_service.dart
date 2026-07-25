@@ -180,6 +180,7 @@ class CheckoutService {
             productId: line.productId,
             qty: _formatQty(baseQty),
             unitPrice: line.unitPrice,
+            discountVnd: Value(line.discountVnd),
             lineTotal: line.lineTotal,
             unitCostVnd: Value(unitCostVnd),
           ),
@@ -189,6 +190,7 @@ class CheckoutService {
           'productId': line.productId,
           'qty': _formatQty(baseQty),
           'unitPrice': line.unitPrice,
+          'discountVnd': line.discountVnd,
           'lineTotal': line.lineTotal,
         });
 

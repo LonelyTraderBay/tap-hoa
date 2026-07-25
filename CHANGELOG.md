@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### POS
+
+- Added per-cart-line VND discounts, synced as `SaleLine.discountVnd`; line discounts apply before invoice-level discounts.
+
 ### Phase 2 — Closeout follow-up
 
 - Ledger periods can now be unlocked by owners with an audit reason; Flutter sổ shows period lock/unlock audit and unlock controls.

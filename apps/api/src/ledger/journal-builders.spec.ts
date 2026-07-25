@@ -229,6 +229,24 @@ describe('journal-builders', () => {
     expect(lines.find((l) => l.accountCode === '3331')?.creditVnd).toBe(16_513);
   });
 
+  it('computeSaleLineVatSnapshots starts from line nets before invoice discount', () => {
+    const snaps = computeSaleLineVatSnapshots({
+      // First line was 220k gross with 10k line discount; invoice discount is
+      // then allocated over 210k + 105k.
+      lines: [
+        { lineTotal: 210_000, vatRateBps: 1000 },
+        { lineTotal: 105_000, vatRateBps: 500 },
+      ],
+      discountVnd: 15_000,
+      storeVatRateBps: 1000,
+    });
+    expect(allocateSaleDiscount([210_000, 105_000], 15_000)).toEqual([
+      200_000, 100_000,
+    ]);
+    expect(snaps[0]).toEqual({ vatRateBps: 1000, netVnd: 181_818, vatVnd: 18_182 });
+    expect(snaps[1]).toEqual({ vatRateBps: 500, netVnd: 95_238, vatVnd: 4_762 });
+  });
+
   it('buildSaleReturnJournal prefers line snapshots for VAT reversal', () => {
     const lines = buildSaleReturnJournal({
       cashRefundVnd: 110_000,

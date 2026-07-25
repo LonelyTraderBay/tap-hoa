@@ -887,6 +887,7 @@ export class SyncService {
           productId: string;
           qty: Prisma.Decimal;
           unitPrice: number;
+          discountVnd: number;
           lineTotal: number;
           unitCostVnd: number;
           productVatRateBps: number | null;
@@ -943,6 +944,7 @@ export class SyncService {
             productId: line.productId,
             qty: new Prisma.Decimal(line.qty),
             unitPrice: line.unitPrice,
+            discountVnd: line.discountVnd ?? 0,
             lineTotal: line.lineTotal,
             unitCostVnd,
             productVatRateBps: product?.vatRateBps ?? null,
@@ -1027,6 +1029,7 @@ export class SyncService {
                 productId: line.productId,
                 qty: line.qty,
                 unitPrice: line.unitPrice,
+                discountVnd: line.discountVnd,
                 lineTotal: line.lineTotal,
                 unitCostVnd: line.unitCostVnd,
                 vatRateBps: line.vatRateBps,
@@ -1181,7 +1184,9 @@ export class SyncService {
         !Number.isSafeInteger(line.unitPrice) ||
         line.unitPrice < 0 ||
         !Number.isSafeInteger(line.lineTotal) ||
-        line.lineTotal < 0
+        line.lineTotal < 0 ||
+        (line.discountVnd != null &&
+          (!Number.isSafeInteger(line.discountVnd) || line.discountVnd < 0))
       ) {
         return 'invalid_money';
       }
@@ -1190,7 +1195,12 @@ export class SyncService {
         if (!qty.isFinite() || qty.lessThanOrEqualTo(0)) {
           return 'invalid_quantity';
         }
-        const expectedLineTotal = qty.times(line.unitPrice).round();
+        const lineDiscount = line.discountVnd ?? 0;
+        const grossLineTotal = qty.times(line.unitPrice).round();
+        if (new Prisma.Decimal(lineDiscount).greaterThan(grossLineTotal)) {
+          return 'line_total_mismatch';
+        }
+        const expectedLineTotal = grossLineTotal.minus(lineDiscount);
         if (!expectedLineTotal.equals(line.lineTotal)) {
           return 'line_total_mismatch';
         }

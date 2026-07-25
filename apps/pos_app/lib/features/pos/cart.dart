@@ -2,6 +2,15 @@ import 'package:decimal/decimal.dart';
 
 int _roundVndHalfUp(Decimal value) => value.round().toBigInt().toInt();
 
+int _lineGrossVnd({required int unitPrice, required Decimal qty}) =>
+    _roundVndHalfUp(Decimal.fromInt(unitPrice) * qty);
+
+int _clampVnd(int value, int max) {
+  if (value < 0) return 0;
+  if (value > max) return max;
+  return value;
+}
+
 String _formatQty(Decimal qty) {
   if (qty == qty.truncate()) {
     return qty.truncate().toString();
@@ -10,27 +19,34 @@ String _formatQty(Decimal qty) {
 }
 
 class CartLine {
-  const CartLine({
+  CartLine({
     required this.productId,
     required this.name,
     required this.unitPrice,
     required this.qty,
-  });
+    int discountVnd = 0,
+  }) : discountVnd = _clampVnd(
+         discountVnd,
+         _lineGrossVnd(unitPrice: unitPrice, qty: qty),
+       );
 
   final String productId;
   final String name;
   final int unitPrice;
   final Decimal qty;
+  final int discountVnd;
 
-  int get lineTotal =>
-      _roundVndHalfUp(Decimal.fromInt(unitPrice) * qty);
+  int get grossTotalVnd => _lineGrossVnd(unitPrice: unitPrice, qty: qty);
 
-  CartLine copyWith({Decimal? qty}) => CartLine(
-        productId: productId,
-        name: name,
-        unitPrice: unitPrice,
-        qty: qty ?? this.qty,
-      );
+  int get lineTotal => grossTotalVnd - discountVnd;
+
+  CartLine copyWith({Decimal? qty, int? discountVnd}) => CartLine(
+    productId: productId,
+    name: name,
+    unitPrice: unitPrice,
+    qty: qty ?? this.qty,
+    discountVnd: discountVnd ?? this.discountVnd,
+  );
 }
 
 class SaleDraftLine {
@@ -39,6 +55,7 @@ class SaleDraftLine {
     required this.name,
     required this.qty,
     required this.unitPrice,
+    required this.discountVnd,
     required this.lineTotal,
   });
 
@@ -46,6 +63,7 @@ class SaleDraftLine {
   final String name;
   final String qty;
   final int unitPrice;
+  final int discountVnd;
   final int lineTotal;
 }
 
@@ -65,7 +83,13 @@ class SaleDraft {
 
 class Cart {
   final lines = <CartLine>[];
-  int discountVnd = 0;
+  int _discountVnd = 0;
+
+  int get discountVnd => _discountVnd;
+
+  set discountVnd(int value) {
+    _discountVnd = _clampVnd(value, subtotalVnd);
+  }
 
   int get subtotalVnd => lines.fold(0, (sum, line) => sum + line.lineTotal);
 
@@ -73,31 +97,47 @@ class Cart {
 
   void add(CartLine line) => lines.add(line);
 
+  void _clampInvoiceDiscount() {
+    _discountVnd = _clampVnd(_discountVnd, subtotalVnd);
+  }
+
   void update(String productId, Decimal qty) {
     final index = lines.indexWhere((line) => line.productId == productId);
     if (index == -1) {
       throw StateError('Cart line not found: $productId');
     }
     lines[index] = lines[index].copyWith(qty: qty);
+    _clampInvoiceDiscount();
+  }
+
+  void updateLineDiscount(String productId, int discountVnd) {
+    final index = lines.indexWhere((line) => line.productId == productId);
+    if (index == -1) {
+      throw StateError('Cart line not found: $productId');
+    }
+    lines[index] = lines[index].copyWith(discountVnd: discountVnd);
+    _clampInvoiceDiscount();
   }
 
   void remove(String productId) {
     lines.removeWhere((line) => line.productId == productId);
+    _clampInvoiceDiscount();
   }
 
   SaleDraft toSaleDraft() => SaleDraft(
-        lines: [
-          for (final line in lines)
-            SaleDraftLine(
-              productId: line.productId,
-              name: line.name,
-              qty: _formatQty(line.qty),
-              unitPrice: line.unitPrice,
-              lineTotal: line.lineTotal,
-            ),
-        ],
-        subtotalVnd: subtotalVnd,
-        discountVnd: discountVnd,
-        totalVnd: totalVnd,
-      );
+    lines: [
+      for (final line in lines)
+        SaleDraftLine(
+          productId: line.productId,
+          name: line.name,
+          qty: _formatQty(line.qty),
+          unitPrice: line.unitPrice,
+          discountVnd: line.discountVnd,
+          lineTotal: line.lineTotal,
+        ),
+    ],
+    subtotalVnd: subtotalVnd,
+    discountVnd: discountVnd,
+    totalVnd: totalVnd,
+  );
 }

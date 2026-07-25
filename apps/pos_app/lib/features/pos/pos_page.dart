@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/local/database.dart';
 import '../../data/sync/outbox_worker.dart';
@@ -134,6 +135,81 @@ class _PosPageState extends State<PosPage> {
         });
       },
     );
+  }
+
+  Future<int?> _showDiscountDialog({
+    required String title,
+    required int initialVnd,
+    required int maxVnd,
+  }) async {
+    final controller = TextEditingController(text: initialVnd.toString());
+    var errorText = '';
+    try {
+      return await showDialog<int>(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text(title),
+                content: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: 'Giảm giá (VND)',
+                    helperText: 'Tối đa $maxVnd VND',
+                    errorText: errorText.isEmpty ? null : errorText,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Hủy'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final value = int.tryParse(controller.text.trim()) ?? 0;
+                      if (value > maxVnd) {
+                        setDialogState(() {
+                          errorText = 'Không được vượt quá $maxVnd VND';
+                        });
+                        return;
+                      }
+                      Navigator.of(context).pop(value);
+                    },
+                    child: const Text('Lưu'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _editLineDiscount(CartLine line) async {
+    final value = await _showDiscountDialog(
+      title: 'Giảm dòng: ${line.name}',
+      initialVnd: line.discountVnd,
+      maxVnd: line.grossTotalVnd,
+    );
+    if (value == null || !mounted) return;
+    setState(() => _cart.updateLineDiscount(line.productId, value));
+  }
+
+  Future<void> _editInvoiceDiscount() async {
+    final value = await _showDiscountDialog(
+      title: 'Giảm hóa đơn',
+      initialVnd: _cart.discountVnd,
+      maxVnd: _cart.subtotalVnd,
+    );
+    if (value == null || !mounted) return;
+    setState(() => _cart.discountVnd = value);
   }
 
   void _openSaleReturn() {
@@ -467,7 +543,8 @@ class _PosPageState extends State<PosPage> {
                     storeId: widget.storeId,
                     productService: widget.productService,
                     groupService: ProductGroupService(widget.database),
-                    canEditCatalog: widget.role == 'owner' ||
+                    canEditCatalog:
+                        widget.role == 'owner' ||
                         widget.role == 'store_manager',
                   ),
                 ),
@@ -575,8 +652,23 @@ class _PosPageState extends State<PosPage> {
                       final line = _cart.lines[index];
                       return ListTile(
                         title: Text(line.name),
-                        subtitle: Text('${line.qty} × ${line.unitPrice} VND'),
-                        trailing: Text('${line.lineTotal} VND'),
+                        subtitle: Text(
+                          line.discountVnd > 0
+                              ? '${line.qty} × ${line.unitPrice} VND = ${line.grossTotalVnd} VND\nGiảm dòng: ${line.discountVnd} VND'
+                              : '${line.qty} × ${line.unitPrice} VND',
+                        ),
+                        isThreeLine: line.discountVnd > 0,
+                        trailing: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('${line.lineTotal} VND'),
+                            TextButton(
+                              onPressed: () => _editLineDiscount(line),
+                              child: const Text('Giảm'),
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
@@ -588,9 +680,17 @@ class _PosPageState extends State<PosPage> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Tổng: ${_cart.totalVnd} VND',
+                      _cart.discountVnd > 0
+                          ? 'Tạm tính: ${_cart.subtotalVnd} VND\nGiảm HĐ: ${_cart.discountVnd} VND\nTổng: ${_cart.totalVnd} VND'
+                          : 'Tổng: ${_cart.totalVnd} VND',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                  ),
+                  TextButton(
+                    onPressed: _cart.lines.isEmpty
+                        ? null
+                        : _editInvoiceDiscount,
+                    child: const Text('Giảm HĐ'),
                   ),
                   FilledButton(
                     onPressed: _openPayment,

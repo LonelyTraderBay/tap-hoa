@@ -51,6 +51,7 @@ function makeSaleDto(
         productId: opts.productId,
         qty,
         unitPrice,
+        discountVnd: 0,
         lineTotal: totalVnd,
       },
     ],
@@ -260,6 +261,66 @@ describe('Sync push', () => {
     expect(res.body.rejected).toEqual([]);
   });
 
+  it('POST /sync/push accepts sale line discounts before invoice discount', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 0, clientId: shiftId })
+      .expect(201);
+
+    const saleId = randomUUID();
+    const sale = {
+      id: saleId,
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      paymentMethod: 'cash',
+      cashAmount: 17000,
+      transferAmount: 0,
+      debtAmount: 0,
+      discountVnd: 1000,
+      totalVnd: 17000,
+      customerId: null,
+      clientCreatedAt: new Date().toISOString(),
+      lines: [
+        {
+          productId: product.id,
+          qty: '2',
+          unitPrice: 10000,
+          discountVnd: 2000,
+          lineTotal: 18000,
+        },
+      ],
+    };
+
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ deviceId: 'dev-line-discount', sales: [sale] })
+      .expect(201);
+
+    expect(res.body.acceptedIds).toEqual([saleId]);
+    expect(res.body.rejected).toEqual([]);
+    const storedLine = await prisma.saleLine.findFirst({
+      where: { saleId },
+    });
+    expect(storedLine?.discountVnd).toBe(2000);
+    expect(storedLine?.lineTotal).toBe(18000);
+  });
+
   it('POST /sync/push rejects invalid quantities and client money mismatches', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())
@@ -308,13 +369,35 @@ describe('Sync push', () => {
       productId: product.id,
     });
     negativeMoney.discountVnd = -1;
+    const negativeLineDiscount = makeSaleDto(randomUUID(), {
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      productId: product.id,
+    });
+    negativeLineDiscount.lines[0].discountVnd = -1;
+    const excessiveLineDiscount = makeSaleDto(randomUUID(), {
+      storeId,
+      shiftId,
+      soldById: login.user.id,
+      productId: product.id,
+    });
+    excessiveLineDiscount.lines[0].discountVnd = 25000;
+    excessiveLineDiscount.lines[0].lineTotal = 0;
 
     const res = await request(app.getHttpServer())
       .post('/sync/push')
       .set('Authorization', `Bearer ${login.accessToken}`)
       .send({
         deviceId: 'dev-invalid-money',
-        sales: [invalidQty, badLine, badTotal, negativeMoney],
+        sales: [
+          invalidQty,
+          badLine,
+          badTotal,
+          negativeMoney,
+          negativeLineDiscount,
+          excessiveLineDiscount,
+        ],
       })
       .expect(201);
 
@@ -323,6 +406,8 @@ describe('Sync push', () => {
       { id: badLine.id, reason: 'line_total_mismatch' },
       { id: badTotal.id, reason: 'sale_total_mismatch' },
       { id: negativeMoney.id, reason: 'invalid_money' },
+      { id: negativeLineDiscount.id, reason: 'invalid_money' },
+      { id: excessiveLineDiscount.id, reason: 'line_total_mismatch' },
     ]);
   });
 

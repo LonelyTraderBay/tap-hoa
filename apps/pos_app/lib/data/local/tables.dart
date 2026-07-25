@@ -92,6 +92,7 @@ class SaleLinesLocal extends Table {
   TextColumn get productId => text()();
   TextColumn get qty => text()();
   IntColumn get unitPrice => integer()();
+  IntColumn get discountVnd => integer().withDefault(const Constant(0))();
   IntColumn get lineTotal => integer()();
   IntColumn get unitCostVnd => integer().nullable()();
 
