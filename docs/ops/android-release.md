@@ -1,5 +1,7 @@
 # Android release signing
 
+See also: `docs/ops/windows-prod.md` (Windows prod `API_URL` and smoke checklist).
+
 Release APKs are signed from a local `apps/pos_app/android/key.properties` file.
 This file and all keystores are ignored by git; never commit real passwords or keystore files.
 

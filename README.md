@@ -79,7 +79,7 @@ flutter pub get
 flutter run -d windows --dart-define=API_URL=http://localhost:3000
 ```
 
-Signed Android release APKs require a local keystore and `apps/pos_app/android/key.properties`; see `docs/ops/android-release.md`.
+Signed Android release APKs require a local keystore and `apps/pos_app/android/key.properties`; see `docs/ops/android-release.md`. Production Windows builds use `--dart-define=API_URL=https://…`; see `docs/ops/windows-prod.md`.
 
 | Platform | `API_URL` |
 |----------|-----------|
@@ -156,12 +156,17 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist.  
 **Phase 3:** Feature track Done (PR #12–#16). Production closeout / hardening: see `docs/superpowers/plans/2026-07-25-phase3-hardening.md` (store-scoped period reports, net VAT, supplier return AP integrity, bank recon idempotency, HĐĐT HTTP timeout/retry). Nộp CQT tự động vẫn ngoài scope.
 
-### Phase 3 runbook (prod host / env / migrate / backup / rollback)
+### Wave 1 ops (go-live)
 
-- Production deploy/backup/rollback runbook: `docs/ops/production-deploy.md`
-- Production secrets + real owner account: `docs/ops/production-secrets.md`
-- HĐĐT HTTP gateway / stub mode: `docs/ops/einvoice-http.md`
-- Host choice for Wave 1: Docker Compose (`apps/api/Dockerfile`, `apps/api/docker-compose.prod.yml`); live VPS execution is an operator follow-up when credentials are available.
+| Topic | Doc |
+|-------|-----|
+| Deploy, migrate, backup, rollback | `docs/ops/production-deploy.md` |
+| Secrets + real owner account | `docs/ops/production-secrets.md` |
+| HĐĐT HTTP gateway / stub | `docs/ops/einvoice-http.md` |
+| Android release signing + APK | `docs/ops/android-release.md` |
+| Windows prod `API_URL` + smoke | `docs/ops/windows-prod.md` |
+
+Host choice for Wave 1: Docker Compose (`apps/api/Dockerfile`, `apps/api/docker-compose.prod.yml`); live VPS execution is an operator follow-up when credentials are available.
 
 Short path:
 

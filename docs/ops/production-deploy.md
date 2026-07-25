@@ -9,6 +9,8 @@ See also:
 
 - `docs/ops/production-secrets.md` — `JWT_SECRET`, e-invoice keys, owner account
 - `docs/ops/einvoice-http.md` — HĐĐT HTTP gateway vs stub operator checklist
+- `docs/ops/android-release.md` — Android release signing and APK
+- `docs/ops/windows-prod.md` — Windows prod `API_URL`, build, operator smoke
 
 ## 1. Host choice
 
