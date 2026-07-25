@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { Role } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -203,6 +204,101 @@ describe('Reports day', () => {
 
     expect(report.body.totalRevenueVnd).toBe(50000);
     expect(report.body.byStore).toHaveLength(2);
+  });
+
+  it('GET /reports/day breaks revenue down by shift for a store date', async () => {
+    const login = await loginAsOwner(app);
+    const storesRes = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const ch1 = storesRes.body.find(
+      (store: { code: string }) => store.code === 'CH1',
+    );
+    if (!ch1) {
+      throw new Error('Seed store CH1 not found');
+    }
+
+    const reportDate = '2026-07-25';
+    const shiftA = await prisma.shift.create({
+      data: {
+        id: randomUUID(),
+        storeId: ch1.id,
+        userId: login.user.id,
+        openedAt: new Date(`${reportDate}T01:00:00.000Z`),
+        openingCash: 100000,
+      },
+    });
+    const shiftB = await prisma.shift.create({
+      data: {
+        id: randomUUID(),
+        storeId: ch1.id,
+        userId: login.user.id,
+        openedAt: new Date(`${reportDate}T08:00:00.000Z`),
+        openingCash: 200000,
+      },
+    });
+
+    await prisma.sale.createMany({
+      data: [
+        {
+          id: randomUUID(),
+          storeId: ch1.id,
+          shiftId: shiftA.id,
+          soldById: login.user.id,
+          paymentMethod: 'cash',
+          cashAmount: 12000,
+          totalVnd: 12000,
+          clientCreatedAt: new Date(`${reportDate}T03:00:00.000Z`),
+        },
+        {
+          id: randomUUID(),
+          storeId: ch1.id,
+          shiftId: shiftB.id,
+          soldById: login.user.id,
+          paymentMethod: 'cash',
+          cashAmount: 15000,
+          totalVnd: 15000,
+          clientCreatedAt: new Date(`${reportDate}T09:00:00.000Z`),
+        },
+        {
+          id: randomUUID(),
+          storeId: ch1.id,
+          shiftId: shiftB.id,
+          soldById: login.user.id,
+          paymentMethod: 'cash',
+          cashAmount: 18000,
+          totalVnd: 18000,
+          clientCreatedAt: new Date(`${reportDate}T10:00:00.000Z`),
+        },
+      ],
+    });
+
+    const report = await request(app.getHttpServer())
+      .get(`/reports/day?date=${reportDate}&storeId=${ch1.id}`)
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(200);
+
+    expect(report.body.totalRevenueVnd).toBe(45000);
+    expect(report.body.byStore).toHaveLength(1);
+    expect(report.body.byShift).toHaveLength(2);
+    expect(report.body.byShift).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          storeId: ch1.id,
+          shiftId: shiftA.id,
+          revenueVnd: 12000,
+          orderCount: 1,
+          cashVnd: 12000,
+        }),
+        expect.objectContaining({
+          storeId: ch1.id,
+          shiftId: shiftB.id,
+          revenueVnd: 33000,
+          orderCount: 2,
+          cashVnd: 33000,
+        }),
+      ]),
+    );
   });
 
   it('GET /reports/day uses Asia/Ho_Chi_Minh day boundaries', async () => {
@@ -649,6 +745,188 @@ describe('Reports stock-on-hand', () => {
     await request(app.getHttpServer())
       .get(`/reports/stock-on-hand?storeId=${ch2.id}`)
       .set('Authorization', `Bearer ${cashierRes.body.accessToken}`)
+      .expect(403);
+  });
+});
+
+describe('Reports debt aging aggregate', () => {
+  const managerPhone = '0900000088';
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let ownerToken: string;
+  let managerToken: string;
+  let ownerId: string;
+  let ch1: { id: string };
+  let ch2: { id: string };
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    prisma = moduleRef.get(PrismaService);
+    await app.init();
+
+    const ownerLogin = await loginAsOwner(app);
+    ownerToken = ownerLogin.accessToken;
+    ownerId = ownerLogin.user.id;
+    ch1 = (await prisma.store.findFirst({ where: { code: 'CH1' } }))!;
+    ch2 = (await prisma.store.findFirst({ where: { code: 'CH2' } }))!;
+    const passwordHash = await bcrypt.hash('123456', 10);
+    const manager = await prisma.user.upsert({
+      where: { phone: managerPhone },
+      update: { active: true, passwordHash, role: Role.store_manager },
+      create: {
+        phone: managerPhone,
+        name: 'QL cong no',
+        passwordHash,
+        role: Role.store_manager,
+      },
+    });
+    await prisma.userStore.upsert({
+      where: { userId_storeId: { userId: manager.id, storeId: ch1.id } },
+      update: {},
+      create: { userId: manager.id, storeId: ch1.id },
+    });
+    await prisma.userStore.deleteMany({
+      where: { userId: manager.id, storeId: { not: ch1.id } },
+    });
+
+    const managerLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ phone: managerPhone, password: '123456' })
+      .expect(201);
+    managerToken = managerLogin.body.accessToken;
+  });
+
+  beforeEach(async () => {
+    await prisma.debtLedgerEntry.deleteMany();
+    await prisma.customer.deleteMany();
+    await prisma.store.update({
+      where: { id: ch1.id },
+      data: { debtOverdueDays: 15 },
+    });
+    await prisma.store.update({
+      where: { id: ch2.id },
+      data: { debtOverdueDays: 45 },
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  async function seedDebt(input: {
+    storeId: string;
+    name: string;
+    balanceVnd: number;
+  }) {
+    const customer = await prisma.customer.create({
+      data: {
+        id: randomUUID(),
+        storeId: input.storeId,
+        name: input.name,
+        phone: `09${Math.floor(Math.random() * 1_000_000_000)
+          .toString()
+          .padStart(9, '0')}`,
+        balanceVnd: input.balanceVnd,
+      },
+    });
+    await prisma.debtLedgerEntry.create({
+      data: {
+        id: randomUUID(),
+        storeId: input.storeId,
+        customerId: customer.id,
+        type: 'sale_debt',
+        amountVnd: input.balanceVnd,
+        balanceAfterVnd: input.balanceVnd,
+        recordedById: ownerId,
+        clientCreatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+    return customer;
+  }
+
+  it('GET /reports/debt-aging aggregates owner stores when storeId is omitted', async () => {
+    const customer1 = await seedDebt({
+      storeId: ch1.id,
+      name: 'No CH1',
+      balanceVnd: 100000,
+    });
+    const customer2 = await seedDebt({
+      storeId: ch2.id,
+      name: 'No CH2',
+      balanceVnd: 200000,
+    });
+
+    const report = await request(app.getHttpServer())
+      .get('/reports/debt-aging')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+
+    expect(report.body.storeId).toBeNull();
+    expect(report.body.scope).toBe('aggregate');
+    expect(report.body.storeIds).toEqual(expect.arrayContaining([ch1.id, ch2.id]));
+    expect(report.body.customers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          customerId: customer1.id,
+          storeId: ch1.id,
+          balanceVnd: 100000,
+          debtOverdueDays: 15,
+        }),
+        expect.objectContaining({
+          customerId: customer2.id,
+          storeId: ch2.id,
+          balanceVnd: 200000,
+          debtOverdueDays: 45,
+        }),
+      ]),
+    );
+
+    const exportCsv = await request(app.getHttpServer())
+      .get('/reports/ar.csv')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    expect(exportCsv.body.scope).toBe('aggregate');
+    expect(exportCsv.body.csv).toContain(
+      'storeId,customerId,name,phone,balanceVnd',
+    );
+    expect(exportCsv.body.csv).toContain(customer1.id);
+    expect(exportCsv.body.csv).toContain(customer2.id);
+  });
+
+  it('GET /reports/debt-aging scopes omitted storeId to manager stores', async () => {
+    const managerCustomer = await seedDebt({
+      storeId: ch1.id,
+      name: 'No manager',
+      balanceVnd: 70000,
+    });
+    await seedDebt({
+      storeId: ch2.id,
+      name: 'No other',
+      balanceVnd: 80000,
+    });
+
+    const report = await request(app.getHttpServer())
+      .get('/reports/debt-aging')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+
+    expect(report.body.storeId).toBeNull();
+    expect(report.body.scope).toBe('aggregate');
+    expect(report.body.storeIds).toEqual([ch1.id]);
+    expect(report.body.customers).toEqual([
+      expect.objectContaining({
+        customerId: managerCustomer.id,
+        storeId: ch1.id,
+        balanceVnd: 70000,
+      }),
+    ]);
+
+    await request(app.getHttpServer())
+      .get(`/reports/debt-aging?storeId=${ch2.id}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .expect(403);
   });
 });

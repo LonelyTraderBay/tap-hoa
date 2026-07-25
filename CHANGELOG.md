@@ -8,6 +8,12 @@
 - Product sync now audits `product_price_change` when an existing product price changes, exposed through ledger audit filters.
 - Sales are not silently deleted or voided; returns remain the supported correction path.
 
+### Wave 8 — Reports
+
+- `GET /reports/day` now includes per-shift revenue breakdowns in `byShift`.
+- `GET /reports/debt-aging` supports owner/manager aggregate scope when `storeId` is omitted.
+- Added `GET /reports/ar.csv` for accounts-receivable customer debt CSV export.
+
 ### POS
 
 - Added per-cart-line VND discounts, synced as `SaleLine.discountVnd`; line discounts apply before invoice-level discounts.

@@ -22,8 +22,13 @@ export type StoreDayReport = {
   debtVnd: number;
 };
 
+export type ShiftDayReport = StoreDayReport & {
+  shiftId: string;
+};
+
 export type DayReportResponse = {
   byStore: StoreDayReport[];
+  byShift: ShiftDayReport[];
   totalRevenueVnd: number;
 };
 
@@ -130,11 +135,25 @@ export class ReportsService {
     const storeIds = await this.resolveStoreIds(user, storeId);
 
     if (storeIds.length === 0) {
-      return { byStore: [], totalRevenueVnd: 0 };
+      return { byStore: [], byShift: [], totalRevenueVnd: 0 };
     }
 
     const grouped = await this.prisma.sale.groupBy({
       by: ['storeId'],
+      where: {
+        storeId: { in: storeIds },
+        clientCreatedAt: { gte: start, lt: end },
+      },
+      _sum: {
+        totalVnd: true,
+        cashAmount: true,
+        transferAmount: true,
+        debtAmount: true,
+      },
+      _count: { id: true },
+    });
+    const groupedByShift = await this.prisma.sale.groupBy({
+      by: ['storeId', 'shiftId'],
       where: {
         storeId: { in: storeIds },
         clientCreatedAt: { gte: start, lt: end },
@@ -158,13 +177,26 @@ export class ReportsService {
     }));
 
     byStore.sort((a, b) => a.storeId.localeCompare(b.storeId));
+    const byShift: ShiftDayReport[] = groupedByShift.map((row) => ({
+      storeId: row.storeId,
+      shiftId: row.shiftId,
+      revenueVnd: row._sum.totalVnd ?? 0,
+      orderCount: row._count.id,
+      cashVnd: row._sum.cashAmount ?? 0,
+      transferVnd: row._sum.transferAmount ?? 0,
+      debtVnd: row._sum.debtAmount ?? 0,
+    }));
+    byShift.sort((a, b) => {
+      const byStoreId = a.storeId.localeCompare(b.storeId);
+      return byStoreId !== 0 ? byStoreId : a.shiftId.localeCompare(b.shiftId);
+    });
 
     const totalRevenueVnd = byStore.reduce(
       (sum, row) => sum + row.revenueVnd,
       0,
     );
 
-    return { byStore, totalRevenueVnd };
+    return { byStore, byShift, totalRevenueVnd };
   }
 
   async topSkus(
@@ -339,40 +371,88 @@ export class ReportsService {
     return { storeId, items, totalEstimatedValueVnd };
   }
 
-  async debtAging(user: AuthUser, storeId: string) {
-    this.assertStoreAccess(user, storeId);
-    const store = await this.prisma.store.findUnique({
-      where: { id: storeId },
+  private async resolveDebtAgingStoreFilter(
+    user: AuthUser,
+    storeId?: string,
+  ): Promise<{ storeIds: string[]; scope: 'store' | 'aggregate' }> {
+    if (!storeId && user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    const storeIds = await this.resolveStoreIds(user, storeId);
+    return { storeIds, scope: storeId ? 'store' : 'aggregate' };
+  }
+
+  async debtAging(user: AuthUser, storeId?: string) {
+    const { storeIds, scope } = await this.resolveDebtAgingStoreFilter(
+      user,
+      storeId,
+    );
+    const stores = await this.prisma.store.findMany({
+      where: { id: { in: storeIds } },
+      orderBy: { id: 'asc' },
     });
-    if (!store) {
+    if (storeId && stores.length === 0) {
       throw new BadRequestException('store not found');
     }
+    const effectiveStoreIds = stores.map((store) => store.id);
+    const storeById = new Map(stores.map((store) => [store.id, store]));
+    if (effectiveStoreIds.length === 0) {
+      return {
+        storeId: storeId ?? null,
+        scope,
+        storeIds: [],
+        debtOverdueDays: null,
+        customers: [],
+      };
+    }
     const customers = await this.prisma.customer.findMany({
-      where: { storeId, balanceVnd: { gt: 0 } },
-      orderBy: { name: 'asc' },
+      where: { storeId: { in: effectiveStoreIds }, balanceVnd: { gt: 0 } },
+      orderBy: [{ storeId: 'asc' }, { name: 'asc' }],
     });
+    const customerIds = customers.map((customer) => customer.id);
     const ledger = await this.prisma.debtLedgerEntry.findMany({
-      where: { storeId },
+      where: {
+        storeId: { in: effectiveStoreIds },
+        customerId: { in: customerIds },
+      },
       orderBy: { clientCreatedAt: 'asc' },
     });
     const asOf = new Date();
+    const ledgerByCustomer = new Map<
+      string,
+      Array<{
+        type: string;
+        amountVnd: number;
+        clientCreatedAt: Date;
+      }>
+    >();
+    for (const entry of ledger) {
+      const entries = ledgerByCustomer.get(entry.customerId) ?? [];
+      entries.push({
+        type: entry.type,
+        amountVnd: entry.amountVnd,
+        clientCreatedAt: entry.clientCreatedAt,
+      });
+      ledgerByCustomer.set(entry.customerId, entries);
+    }
     return {
-      storeId,
-      debtOverdueDays: store.debtOverdueDays,
+      storeId: storeId ?? null,
+      scope,
+      storeIds: effectiveStoreIds,
+      debtOverdueDays: storeId
+        ? (storeById.get(storeId)?.debtOverdueDays ?? null)
+        : null,
       customers: customers.map((c) => {
-        const entries = ledger
-          .filter((e) => e.customerId === c.id)
-          .map((e) => ({
-            type: e.type,
-            amountVnd: e.amountVnd,
-            clientCreatedAt: e.clientCreatedAt,
-          }));
-        const aging = computeDebtAging(entries, store.debtOverdueDays, asOf);
+        const debtOverdueDays = storeById.get(c.storeId)?.debtOverdueDays ?? 30;
+        const entries = ledgerByCustomer.get(c.id) ?? [];
+        const aging = computeDebtAging(entries, debtOverdueDays, asOf);
         return {
           customerId: c.id,
+          storeId: c.storeId,
           name: c.name,
           phone: c.phone,
           balanceVnd: c.balanceVnd,
+          debtOverdueDays,
           oldestUnpaidAt: aging.oldestUnpaidAt?.toISOString() ?? null,
           daysOutstanding: aging.daysOutstanding,
           overdue: aging.overdue,
@@ -489,12 +569,38 @@ export class ReportsService {
     };
   }
 
-  private csvEscape(value: string | number): string {
+  private csvEscape(value: string | number | null): string {
     const s = String(value);
     if (/[",\n\r]/.test(s)) {
       return `"${s.replace(/"/g, '""')}"`;
     }
     return s;
+  }
+
+  async arExportCsv(user: AuthUser, storeId?: string) {
+    const aging = await this.debtAging(user, storeId);
+    const lines = [
+      'storeId,customerId,name,phone,balanceVnd,debtOverdueDays,oldestUnpaidAt,daysOutstanding,overdue',
+      ...aging.customers.map((customer) =>
+        [
+          this.csvEscape(customer.storeId),
+          this.csvEscape(customer.customerId),
+          this.csvEscape(customer.name),
+          this.csvEscape(customer.phone ?? ''),
+          customer.balanceVnd,
+          customer.debtOverdueDays,
+          this.csvEscape(customer.oldestUnpaidAt ?? ''),
+          customer.daysOutstanding,
+          customer.overdue ? 'true' : 'false',
+        ].join(','),
+      ),
+    ];
+    return {
+      storeId: aging.storeId,
+      scope: aging.scope,
+      storeIds: aging.storeIds,
+      csv: lines.join('\n'),
+    };
   }
 
   async periodExportCsv(

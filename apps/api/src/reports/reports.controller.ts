@@ -63,10 +63,21 @@ export class ReportsController {
     @Req() req: { user: AuthUser },
     @Query('storeId') storeId?: string,
   ) {
-    if (!storeId) {
-      throw new BadRequestException('storeId is required');
-    }
     return this.reportsService.debtAging(req.user, storeId);
+  }
+
+  @Get('ar.csv')
+  async arExportCsv(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+  ) {
+    const result = await this.reportsService.arExportCsv(req.user, storeId);
+    return {
+      storeId: result.storeId,
+      scope: result.scope,
+      storeIds: result.storeIds,
+      csv: result.csv,
+    };
   }
 
   @Get('period/trial-balance')
