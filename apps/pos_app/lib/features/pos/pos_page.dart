@@ -132,29 +132,92 @@ class _PosPageState extends State<PosPage> {
     super.dispose();
   }
 
-  void _addProductToCart(ProductWithStock product) {
+  void _addProductToCart(ProductWithStock product, {required Decimal qty}) {
     final existing = _cart.lines.indexWhere(
       (line) => line.productId == product.id,
     );
     if (existing >= 0) {
       final line = _cart.lines[existing];
-      _cart.update(product.id, line.qty + Decimal.one);
+      _cart.update(product.id, line.qty + qty);
     } else {
       _cart.add(
         CartLine(
           productId: product.id,
           name: product.name,
           unitPrice: product.basePriceVnd,
-          qty: Decimal.one,
+          qty: qty,
+          unitLabel: product.displayUnit,
           isWeighted: product.isWeighted,
         ),
       );
     }
   }
 
-  void _addProduct(ProductWithStock product) {
+  Future<Decimal?> _showWeightedQtyDialog(ProductWithStock product) async {
+    String errorText = '';
+    String input = '';
+    return showDialog<Decimal>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Nhập kg: ${product.name}'),
+              content: TextField(
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Số kg',
+                  helperText: 'Hàng cân: tối đa 3 chữ số thập phân',
+                  errorText: errorText.isEmpty ? null : errorText,
+                ),
+                onChanged: (value) => input = value,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Hủy'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final raw = input.trim().replaceAll(',', '.');
+                    final qty = Decimal.tryParse(raw);
+                    if (qty == null || qty <= Decimal.zero) {
+                      setDialogState(() {
+                        errorText = 'Số lượng phải lớn hơn 0';
+                      });
+                      return;
+                    }
+                    if (_decimalPlaces(raw) > 3) {
+                      setDialogState(() {
+                        errorText = 'Tối đa 3 chữ số thập phân';
+                      });
+                      return;
+                    }
+                    Navigator.of(context).pop(qty);
+                  },
+                  child: const Text('Thêm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _addProduct(ProductWithStock product) async {
+    final qty = product.isWeighted
+        ? await _showWeightedQtyDialog(product)
+        : Decimal.one;
+    if (qty == null || !mounted) return;
     setState(() {
-      _addProductToCart(product);
+      _addProductToCart(product, qty: qty);
       _message = null;
     });
   }
@@ -172,7 +235,7 @@ class _PosPageState extends State<PosPage> {
     }
 
     _pendingAutoAddBarcodeQuery = normalizedQuery;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) {
         return;
       }
@@ -180,11 +243,19 @@ class _PosPageState extends State<PosPage> {
         _pendingAutoAddBarcodeQuery = null;
         return;
       }
+      final qty = product.isWeighted
+          ? await _showWeightedQtyDialog(product)
+          : Decimal.one;
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _addProductToCart(product);
+        if (qty != null) {
+          _addProductToCart(product, qty: qty);
+          _message = null;
+        }
         _searchController.clear();
         _query = '';
-        _message = null;
         _pendingAutoAddBarcodeQuery = null;
       });
     });
@@ -842,12 +913,15 @@ class _PosPageState extends State<PosPage> {
                     itemBuilder: (context, index) {
                       final line = _cart.lines[index];
                       final qtyLabel = _formatLineQty(line);
+                      final qtyWithUnit = line.unitLabel.isEmpty
+                          ? qtyLabel
+                          : '$qtyLabel ${line.unitLabel}';
                       return ListTile(
                         title: Text(line.name),
                         subtitle: Text(
                           line.discountVnd > 0
-                              ? '$qtyLabel × ${line.unitPrice} VND = ${line.grossTotalVnd} VND\nGiảm dòng: ${line.discountVnd} VND'
-                              : '$qtyLabel × ${line.unitPrice} VND',
+                              ? '$qtyWithUnit × ${line.unitPrice} VND = ${line.grossTotalVnd} VND\nGiảm dòng: ${line.discountVnd} VND'
+                              : '$qtyWithUnit × ${line.unitPrice} VND',
                         ),
                         isThreeLine: line.discountVnd > 0,
                         trailing: Wrap(
