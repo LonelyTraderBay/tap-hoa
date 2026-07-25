@@ -143,6 +143,7 @@ describe('Phase 3 hardening e2e', () => {
     await prisma.journalLine.deleteMany();
     await prisma.journalEntry.deleteMany();
     await prisma.periodLock.deleteMany({ where: { periodYm } });
+    await prisma.eInvoice.deleteMany();
     await prisma.saleReturnLine.deleteMany();
     await prisma.saleReturn.deleteMany({ where: { storeId: store1 } });
     await prisma.saleLine.deleteMany({ where: { sale: { storeId: store1 } } });
