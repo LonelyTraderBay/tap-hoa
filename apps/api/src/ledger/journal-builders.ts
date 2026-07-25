@@ -137,3 +137,61 @@ export function purchaseAmountFromLines(
   }
   return amount;
 }
+
+/** Reverse sale: Dr 511 / Cr cash channels; reverse COGS Dr 156 / Cr 632. */
+export function buildSaleReturnJournal(input: {
+  cashRefundVnd: number;
+  transferRefundVnd: number;
+  debtCreditVnd: number;
+  totalRefundVnd: number;
+  lines: { qty: number; unitCostVnd: number | null }[];
+}): JournalLineDraft[] {
+  const out: JournalLineDraft[] = [];
+  pushDr(out, '511', input.totalRefundVnd);
+  pushCr(out, '111', input.cashRefundVnd);
+  pushCr(out, '112', input.transferRefundVnd);
+  pushCr(out, '131', input.debtCreditVnd);
+  let cogs = 0;
+  for (const line of input.lines) {
+    if (line.unitCostVnd != null && line.unitCostVnd > 0 && line.qty > 0) {
+      cogs += Math.round(line.qty * line.unitCostVnd);
+    }
+  }
+  pushDr(out, '156', cogs);
+  pushCr(out, '632', cogs);
+  assertBalanced(out);
+  return out;
+}
+
+/**
+ * Stocktake variance at WAC.
+ * Increase: Dr 156 / Cr 711; decrease: Dr 642 / Cr 156.
+ */
+export function buildStocktakeJournal(input: {
+  lines: { varianceQty: number; avgCostVnd: number | null }[];
+}): JournalLineDraft[] {
+  let increase = 0;
+  let decrease = 0;
+  for (const line of input.lines) {
+    if (line.avgCostVnd == null || line.avgCostVnd <= 0) continue;
+    if (line.varianceQty > 0) {
+      increase += Math.round(line.varianceQty * line.avgCostVnd);
+    } else if (line.varianceQty < 0) {
+      decrease += Math.round(Math.abs(line.varianceQty) * line.avgCostVnd);
+    }
+  }
+  if (increase <= 0 && decrease <= 0) {
+    return [];
+  }
+  const out: JournalLineDraft[] = [];
+  if (increase > 0) {
+    pushDr(out, '156', increase);
+    pushCr(out, '711', increase);
+  }
+  if (decrease > 0) {
+    pushDr(out, '642', decrease);
+    pushCr(out, '156', decrease);
+  }
+  assertBalanced(out);
+  return out;
+}

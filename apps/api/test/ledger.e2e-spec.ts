@@ -49,6 +49,10 @@ describe('Phase 2 ledger e2e', () => {
     await prisma.eInvoice.deleteMany({
       where: { sale: { storeId } },
     });
+    await prisma.saleReturnLine.deleteMany({
+      where: { saleReturn: { storeId } },
+    });
+    await prisma.saleReturn.deleteMany({ where: { storeId } });
     await prisma.saleLine.deleteMany({ where: { sale: { storeId } } });
     await prisma.sale.deleteMany({ where: { storeId } });
     await prisma.shift.updateMany({

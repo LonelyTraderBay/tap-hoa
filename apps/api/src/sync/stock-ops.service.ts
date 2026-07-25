@@ -525,6 +525,14 @@ export class StockOpsService {
           });
         }
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromStocktake(dto.id, user.userId),
+        {
+          sourceType: 'stocktake',
+          sourceId: dto.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {

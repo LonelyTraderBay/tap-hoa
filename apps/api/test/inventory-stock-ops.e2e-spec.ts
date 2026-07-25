@@ -52,6 +52,8 @@ describe('Inventory stock ops sync', () => {
     await prisma.wastageVoucherLine.deleteMany();
     await prisma.wastageVoucher.deleteMany();
     await prisma.debtLedgerEntry.deleteMany();
+    await prisma.saleReturnLine.deleteMany();
+    await prisma.saleReturn.deleteMany();
     await prisma.saleLine.deleteMany();
     await prisma.sale.deleteMany();
 

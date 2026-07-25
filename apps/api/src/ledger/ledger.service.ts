@@ -10,6 +10,8 @@ import {
   buildDebtPaymentJournal,
   buildPurchaseJournal,
   buildSaleJournal,
+  buildSaleReturnJournal,
+  buildStocktakeJournal,
   buildSupplierPaymentJournal,
   periodYmFromDate,
 } from './journal-builders';
@@ -239,6 +241,72 @@ export class LedgerService {
       sourceType: 'supplier_payment',
       sourceId: row.id,
       postedAt: row.clientCreatedAt,
+      lines,
+      actorUserId,
+    });
+  }
+
+  async postFromSaleReturn(returnId: string, actorUserId?: string) {
+    const row = await this.prisma.saleReturn.findUnique({
+      where: { id: returnId },
+      include: {
+        lines: true,
+        originalSale: { include: { lines: true } },
+      },
+    });
+    if (!row) return;
+    const costByProduct = new Map(
+      row.originalSale.lines.map((l) => [l.productId, l.unitCostVnd] as const),
+    );
+    const lines = buildSaleReturnJournal({
+      cashRefundVnd: row.cashRefundVnd,
+      transferRefundVnd: row.transferRefundVnd,
+      debtCreditVnd: row.debtCreditVnd,
+      totalRefundVnd: row.totalRefundVnd,
+      lines: row.lines.map((l) => ({
+        qty: Number(l.qty),
+        unitCostVnd: costByProduct.get(l.productId) ?? null,
+      })),
+    });
+    await this.postEntry({
+      storeId: row.storeId,
+      sourceType: 'sale_return',
+      sourceId: row.id,
+      postedAt: row.clientCreatedAt,
+      memo: `Return of ${row.originalSaleId}`,
+      lines,
+      actorUserId,
+    });
+  }
+
+  async postFromStocktake(stocktakeId: string, actorUserId?: string) {
+    const row = await this.prisma.stocktake.findUnique({
+      where: { id: stocktakeId },
+      include: { lines: true },
+    });
+    if (!row) return;
+    const costLines: { varianceQty: number; avgCostVnd: number | null }[] = [];
+    for (const line of row.lines) {
+      const stock = await this.prisma.productStoreStock.findUnique({
+        where: {
+          productId_storeId: {
+            productId: line.productId,
+            storeId: row.storeId,
+          },
+        },
+      });
+      costLines.push({
+        varianceQty: Number(line.varianceQty),
+        avgCostVnd: stock?.avgCostVnd ?? null,
+      });
+    }
+    const lines = buildStocktakeJournal({ lines: costLines });
+    await this.postEntry({
+      storeId: row.storeId,
+      sourceType: 'stocktake',
+      sourceId: row.id,
+      postedAt: row.clientCreatedAt,
+      memo: row.note ?? undefined,
       lines,
       actorUserId,
     });

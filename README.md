@@ -1,14 +1,15 @@
 # tap-hoa
 
-Offline-first grocery POS monorepo (Phase 1 MVP).
+Offline-first grocery POS monorepo (Phase 1 MVP + Phase 2 accounting closeout).
 
 | Path | Stack | Purpose |
 |------|-------|---------|
-| `apps/api` | NestJS 10, Prisma, PostgreSQL | Central API — auth, catalog sync, sales push, reports |
+| `apps/api` | NestJS 10, Prisma, PostgreSQL | Central API — auth, catalog sync, sales push, reports, ledger, AP, e-invoice stub |
 | `apps/pos_app` | Flutter 3, Drift/SQLite | POS client (Windows, Android, iOS) |
 
 **Spec:** `docs/superpowers/specs/2026-07-23-tap-hoa-pos-ke-toan-design.md`  
 **Implementation plan:** `docs/superpowers/plans/2026-07-23-phase1-foundation-pos.md`  
+**Phase 2 roadmap / closeout:** `docs/superpowers/plans/2026-07-24-phase2-roadmap.md`, `docs/superpowers/plans/2026-07-25-phase2-hardening.md`  
 **Deferred Phase 1 items:** `docs/superpowers/plans/2026-07-23-phase1-remaining.md`
 
 ## Prerequisites
@@ -104,6 +105,15 @@ Manual smoke test after API + POS are running:
 
 Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PASS 2026-07-24).
 
+## Phase 2 acceptance checklist (parent §8)
+
+- [x] **COGS / WAC** — purchase updates `avgCostVnd`; sale snapshots `unitCostVnd` (`cogs-wac.e2e`)
+- [x] **Auto journals + period lock** — sale/debt/cash/purchase/AP/return/stocktake; lock blocks post + audit (`ledger*.e2e`)
+- [x] **AP NCC** — purchase opens payable; payment reduces AP (`ap-cash.e2e`)
+- [x] **HĐĐT stub** — issue only for synced sale; Flutter **Xuất HĐĐT** (`einvoice.e2e`)
+- [x] **Báo cáo kỳ** — CĐPS/KQKD/CSV khớp sổ (`period-reports.e2e`); Flutter ledger + **Sổ quỹ kỳ**
+- [x] Closeout gate: `docs/superpowers/plans/2026-07-25-phase2-hardening.md` (PASS 2026-07-25)
+
 ## API surface (Phase 1)
 
 | Area | Endpoints |
@@ -118,6 +128,15 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 | Devices | `POST /devices/push-token`, `POST /devices/low-stock-alert` |
 | Stores | `PATCH /stores/:id/debt-overdue-days` |
 
+## API surface (Phase 2)
+
+| Area | Endpoints |
+|------|-----------|
+| Ledger | `GET /ledger/journal`, `GET /ledger/trial-balance`, `GET|POST /ledger/period-locks` |
+| Suppliers / AP | `GET|POST /suppliers`, `GET /suppliers/:id/payables`, `POST /suppliers/:id/payments`, `GET|POST /suppliers/bank-accounts` |
+| E-invoice | `POST /einvoices/issue`, `GET /einvoices/by-sale/:saleId` |
+| Period reports | `GET /reports/period/trial-balance`, `/pnl`, `/vat`, `/export.csv`, `GET /reports/cash-fund` |
+
 ### Optional FCM
 
 - API: set `FIREBASE_SERVICE_ACCOUNT` to a service-account JSON file path. Without it, push registration still works; sends are logged/skipped.
@@ -125,4 +144,5 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 
 ## Out of scope (this MVP)
 
-See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist (polish complete as of 2026-07-24).
+See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist (polish complete as of 2026-07-24).  
+Phase 2 deferred (Phase 3): real VAT CoA, real e-invoice provider, Excel/PDF, full bank recon — see `2026-07-25-phase2-hardening.md`.

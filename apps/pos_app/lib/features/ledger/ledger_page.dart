@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Read-only ledger views for owner (server-of-truth).
 class LedgerRepository {
@@ -38,6 +39,11 @@ class LedgerRepository {
     );
   }
 
+  Future<List<Map<String, dynamic>>> periodLocks() async {
+    final res = await _dio.get<List<dynamic>>('/ledger/period-locks');
+    return (res.data ?? []).cast<Map<String, dynamic>>();
+  }
+
   Future<Map<String, dynamic>> periodPnl(String periodYm) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/reports/period/pnl',
@@ -69,6 +75,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
   late String _periodYm;
   List<Map<String, dynamic>> _entries = [];
   List<Map<String, dynamic>> _tbRows = [];
+  List<Map<String, dynamic>> _locks = [];
   Map<String, dynamic>? _pnl;
   String? _error;
   bool _loading = true;
@@ -99,11 +106,13 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
       );
       final tb = await widget.repository.trialBalance(_periodYm);
       final pnl = await widget.repository.periodPnl(_periodYm);
+      final locks = await widget.repository.periodLocks();
       if (!mounted) return;
       setState(() {
         _entries = entries;
         _tbRows = ((tb['rows'] as List?) ?? []).cast<Map<String, dynamic>>();
         _pnl = pnl;
+        _locks = locks;
         _loading = false;
       });
     } catch (e) {
@@ -122,6 +131,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Đã khóa sổ $_periodYm')),
       );
+      await _reload();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -130,13 +140,68 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
     }
   }
 
+  Future<void> _exportCsv() async {
+    try {
+      final csv = await widget.repository.periodExportCsv(_periodYm);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('CSV $_periodYm'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: SelectableText(csv.isEmpty ? '(trống)' : csv),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: csv));
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Copy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Đóng'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xuất CSV thất bại: $e')),
+      );
+    }
+  }
+
+  bool get _periodLocked =>
+      _locks.any((l) => l['periodYm']?.toString() == _periodYm);
+
   @override
   Widget build(BuildContext context) {
+    final lockHint = _periodLocked
+        ? 'Kỳ $_periodYm đã khóa'
+        : (_locks.isEmpty
+            ? 'Chưa khóa kỳ nào'
+            : 'Đã khóa: ${_locks.take(3).map((l) => l['periodYm']).join(', ')}');
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Sổ kế toán'),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Sổ kế toán'),
+              Text(
+                lockHint,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Nhật ký'),
@@ -145,6 +210,11 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
             ],
           ),
           actions: [
+            IconButton(
+              tooltip: 'Xuất CSV',
+              onPressed: _exportCsv,
+              icon: const Icon(Icons.download_outlined),
+            ),
             if (widget.isOwner)
               IconButton(
                 tooltip: 'Khóa sổ tháng',
