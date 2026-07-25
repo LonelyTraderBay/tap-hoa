@@ -213,6 +213,11 @@ export class ProductsService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
+        const existingProduct = await tx.product.findUnique({
+          where: { id: dto.id },
+          select: { basePriceVnd: true },
+        });
+
         await tx.product.upsert({
           where: { id: dto.id },
           create: {
@@ -245,6 +250,28 @@ export class ProductsService {
             active: dto.active,
           },
         });
+
+        if (
+          existingProduct &&
+          existingProduct.basePriceVnd !== dto.basePriceVnd
+        ) {
+          await tx.auditLog.create({
+            data: {
+              id: randomUUID(),
+              actorUserId: user.userId,
+              action: 'product_price_change',
+              entityType: 'product',
+              entityId: dto.id,
+              detailJson: JSON.stringify({
+                oldPriceVnd: existingProduct.basePriceVnd,
+                newPriceVnd: dto.basePriceVnd,
+                sku,
+                name,
+                storeId: dto.storeId,
+              }),
+            },
+          });
+        }
 
         if (kind === 'combo') {
           await tx.productComboComponent.deleteMany({

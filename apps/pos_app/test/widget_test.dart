@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pos_app/data/local/database.dart';
+import 'package:pos_app/data/local/local_backup_service.dart';
 import 'package:pos_app/data/sync/outbox_worker.dart';
 import 'package:pos_app/data/sync/pull_catalog.dart';
 import 'package:pos_app/features/auth/auth_repository.dart';
@@ -49,6 +50,7 @@ PosApp _buildApp({
 }) {
   return PosApp(
     database: database,
+    backupService: LocalBackupService(db: database),
     authRepository: authRepository ?? MockAuthRepository(),
     shiftRepository: shiftRepository ?? MockShiftRepository(),
     productRepository: MockProductRepository(),
@@ -63,6 +65,7 @@ PosApp _buildApp({
     stockOnHandRepository: MockStockOnHandRepository(),
   );
 }
+
 void main() {
   late AppDatabase database;
 

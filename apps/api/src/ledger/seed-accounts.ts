@@ -7,6 +7,7 @@ export async function seedChartOfAccounts(prisma: PrismaClient) {
     { code: '112', name: 'Tiền gửi ngân hàng', type: AccountType.asset },
     { code: '131', name: 'Phải thu khách hàng', type: AccountType.asset },
     { code: '1331', name: 'GTGT được khấu trừ', type: AccountType.asset },
+    { code: '151', name: 'Hàng đi đường', type: AccountType.asset },
     { code: '156', name: 'Hàng tồn kho', type: AccountType.asset },
     { code: '331', name: 'Phải trả nhà cung cấp', type: AccountType.liability },
     { code: '3331', name: 'GTGT phải nộp', type: AccountType.liability },

@@ -46,4 +46,45 @@ void main() {
     expect(result.daysOutstanding, 30);
     expect(result.overdue, isFalse);
   });
+
+  test('parses aggregate debt aging response', () {
+    final report = DebtAgingReport.fromJson({
+      'storeId': null,
+      'scope': 'aggregate',
+      'storeIds': ['store-1', 'store-2'],
+      'debtOverdueDays': null,
+      'customers': [
+        {
+          'customerId': 'customer-1',
+          'storeId': 'store-1',
+          'name': 'Khach 1',
+          'phone': null,
+          'balanceVnd': 100000,
+          'debtOverdueDays': 30,
+          'oldestUnpaidAt': '2026-01-01T00:00:00.000Z',
+          'daysOutstanding': 31,
+          'overdue': true,
+        },
+        {
+          'customerId': 'customer-2',
+          'storeId': 'store-2',
+          'name': 'Khach 2',
+          'phone': '090',
+          'balanceVnd': 200000,
+          'debtOverdueDays': 45,
+          'oldestUnpaidAt': null,
+          'daysOutstanding': 0,
+          'overdue': false,
+        },
+      ],
+    });
+
+    expect(report.scope, 'aggregate');
+    expect(report.storeId, isNull);
+    expect(report.storeIds, ['store-1', 'store-2']);
+    expect(report.customers, hasLength(2));
+    expect(report.totalBalanceVnd, 300000);
+    expect(report.overdueCount, 1);
+    expect(report.customers.first.oldestUnpaidAt, isNotNull);
+  });
 }

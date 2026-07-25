@@ -21,6 +21,7 @@ import {
   PushShiftOpenDto,
   PushSyncDto,
 } from './dto/push-sale.dto';
+import { crossesLargeDebtThreshold } from './large-debt-threshold';
 import { StockOpsService } from './stock-ops.service';
 import { SaleReturnsService } from './sale-returns.service';
 
@@ -34,6 +35,14 @@ export type ClosedShiftSnapshot = {
   closingCash: number;
   closedAt: string;
   note: string | null;
+};
+
+type LargeDebtAlert = {
+  storeId: string;
+  customerId: string;
+  customerName: string;
+  balanceVnd: number;
+  thresholdVnd: number;
 };
 
 @Injectable()
@@ -147,6 +156,7 @@ export class SyncService {
             name: store.name,
             active: store.active,
             debtOverdueDays: store.debtOverdueDays,
+            largeDebtThresholdVnd: store.largeDebtThresholdVnd,
             updatedAt: store.updatedAt.toISOString(),
           }
         : null,
@@ -232,9 +242,9 @@ export class SyncService {
       }
     }
 
-    const salesResult = await this.pushSales(user, body.deviceId, body.sales);
-
     const inventoryResult = await this.pushInventory(user, body);
+
+    const salesResult = await this.pushSales(user, body.deviceId, body.sales);
 
     const voucherResult = await this.pushCashVouchers(
       user,
@@ -383,6 +393,39 @@ export class SyncService {
       }
     }
 
+    const acceptedPurchaseOrderCreateIds: string[] = [];
+    const rejectedPurchaseOrderCreates: { id: string; reason: string }[] = [];
+    for (const dto of body.purchaseOrderCreates ?? []) {
+      const result = await this.stockOps.processPurchaseOrderCreate(user, dto);
+      if (result.accepted) {
+        acceptedPurchaseOrderCreateIds.push(dto.id);
+      } else {
+        rejectedPurchaseOrderCreates.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedPurchaseOrderOrderIds: string[] = [];
+    const rejectedPurchaseOrderOrders: { id: string; reason: string }[] = [];
+    for (const dto of body.purchaseOrderOrders ?? []) {
+      const result = await this.stockOps.processPurchaseOrderOrder(user, dto);
+      if (result.accepted) {
+        acceptedPurchaseOrderOrderIds.push(dto.id);
+      } else {
+        rejectedPurchaseOrderOrders.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedPurchaseOrderCloseIds: string[] = [];
+    const rejectedPurchaseOrderCloses: { id: string; reason: string }[] = [];
+    for (const dto of body.purchaseOrderCloses ?? []) {
+      const result = await this.stockOps.processPurchaseOrderClose(user, dto);
+      if (result.accepted) {
+        acceptedPurchaseOrderCloseIds.push(dto.id);
+      } else {
+        rejectedPurchaseOrderCloses.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
     const acceptedPurchaseReceiptIds: string[] = [];
     const rejectedPurchaseReceipts: { id: string; reason: string }[] = [];
     for (const dto of body.purchaseReceipts ?? []) {
@@ -416,6 +459,12 @@ export class SyncService {
       rejectedStockTransferReceives,
       acceptedStocktakeIds,
       rejectedStocktakes,
+      acceptedPurchaseOrderCreateIds,
+      rejectedPurchaseOrderCreates,
+      acceptedPurchaseOrderOrderIds,
+      rejectedPurchaseOrderOrders,
+      acceptedPurchaseOrderCloseIds,
+      rejectedPurchaseOrderCloses,
       acceptedPurchaseReceiptIds,
       rejectedPurchaseReceipts,
       acceptedWastageIds,
@@ -871,11 +920,16 @@ export class SyncService {
       }
     }
 
+    let largeDebtAlert: LargeDebtAlert | null = null;
     try {
       await this.prisma.$transaction(async (tx) => {
         const storeVatRow = await tx.store.findUnique({
           where: { id: sale.storeId },
-          select: { vatEnabled: true, defaultVatRateBps: true },
+          select: {
+            vatEnabled: true,
+            defaultVatRateBps: true,
+            largeDebtThresholdVnd: true,
+          },
         });
         const storeVat =
           storeVatRow?.vatEnabled && storeVatRow.defaultVatRateBps > 0
@@ -1053,13 +1107,30 @@ export class SyncService {
         });
 
         if (sale.debtAmount > 0 && sale.customerId) {
-          await tx.customer.update({
+          const previous = await tx.customer.findUniqueOrThrow({
+            where: { id: sale.customerId },
+            select: { name: true, balanceVnd: true },
+          });
+          const updated = await tx.customer.update({
             where: { id: sale.customerId },
             data: { balanceVnd: { increment: sale.debtAmount } },
           });
-          const updated = await tx.customer.findUniqueOrThrow({
-            where: { id: sale.customerId },
-          });
+          const threshold = storeVatRow?.largeDebtThresholdVnd ?? null;
+          if (
+            crossesLargeDebtThreshold({
+              thresholdVnd: threshold,
+              previousBalanceVnd: previous.balanceVnd,
+              nextBalanceVnd: updated.balanceVnd,
+            })
+          ) {
+            largeDebtAlert = {
+              storeId: sale.storeId,
+              customerId: sale.customerId,
+              customerName: previous.name,
+              balanceVnd: updated.balanceVnd,
+              thresholdVnd: threshold!,
+            };
+          }
           await tx.debtLedgerEntry.create({
             data: {
               id: randomUUID(),
@@ -1094,6 +1165,9 @@ export class SyncService {
           actorUserId: user.userId,
         },
       );
+      if (largeDebtAlert) {
+        void this.notifyLargeDebt(largeDebtAlert);
+      }
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {
@@ -1118,6 +1192,20 @@ export class SyncService {
       }
       throw error;
     }
+  }
+
+  private notifyLargeDebt(alert: LargeDebtAlert) {
+    return this.devicesService.notifyStoreManagers(alert.storeId, {
+      title: 'Nợ lớn',
+      body: `${alert.customerName}: ${alert.balanceVnd.toLocaleString('vi-VN')}đ (ngưỡng ${alert.thresholdVnd.toLocaleString('vi-VN')}đ)`,
+      data: {
+        type: 'large_debt',
+        storeId: alert.storeId,
+        customerId: alert.customerId,
+        balanceVnd: String(alert.balanceVnd),
+        thresholdVnd: String(alert.thresholdVnd),
+      },
+    });
   }
 
   private async ensureDebtCustomer(

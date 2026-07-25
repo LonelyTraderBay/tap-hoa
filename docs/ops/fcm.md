@@ -4,8 +4,9 @@
 Push token registration and low-stock alerts are logged or skipped — no crash, no
 blocker for go-live.
 
-Enable FCM only when the store wants device push (sync errors, low stock). Never
-commit Firebase service-account JSON or real `firebase_options.dart` project keys.
+Enable FCM only when the store wants device push (sync errors, low stock, large
+customer debt alerts). Never commit Firebase service-account JSON or real
+`firebase_options.dart` project keys.
 
 ---
 
@@ -22,6 +23,12 @@ commit Firebase service-account JSON or real `firebase_options.dart` project key
 
 Without Firebase, the API still accepts `POST /devices/push-token`; send paths log and
 skip. The app continues without push delivery.
+
+Large-debt alerts are also off until each store sets
+`largeDebtThresholdVnd` (owner store settings; `null`/blank = off). When enabled,
+the API sends a best-effort push to owners/store managers after a debt sale makes a
+customer balance cross from below the threshold to at/above it. Debt payments reduce
+balances and do not trigger a "large debt" push.
 
 ---
 
@@ -47,8 +54,8 @@ Only when push is required:
 ### Smoke (when FCM on)
 
 - [ ] Register: open POS while online; confirm token posts to API without error.
-- [ ] Trigger a low-stock or sync-reject scenario; confirm push received on a test
-  device (or API log shows successful send).
+- [ ] Trigger a low-stock, sync-reject, or configured large-debt-threshold scenario;
+  confirm push received on a test device (or API log shows successful send).
 
 ---
 

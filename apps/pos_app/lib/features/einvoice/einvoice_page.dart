@@ -27,6 +27,26 @@ class EInvoiceRepository {
     return res.data ?? {};
   }
 
+  Future<Map<String, dynamic>> issueBatch({
+    required String customerId,
+    required List<String> saleIds,
+    String? buyerTaxCode,
+    String? templateCode,
+    String? serial,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/einvoices/issue-batch',
+      data: {
+        'customerId': customerId,
+        'saleIds': saleIds,
+        'buyerTaxCode': ?buyerTaxCode,
+        'templateCode': ?templateCode,
+        'serial': ?serial,
+      },
+    );
+    return res.data ?? {};
+  }
+
   Future<Map<String, dynamic>?> bySale(String saleId) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
@@ -45,6 +65,17 @@ class EInvoiceRepository {
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/einvoices/$invoiceId/cancel',
+      data: {'reason': reason},
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> adjust({
+    required String invoiceId,
+    required String reason,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/einvoices/$invoiceId/adjust',
       data: {'reason': reason},
     );
     return res.data ?? {};
@@ -69,7 +100,8 @@ class EInvoiceIssuePage extends StatefulWidget {
 
 class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
   List<SalesLocalData> _sales = [];
-  SalesLocalData? _selected;
+  final Set<String> _selectedIds = <String>{};
+  String? _selectedCustomerId;
   final _taxCtrl = TextEditingController();
   final _templateCtrl = TextEditingController(text: '1');
   final _serialCtrl = TextEditingController(text: 'C25TAA');
@@ -79,6 +111,9 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
   bool _loading = true;
   bool _invoiceLoading = false;
   bool _busy = false;
+
+  List<SalesLocalData> get _selectedSales =>
+      _sales.where((s) => _selectedIds.contains(s.id)).toList();
 
   @override
   void initState() {
@@ -121,10 +156,12 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
       setState(() {
         _sales = syncedToday;
         _loading = false;
-        _selected = syncedToday.any((s) => s.id == _selected?.id)
-            ? _selected
-            : null;
-        if (_selected == null) _invoice = null;
+        final liveIds = syncedToday.map((s) => s.id).toSet();
+        _selectedIds.removeWhere((id) => !liveIds.contains(id));
+        if (_selectedIds.isEmpty) {
+          _selectedCustomerId = null;
+          _invoice = null;
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -135,23 +172,54 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
     }
   }
 
-  Future<void> _selectSale(SalesLocalData sale) async {
+  Future<void> _toggleSale(SalesLocalData sale) async {
+    final isSelected = _selectedIds.contains(sale.id);
+    if (!isSelected && _selectedIds.isNotEmpty) {
+      if (sale.customerId == null ||
+          sale.customerId!.isEmpty ||
+          _selectedCustomerId == null) {
+        setState(() => _error = 'Chỉ gộp HĐĐT cho đơn có khách hàng');
+        return;
+      }
+      if (_selectedCustomerId != sale.customerId) {
+        setState(() => _error = 'Chỉ chọn các đơn của cùng một khách hàng');
+        return;
+      }
+    }
+
     setState(() {
-      _selected = sale;
+      if (isSelected) {
+        _selectedIds.remove(sale.id);
+      } else {
+        _selectedIds.add(sale.id);
+      }
+      _selectedCustomerId = _selectedSales.isEmpty
+          ? null
+          : _selectedSales.first.customerId;
       _invoice = null;
-      _invoiceLoading = true;
+      _invoiceLoading = _selectedIds.length == 1;
       _error = null;
       _result = null;
     });
+    if (_selectedIds.length != 1) return;
+    final selectedId = _selectedIds.first;
     try {
-      final invoice = await widget.repository.bySale(sale.id);
-      if (!mounted || _selected?.id != sale.id) return;
+      final invoice = await widget.repository.bySale(selectedId);
+      if (!mounted ||
+          _selectedIds.length != 1 ||
+          !_selectedIds.contains(selectedId)) {
+        return;
+      }
       setState(() {
         _invoice = invoice;
         _invoiceLoading = false;
       });
     } catch (e) {
-      if (!mounted || _selected?.id != sale.id) return;
+      if (!mounted ||
+          _selectedIds.length != 1 ||
+          !_selectedIds.contains(selectedId)) {
+        return;
+      }
       setState(() {
         _error = 'Không tải được trạng thái HĐĐT: $e';
         _invoiceLoading = false;
@@ -160,9 +228,14 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
   }
 
   Future<void> _issue() async {
-    final sale = _selected;
-    if (sale == null) {
+    final sales = _selectedSales;
+    if (sales.isEmpty) {
       setState(() => _error = 'Chọn đơn đã sync');
+      return;
+    }
+    final customerId = _selectedCustomerId;
+    if (sales.length > 1 && (customerId == null || customerId.isEmpty)) {
+      setState(() => _error = 'Chọn các đơn có khách hàng để gộp HĐĐT');
       return;
     }
     setState(() {
@@ -171,18 +244,29 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
       _result = null;
     });
     try {
-      final issued = await widget.repository.issue(
-        saleId: sale.id,
-        buyerTaxCode: _taxCtrl.text.trim().isEmpty
-            ? null
-            : _taxCtrl.text.trim(),
-        templateCode: _templateCtrl.text.trim().isEmpty
-            ? null
-            : _templateCtrl.text.trim(),
-        serial: _serialCtrl.text.trim().isEmpty
-            ? null
-            : _serialCtrl.text.trim(),
-      );
+      final buyerTaxCode = _taxCtrl.text.trim().isEmpty
+          ? null
+          : _taxCtrl.text.trim();
+      final templateCode = _templateCtrl.text.trim().isEmpty
+          ? null
+          : _templateCtrl.text.trim();
+      final serial = _serialCtrl.text.trim().isEmpty
+          ? null
+          : _serialCtrl.text.trim();
+      final issued = sales.length == 1
+          ? await widget.repository.issue(
+              saleId: sales.first.id,
+              buyerTaxCode: buyerTaxCode,
+              templateCode: templateCode,
+              serial: serial,
+            )
+          : await widget.repository.issueBatch(
+              customerId: customerId!,
+              saleIds: sales.map((s) => s.id).toList(),
+              buyerTaxCode: buyerTaxCode,
+              templateCode: templateCode,
+              serial: serial,
+            );
       if (!mounted) return;
       final status = issued['status']?.toString() ?? '';
       final pdf = issued['pdfPath']?.toString();
@@ -203,6 +287,7 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
         } else {
           _result =
               'HĐ ${issued['invoiceNumber']} · $status · ${issued['provider']}'
+              '${sales.length > 1 ? ' · ${sales.length} đơn' : ''}'
               '${links.isEmpty ? '' : ' · $links'}';
         }
         _busy = false;
@@ -230,17 +315,26 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
     return status == 'issued' || status == 'pending_sign';
   }
 
-  Future<String?> _askCancelReason() async {
+  bool _canAdjustInvoice(Map<String, dynamic>? invoice) {
+    final status = invoice?['status']?.toString();
+    return status == 'issued' && invoice?['adjustmentForId'] == null;
+  }
+
+  Future<String?> _askReason({
+    required String title,
+    required String label,
+    required String confirmText,
+  }) async {
     final ctrl = TextEditingController();
     try {
       return await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Hủy HĐĐT'),
+          title: Text(title),
           content: TextField(
             controller: ctrl,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Lý do hủy'),
+            decoration: InputDecoration(labelText: label),
             minLines: 2,
             maxLines: 3,
           ),
@@ -251,7 +345,7 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-              child: const Text('Xác nhận hủy'),
+              child: Text(confirmText),
             ),
           ],
         ),
@@ -264,7 +358,11 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
   Future<void> _cancel() async {
     final invoice = _invoice;
     if (!_canCancelInvoice(invoice)) return;
-    final reason = await _askCancelReason();
+    final reason = await _askReason(
+      title: 'Hủy HĐĐT',
+      label: 'Lý do hủy',
+      confirmText: 'Xác nhận hủy',
+    );
     if (reason == null) return;
     if (reason.isEmpty) {
       setState(() => _error = 'Nhập lý do hủy HĐĐT');
@@ -304,10 +402,58 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
     }
   }
 
+  Future<void> _adjust() async {
+    final invoice = _invoice;
+    if (!_canAdjustInvoice(invoice)) return;
+    final reason = await _askReason(
+      title: 'Điều chỉnh HĐĐT',
+      label: 'Lý do điều chỉnh',
+      confirmText: 'Tạo điều chỉnh',
+    );
+    if (reason == null) return;
+    if (reason.isEmpty) {
+      setState(() => _error = 'Nhập lý do điều chỉnh HĐĐT');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _result = null;
+    });
+    try {
+      final adjusted = await widget.repository.adjust(
+        invoiceId: invoice!['id'].toString(),
+        reason: reason,
+      );
+      if (!mounted) return;
+      setState(() {
+        _invoice = adjusted;
+        final invoiceNumber = adjusted['invoiceNumber']?.toString();
+        _result =
+            'Đã tạo HĐĐT điều chỉnh'
+            '${invoiceNumber == null || invoiceNumber.isEmpty ? '' : ' · $invoiceNumber'}';
+        _busy = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Điều chỉnh HĐ thất bại: ${e.message}';
+        _busy = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Điều chỉnh HĐ thất bại: $e';
+        _busy = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final invoice = _invoice;
     final invoiceStatus = invoice?['status']?.toString();
+    final selectedCount = _selectedIds.length;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Xuất HĐĐT'),
@@ -321,23 +467,29 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
               padding: const EdgeInsets.all(16),
               children: [
                 const Text(
-                  'Chọn đơn đã sync trong ngày (ICT). Provider theo cấu hình server (stub hoặc HTTP gateway).',
+                  'Chọn đơn đã sync trong ngày (ICT). Có thể chọn nhiều đơn của cùng một khách để gộp một HĐĐT.',
                 ),
+                if (_selectedCustomerId != null) ...[
+                  const SizedBox(height: 8),
+                  Text('Khách đang chọn: $_selectedCustomerId'),
+                ],
                 const SizedBox(height: 12),
                 if (_sales.isEmpty)
                   const Text('Không có đơn đã sync hôm nay.')
                 else
                   ..._sales.map(
                     (s) => ListTile(
-                      selected: _selected?.id == s.id,
-                      onTap: () => _selectSale(s),
+                      selected: _selectedIds.contains(s.id),
+                      onTap: () => _toggleSale(s),
                       title: Text('${s.totalVnd} VND'),
                       subtitle: Text(
-                        '${s.id.substring(0, 8)}… · ${s.paymentMethod}',
+                        '${s.id.substring(0, 8)}… · ${s.paymentMethod}'
+                        '${s.customerId == null ? '' : ' · KH ${s.customerId}'}',
                       ),
-                      trailing: _selected?.id == s.id
-                          ? const Icon(Icons.check_circle)
-                          : null,
+                      trailing: Checkbox(
+                        value: _selectedIds.contains(s.id),
+                        onChanged: (_) => _toggleSale(s),
+                      ),
                     ),
                   ),
                 TextField(
@@ -371,8 +523,20 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Xuất hóa đơn'),
+                      : Text(
+                          selectedCount > 1
+                              ? 'Xuất hóa đơn gộp ($selectedCount đơn)'
+                              : 'Xuất hóa đơn',
+                        ),
                 ),
+                if (_canAdjustInvoice(invoice)) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _adjust,
+                    icon: const Icon(Icons.edit_note),
+                    label: const Text('Điều chỉnh hóa đơn'),
+                  ),
+                ],
                 if (_canCancelInvoice(invoice)) ...[
                   const SizedBox(height: 8),
                   OutlinedButton.icon(

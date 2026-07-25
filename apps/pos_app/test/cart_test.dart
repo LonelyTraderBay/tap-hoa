@@ -82,6 +82,34 @@ void main() {
     expect(cart.totalVnd, 0);
   });
 
+  test('removing a line clamps invoice discount to remaining subtotal', () {
+    final cart = Cart();
+    cart
+      ..add(
+        CartLine(
+          productId: 'p1',
+          name: 'Sting',
+          unitPrice: 10000,
+          qty: Decimal.parse('2'),
+        ),
+      )
+      ..add(
+        CartLine(
+          productId: 'p2',
+          name: 'Duong',
+          unitPrice: 5000,
+          qty: Decimal.one,
+        ),
+      );
+    cart.discountVnd = 20000;
+
+    cart.remove('p1');
+
+    expect(cart.subtotalVnd, 5000);
+    expect(cart.discountVnd, 5000);
+    expect(cart.totalVnd, 0);
+  });
+
   test('toSaleDraft maps lines and discount', () {
     final cart = Cart();
     cart.add(

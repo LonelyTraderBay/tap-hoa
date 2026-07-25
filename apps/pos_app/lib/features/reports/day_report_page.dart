@@ -57,14 +57,8 @@ class _DayReportPageState extends State<DayReportPage> {
     try {
       final storeId = widget.role == 'owner' ? null : widget.storeId;
       final results = await Future.wait([
-        widget.repository.fetchDayReport(
-          date: _selectedDate,
-          storeId: storeId,
-        ),
-        widget.repository.fetchTopSkus(
-          date: _selectedDate,
-          storeId: storeId,
-        ),
+        widget.repository.fetchDayReport(date: _selectedDate, storeId: storeId),
+        widget.repository.fetchTopSkus(date: _selectedDate, storeId: storeId),
       ]);
       if (!mounted) return;
       setState(() {
@@ -102,6 +96,54 @@ class _DayReportPageState extends State<DayReportPage> {
     return '$d/$m/$y';
   }
 
+  String _shortId(String value) {
+    return value.length <= 8 ? value : value.substring(0, 8);
+  }
+
+  Widget _buildShiftSection(DayReport report, ThemeData theme) {
+    if (report.byShift.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Doanh thu theo ca',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...report.byShift.map(
+          (shift) => Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Ca ${_shortId(shift.shiftId)} · Cửa hàng ${_shortId(shift.storeId)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('${shift.revenueVnd} VND · ${shift.orderCount} đơn'),
+                  Text(
+                    'TM ${shift.cashVnd} · CK ${shift.transferVnd} · Nợ ${shift.debtVnd}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   void _openStockOnHand() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -118,23 +160,26 @@ class _DayReportPageState extends State<DayReportPage> {
     final report = _report;
     if (report == null) return;
     try {
-      final rows = <({
-        String storeCode,
-        String storeName,
-        int orderCount,
-        int revenueVnd,
-        int cashVnd,
-        int transferVnd,
-        int debtVnd,
-      })>[];
+      final rows =
+          <
+            ({
+              String storeCode,
+              String storeName,
+              int orderCount,
+              int revenueVnd,
+              int cashVnd,
+              int transferVnd,
+              int debtVnd,
+            })
+          >[];
       for (final store in report.byStore) {
         var code = store.storeId;
         var name = store.storeId;
         final db = widget.database;
         if (db != null) {
-          final local = await (db.select(db.storesLocal)
-                ..where((t) => t.id.equals(store.storeId)))
-              .getSingleOrNull();
+          final local = await (db.select(
+            db.storesLocal,
+          )..where((t) => t.id.equals(store.storeId))).getSingleOrNull();
           if (local != null) {
             code = local.code;
             name = local.name;
@@ -160,14 +205,14 @@ class _DayReportPageState extends State<DayReportPage> {
       );
       await file.writeAsString(csv);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xuất CSV: ${file.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Đã xuất CSV: ${file.path}')));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Xuất CSV thất bại')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Xuất CSV thất bại')));
     }
   }
 
@@ -175,8 +220,7 @@ class _DayReportPageState extends State<DayReportPage> {
     final db = widget.database;
     final shifts = widget.shiftRepository;
     if (db == null || shifts == null) return;
-    final canReturn =
-        widget.role == 'owner' || widget.role == 'store_manager';
+    final canReturn = widget.role == 'owner' || widget.role == 'store_manager';
     if (!canReturn) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thu ngân không được đổi trả')),
@@ -258,6 +302,7 @@ class _DayReportPageState extends State<DayReportPage> {
                     style: theme.textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 24),
+                  _buildShiftSection(report, theme),
                   Text(
                     'Top hàng bán chạy',
                     style: theme.textTheme.titleMedium?.copyWith(
@@ -277,7 +322,8 @@ class _DayReportPageState extends State<DayReportPage> {
                     ...topSkus.items.asMap().entries.map((entry) {
                       final rank = entry.key + 1;
                       final item = entry.value;
-                      final grossLabel = item.estimatedGrossVnd?.toString() ?? '—';
+                      final grossLabel =
+                          item.estimatedGrossVnd?.toString() ?? '—';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
@@ -346,8 +392,7 @@ class _DayReportPageState extends State<DayReportPage> {
                       child: const Text('Xem tồn hiện tại'),
                     ),
                   ),
-                  if (widget.database != null &&
-                      widget.shiftRepository != null)
+                  if (widget.database != null && widget.shiftRepository != null)
                     Center(
                       child: TextButton(
                         onPressed: _openReturn,

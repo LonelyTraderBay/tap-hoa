@@ -30,12 +30,49 @@ import '../products/product_repository.dart';
 import '../products/product_service.dart';
 import '../push/push_service.dart';
 import '../shifts/shift_repository.dart';
+import '../stores/store_management_page.dart';
 import 'cart.dart';
 import 'checkout_service.dart';
 import 'payment_sheet.dart';
 import 'receipt_print_settings_page.dart';
 import 'sale_return_service.dart';
 import 'sale_return_sheet.dart';
+
+String _normalizeBarcodeQuery(String value) => value.trim().toLowerCase();
+
+bool posProductMatchesQuery(ProductWithStock product, String rawQuery) {
+  final q = rawQuery.trim().toLowerCase();
+  if (q.isEmpty) {
+    return true;
+  }
+  final barcode = product.barcode;
+  return product.name.toLowerCase().contains(q) ||
+      product.sku.toLowerCase().contains(q) ||
+      (barcode != null && _normalizeBarcodeQuery(barcode).contains(q));
+}
+
+ProductWithStock? posExactBarcodeMatch(
+  Iterable<ProductWithStock> products,
+  String rawQuery,
+) {
+  final q = _normalizeBarcodeQuery(rawQuery);
+  if (q.isEmpty) {
+    return null;
+  }
+
+  ProductWithStock? match;
+  for (final product in products) {
+    final barcode = product.barcode;
+    if (barcode == null || _normalizeBarcodeQuery(barcode) != q) {
+      continue;
+    }
+    if (match != null) {
+      return null;
+    }
+    match = product;
+  }
+  return match;
+}
 
 class PosPage extends StatefulWidget {
   const PosPage({
@@ -80,12 +117,15 @@ class PosPage extends StatefulWidget {
 }
 
 class _PosPageState extends State<PosPage> {
+  static final Decimal _weightedQtyStep = Decimal.parse('0.001');
+
   final _searchController = TextEditingController();
   final _cart = Cart();
   String _query = '';
   String? _message;
   bool _isSyncing = false;
   String? _groupFilterId;
+  String? _pendingAutoAddBarcodeQuery;
 
   @override
   void dispose() {
@@ -93,26 +133,252 @@ class _PosPageState extends State<PosPage> {
     super.dispose();
   }
 
-  void _addProduct(ProductWithStock product) {
-    setState(() {
-      final existing = _cart.lines.indexWhere(
-        (line) => line.productId == product.id,
+  void _addProductToCart(ProductWithStock product, {required Decimal qty}) {
+    final existing = _cart.lines.indexWhere(
+      (line) => line.productId == product.id,
+    );
+    if (existing >= 0) {
+      final line = _cart.lines[existing];
+      _cart.update(product.id, line.qty + qty);
+    } else {
+      _cart.add(
+        CartLine(
+          productId: product.id,
+          name: product.name,
+          unitPrice: product.basePriceVnd,
+          qty: qty,
+          unitLabel: product.displayUnit,
+          isWeighted: product.isWeighted,
+        ),
       );
-      if (existing >= 0) {
-        final line = _cart.lines[existing];
-        _cart.update(product.id, line.qty + Decimal.one);
-      } else {
-        _cart.add(
-          CartLine(
-            productId: product.id,
-            name: product.name,
-            unitPrice: product.basePriceVnd,
-            qty: Decimal.one,
-          ),
+    }
+  }
+
+  Future<Decimal?> _showWeightedQtyDialog(ProductWithStock product) async {
+    String errorText = '';
+    String input = '';
+    return showDialog<Decimal>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Nhập kg: ${product.name}'),
+              content: TextField(
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Số kg',
+                  helperText: 'Hàng cân: tối đa 3 chữ số thập phân',
+                  errorText: errorText.isEmpty ? null : errorText,
+                ),
+                onChanged: (value) => input = value,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Hủy'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final raw = input.trim().replaceAll(',', '.');
+                    final qty = Decimal.tryParse(raw);
+                    if (qty == null || qty <= Decimal.zero) {
+                      setDialogState(() {
+                        errorText = 'Số lượng phải lớn hơn 0';
+                      });
+                      return;
+                    }
+                    if (_decimalPlaces(raw) > 3) {
+                      setDialogState(() {
+                        errorText = 'Tối đa 3 chữ số thập phân';
+                      });
+                      return;
+                    }
+                    Navigator.of(context).pop(qty);
+                  },
+                  child: const Text('Thêm'),
+                ),
+              ],
+            );
+          },
         );
-      }
+      },
+    );
+  }
+
+  Future<void> _addProduct(ProductWithStock product) async {
+    final qty = product.isWeighted
+        ? await _showWeightedQtyDialog(product)
+        : Decimal.one;
+    if (qty == null || !mounted) return;
+    setState(() {
+      _addProductToCart(product, qty: qty);
       _message = null;
     });
+  }
+
+  void _scheduleExactBarcodeAdd(List<ProductWithStock> products) {
+    final normalizedQuery = _normalizeBarcodeQuery(_query);
+    if (normalizedQuery.isEmpty ||
+        _pendingAutoAddBarcodeQuery == normalizedQuery) {
+      return;
+    }
+
+    final product = posExactBarcodeMatch(products, normalizedQuery);
+    if (product == null) {
+      return;
+    }
+
+    _pendingAutoAddBarcodeQuery = normalizedQuery;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        return;
+      }
+      if (_normalizeBarcodeQuery(_query) != normalizedQuery) {
+        _pendingAutoAddBarcodeQuery = null;
+        return;
+      }
+      final qty = product.isWeighted
+          ? await _showWeightedQtyDialog(product)
+          : Decimal.one;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        if (qty != null) {
+          _addProductToCart(product, qty: qty);
+          _message = null;
+        }
+        _searchController.clear();
+        _query = '';
+        _pendingAutoAddBarcodeQuery = null;
+      });
+    });
+  }
+
+  Decimal _qtyStep(CartLine line) =>
+      line.isWeighted ? _weightedQtyStep : Decimal.one;
+
+  String _formatLineQty(CartLine line) {
+    if (line.isWeighted) {
+      return line.qty.toStringAsFixed(3);
+    }
+    return line.qty.truncate().toString();
+  }
+
+  int _decimalPlaces(String raw) {
+    final normalized = raw.replaceAll(',', '.');
+    final dotIndex = normalized.indexOf('.');
+    if (dotIndex == -1) return 0;
+    return normalized.length - dotIndex - 1;
+  }
+
+  void _adjustLineQty(CartLine line, Decimal delta) {
+    final nextQty = line.qty + delta;
+    if (nextQty <= Decimal.zero) return;
+    setState(() => _cart.update(line.productId, nextQty));
+  }
+
+  Future<void> _editLineQty(CartLine line) async {
+    final controller = TextEditingController(text: _formatLineQty(line));
+    String errorText = '';
+    try {
+      final value = await showDialog<Decimal>(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text('Sửa SL: ${line.name}'),
+                content: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: line.isWeighted
+                      ? const TextInputType.numberWithOptions(decimal: true)
+                      : TextInputType.number,
+                  inputFormatters: [
+                    line.isWeighted
+                        ? FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))
+                        : FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Số lượng',
+                    helperText: line.isWeighted
+                        ? 'Hàng cân: tối đa 3 chữ số thập phân'
+                        : 'Hàng thường: số nguyên',
+                    errorText: errorText.isEmpty ? null : errorText,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Hủy'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final raw = controller.text.trim().replaceAll(',', '.');
+                      final qty = Decimal.tryParse(raw);
+                      if (qty == null || qty <= Decimal.zero) {
+                        setDialogState(() {
+                          errorText = 'Số lượng phải lớn hơn 0';
+                        });
+                        return;
+                      }
+                      if (!line.isWeighted && qty != qty.truncate()) {
+                        setDialogState(() {
+                          errorText = 'Hàng thường phải là số nguyên';
+                        });
+                        return;
+                      }
+                      if (line.isWeighted && _decimalPlaces(raw) > 3) {
+                        setDialogState(() {
+                          errorText = 'Tối đa 3 chữ số thập phân';
+                        });
+                        return;
+                      }
+                      Navigator.of(context).pop(qty);
+                    },
+                    child: const Text('Lưu'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      if (value == null || !mounted) return;
+      setState(() => _cart.update(line.productId, value));
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _removeLine(CartLine line) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa dòng?'),
+        content: Text('Xóa ${line.name} khỏi giỏ hàng?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _cart.remove(line.productId));
   }
 
   void _openPayment() {
@@ -277,12 +543,7 @@ class _PosPageState extends State<PosPage> {
   }
 
   bool _matches(ProductWithStock product) {
-    if (_query.isEmpty) {
-      return true;
-    }
-    final q = _query.toLowerCase();
-    return product.name.toLowerCase().contains(q) ||
-        product.sku.toLowerCase().contains(q);
+    return posProductMatchesQuery(product, _query);
   }
 
   @override
@@ -444,6 +705,21 @@ class _PosPageState extends State<PosPage> {
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
+                    builder: (_) => StoreManagementPage(
+                      db: widget.database,
+                      dio: widget.dayReportRepository.dio,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.store_mall_directory_outlined),
+              tooltip: 'Cửa hàng',
+            ),
+          if (widget.role == 'owner')
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
                     builder: (_) => LedgerHomePage(
                       repository: LedgerRepository(
                         dio: widget.dayReportRepository.dio,
@@ -562,7 +838,7 @@ class _PosPageState extends State<PosPage> {
             child: TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                labelText: 'Tìm tên hoặc mã SKU',
+                labelText: 'Tìm tên, mã SKU hoặc barcode',
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: (value) => setState(() => _query = value.trim()),
@@ -616,7 +892,9 @@ class _PosPageState extends State<PosPage> {
                 groupId: _groupFilterId,
               ),
               builder: (context, snapshot) {
-                final products = (snapshot.data ?? []).where(_matches).toList();
+                final allProducts = snapshot.data ?? [];
+                _scheduleExactBarcodeAdd(allProducts);
+                final products = allProducts.where(_matches).toList();
                 if (products.isEmpty) {
                   return const Center(child: Text('Không có hàng phù hợp'));
                 }
@@ -650,22 +928,53 @@ class _PosPageState extends State<PosPage> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final line = _cart.lines[index];
+                      final qtyLabel = _formatLineQty(line);
+                      final qtyWithUnit = line.unitLabel.isEmpty
+                          ? qtyLabel
+                          : '$qtyLabel ${line.unitLabel}';
                       return ListTile(
                         title: Text(line.name),
                         subtitle: Text(
                           line.discountVnd > 0
-                              ? '${line.qty} × ${line.unitPrice} VND = ${line.grossTotalVnd} VND\nGiảm dòng: ${line.discountVnd} VND'
-                              : '${line.qty} × ${line.unitPrice} VND',
+                              ? '$qtyWithUnit × ${line.unitPrice} VND = ${line.grossTotalVnd} VND\nGiảm dòng: ${line.discountVnd} VND'
+                              : '$qtyWithUnit × ${line.unitPrice} VND',
                         ),
                         isThreeLine: line.discountVnd > 0,
-                        trailing: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        trailing: Wrap(
+                          spacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          alignment: WrapAlignment.end,
                           children: [
                             Text('${line.lineTotal} VND'),
+                            IconButton(
+                              tooltip: 'Giảm SL',
+                              visualDensity: VisualDensity.compact,
+                              onPressed:
+                                  line.qty - _qtyStep(line) <= Decimal.zero
+                                  ? null
+                                  : () => _adjustLineQty(line, -_qtyStep(line)),
+                              icon: const Icon(Icons.remove),
+                            ),
+                            TextButton(
+                              onPressed: () => _editLineQty(line),
+                              child: Text(qtyLabel),
+                            ),
+                            IconButton(
+                              tooltip: 'Tăng SL',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () =>
+                                  _adjustLineQty(line, _qtyStep(line)),
+                              icon: const Icon(Icons.add),
+                            ),
                             TextButton(
                               onPressed: () => _editLineDiscount(line),
                               child: const Text('Giảm'),
+                            ),
+                            IconButton(
+                              tooltip: 'Xóa dòng',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _removeLine(line),
+                              icon: const Icon(Icons.delete_outline),
                             ),
                           ],
                         ),

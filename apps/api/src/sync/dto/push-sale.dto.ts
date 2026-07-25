@@ -184,12 +184,31 @@ export type PushPurchaseLineDto = {
   unitCostVnd?: number | null;
 };
 
+export type PushPurchaseOrderDto = {
+  id: string;
+  storeId: string;
+  supplierName: string;
+  supplierPhone?: string | null;
+  supplierId?: string | null;
+  status?: 'draft' | 'ordered';
+  note?: string | null;
+  clientCreatedAt: string;
+  orderedAt?: string | null;
+  lines: PushPurchaseLineDto[];
+};
+
+export type PushPurchaseOrderActionDto = {
+  id: string;
+  actionAt?: string;
+};
+
 export type PushPurchaseReceiptDto = {
   id: string;
   storeId: string;
   supplierName: string;
   supplierPhone?: string | null;
   supplierId?: string | null;
+  purchaseOrderId?: string | null;
   note?: string | null;
   clientCreatedAt: string;
   lines: PushPurchaseLineDto[];
@@ -217,6 +236,9 @@ export type PushSyncDto = {
   stockTransferRejects?: PushStockTransferActionDto[];
   stockTransferReceives?: PushStockTransferActionDto[];
   stocktakes?: PushStocktakeDto[];
+  purchaseOrderCreates?: PushPurchaseOrderDto[];
+  purchaseOrderOrders?: PushPurchaseOrderActionDto[];
+  purchaseOrderCloses?: PushPurchaseOrderActionDto[];
   purchaseReceipts?: PushPurchaseReceiptDto[];
   wastages?: PushWastageDto[];
   productUpserts?: PushProductUpsertDto[];

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/client';
+import { Prisma, Role, TransferStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +12,7 @@ import {
   buildPurchaseReturnJournal,
   buildSaleJournal,
   buildSaleReturnJournal,
+  buildStockTransferStoreJournals,
   buildStocktakeJournal,
   buildSupplierPaymentJournal,
   buildWastageJournal,
@@ -25,6 +26,12 @@ import { seedChartOfAccounts } from './seed-accounts';
 export class LedgerService {
   private readonly logger = new Logger(LedgerService.name);
   private accountsReady = false;
+  private readonly defaultAuditActions = [
+    'period_lock',
+    'period_unlock',
+    'journal_blocked_period_lock',
+    'product_price_change',
+  ];
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -61,6 +68,8 @@ export class LedgerService {
     memo?: string;
     lines: JournalLineDraft[];
     actorUserId?: string | null;
+    auditSourceType?: string;
+    auditSourceId?: string;
   }): Promise<'created' | 'exists' | 'skipped_empty' | 'period_locked'> {
     await this.ensureAccounts();
     if (input.lines.length === 0) {
@@ -88,8 +97,8 @@ export class LedgerService {
       await this.writeAudit({
         actorUserId: input.actorUserId,
         action: 'journal_blocked_period_lock',
-        entityType: input.sourceType,
-        entityId: input.sourceId,
+        entityType: input.auditSourceType ?? input.sourceType,
+        entityId: input.auditSourceId ?? input.sourceId,
         detail: { periodYm },
       });
       return 'period_locked';
@@ -442,6 +451,43 @@ export class LedgerService {
     });
   }
 
+  async postFromStockTransfer(stockTransferId: string, actorUserId?: string) {
+    const row = await this.prisma.stockTransfer.findUnique({
+      where: { id: stockTransferId },
+      include: { lines: true },
+    });
+    if (!row || row.status !== TransferStatus.received) return;
+    const { sourceLines, destinationLines } = buildStockTransferStoreJournals({
+      lines: row.lines.map((line) => ({
+        qty: Number(line.qty),
+        unitCostVnd: line.unitCostVnd,
+      })),
+    });
+    const postedAt = row.receivedAt ?? row.updatedAt;
+    await this.postEntry({
+      storeId: row.fromStoreId,
+      sourceType: 'stock_transfer_out',
+      sourceId: row.id,
+      postedAt,
+      memo: row.note ?? undefined,
+      lines: sourceLines,
+      actorUserId,
+      auditSourceType: 'stock_transfer',
+      auditSourceId: row.id,
+    });
+    await this.postEntry({
+      storeId: row.toStoreId,
+      sourceType: 'stock_transfer_in',
+      sourceId: row.id,
+      postedAt,
+      memo: row.note ?? undefined,
+      lines: destinationLines,
+      actorUserId,
+      auditSourceType: 'stock_transfer',
+      auditSourceId: row.id,
+    });
+  }
+
   async postFromWastage(wastageId: string, actorUserId?: string) {
     const row = await this.prisma.wastageVoucher.findUnique({
       where: { id: wastageId },
@@ -545,6 +591,90 @@ export class LedgerService {
           balanceVnd: t.debitVnd - t.creditVnd,
         };
       }),
+    };
+  }
+
+  async accountLedger(
+    user: AuthUser,
+    accountCode: string,
+    periodYm: string,
+    storeId?: string,
+  ) {
+    this.assertLedgerAccess(user, storeId);
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new Error('invalid_period');
+    }
+    const account = await this.prisma.account.findUnique({
+      where: { code: accountCode },
+    });
+    if (!account) {
+      throw new Error('invalid_account');
+    }
+    const storeFilter = this.ledgerStoreFilter(user, storeId);
+
+    const openingEntries = await this.prisma.journalEntry.findMany({
+      where: {
+        periodYm: { lt: periodYm },
+        ...storeFilter,
+      },
+      include: {
+        lines: { where: { accountCode } },
+      },
+    });
+    const openingBalance = openingEntries.reduce(
+      (sum, entry) =>
+        sum +
+        entry.lines.reduce(
+          (lineSum, line) => lineSum + line.debitVnd - line.creditVnd,
+          0,
+        ),
+      0,
+    );
+
+    const periodEntries = await this.prisma.journalEntry.findMany({
+      where: {
+        periodYm,
+        ...storeFilter,
+      },
+      include: {
+        lines: { where: { accountCode }, orderBy: { id: 'asc' } },
+      },
+      orderBy: [{ postedAt: 'asc' }, { id: 'asc' }],
+    });
+
+    let runningBalance = openingBalance;
+    const lines = [];
+    for (const entry of periodEntries) {
+      for (const line of entry.lines) {
+        const movement = line.debitVnd - line.creditVnd;
+        runningBalance += movement;
+        lines.push({
+          journalEntryId: entry.id,
+          journalLineId: line.id,
+          postedAt: entry.postedAt,
+          periodYm: entry.periodYm,
+          storeId: entry.storeId,
+          sourceType: entry.sourceType,
+          sourceId: entry.sourceId,
+          memo: entry.memo,
+          debitVnd: line.debitVnd,
+          creditVnd: line.creditVnd,
+          movementVnd: movement,
+          runningBalance,
+        });
+      }
+    }
+
+    return {
+      periodYm,
+      storeId: storeId ?? null,
+      scope: storeId ? 'store' : 'aggregate',
+      accountCode: account.code,
+      accountName: account.name,
+      accountType: account.type,
+      openingBalance,
+      lines,
+      closingBalance: runningBalance,
     };
   }
 
@@ -681,6 +811,9 @@ export class LedgerService {
       case 'stocktake':
         await this.postFromStocktake(sourceId, actorUserId);
         return true;
+      case 'stock_transfer':
+        await this.postFromStockTransfer(sourceId, actorUserId);
+        return true;
       case 'wastage':
         await this.postFromWastage(sourceId, actorUserId);
         return true;
@@ -689,15 +822,31 @@ export class LedgerService {
     }
   }
 
-  async listAudit(user: AuthUser, limit = 50) {
+  async listAudit(
+    user: AuthUser,
+    filters: {
+      limit?: number;
+      action?: string;
+      entityType?: string;
+      entityId?: string;
+    } = {},
+  ) {
     this.assertLedgerAccess(user);
+    const limit = filters.limit ?? 50;
     const take = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
+    const where: Prisma.AuditLogWhereInput = {
+      action: filters.action
+        ? filters.action
+        : { in: this.defaultAuditActions },
+    };
+    if (filters.entityType) {
+      where.entityType = filters.entityType;
+    }
+    if (filters.entityId) {
+      where.entityId = filters.entityId;
+    }
     return this.prisma.auditLog.findMany({
-      where: {
-        action: {
-          in: ['period_lock', 'period_unlock', 'journal_blocked_period_lock'],
-        },
-      },
+      where,
       orderBy: { at: 'desc' },
       take,
     });
@@ -712,5 +861,21 @@ export class LedgerService {
       return;
     }
     throw new Error('forbidden');
+  }
+
+  private ledgerStoreFilter(
+    user: AuthUser,
+    storeId?: string,
+  ): Prisma.JournalEntryWhereInput {
+    if (storeId) {
+      return { storeId };
+    }
+    if (user.role === Role.store_manager) {
+      return {
+        storeId:
+          user.storeIds.length === 1 ? user.storeIds[0] : { in: user.storeIds },
+      };
+    }
+    return {};
   }
 }

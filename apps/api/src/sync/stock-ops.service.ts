@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   Prisma,
+  PurchaseOrderStatus,
   Role,
   StockDocType,
   StocktakeLineReason,
@@ -14,6 +15,8 @@ import { splitInclusiveVat } from '../ledger/journal-builders';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  PushPurchaseOrderActionDto,
+  PushPurchaseOrderDto,
   PushPurchaseReceiptDto,
   PushStockTransferActionDto,
   PushStockTransferCreateDto,
@@ -50,6 +53,50 @@ export class StockOpsService {
     } catch {
       return null;
     }
+  }
+
+  private async resolveSupplierId(
+    tx: Prisma.TransactionClient,
+    params: {
+      supplierId?: string | null;
+      supplierName: string;
+      supplierPhone?: string | null;
+    },
+  ): Promise<string> {
+    let supplierId = params.supplierId?.trim() || null;
+    if (supplierId) {
+      const exists = await tx.supplier.findUnique({ where: { id: supplierId } });
+      if (!exists) {
+        supplierId = null;
+      }
+    }
+    if (supplierId) {
+      return supplierId;
+    }
+    const created = await tx.supplier.create({
+      data: {
+        id: randomUUID(),
+        name: params.supplierName.trim(),
+        phone: params.supplierPhone ?? null,
+      },
+    });
+    return created.id;
+  }
+
+  private statusFromReceivedLines(
+    lines: { qty: Prisma.Decimal; receivedQty: Prisma.Decimal }[],
+  ): PurchaseOrderStatus {
+    const anyReceived = lines.some((line) => line.receivedQty.greaterThan(0));
+    const allReceived = lines.every((line) =>
+      line.receivedQty.greaterThanOrEqualTo(line.qty),
+    );
+    if (allReceived) {
+      return PurchaseOrderStatus.received;
+    }
+    if (anyReceived) {
+      return PurchaseOrderStatus.partial;
+    }
+    return PurchaseOrderStatus.ordered;
   }
 
   private async adjustStock(
@@ -190,16 +237,32 @@ export class StockOpsService {
       return { accepted: true };
     }
 
-    const lines: { id: string; productId: string; qty: Prisma.Decimal }[] = [];
+    const lines: {
+      id: string;
+      productId: string;
+      qty: Prisma.Decimal;
+      unitCostVnd: number | null;
+    }[] = [];
     for (const line of dto.lines) {
       const qty = this.parseQty(line.qty);
       if (!line.productId || !qty) {
         return { accepted: false, reason: 'invalid_qty' };
       }
+      const stock = await this.prisma.productStoreStock.findUnique({
+        where: {
+          productId_storeId: {
+            productId: line.productId,
+            storeId: dto.fromStoreId,
+          },
+        },
+        select: { avgCostVnd: true },
+      });
       lines.push({
         id: line.id?.trim() || randomUUID(),
         productId: line.productId,
         qty,
+        unitCostVnd:
+          stock && stock.avgCostVnd > 0 ? stock.avgCostVnd : null,
       });
     }
 
@@ -218,6 +281,7 @@ export class StockOpsService {
               id: l.id,
               productId: l.productId,
               qty: l.qty,
+              unitCostVnd: l.unitCostVnd,
             })),
           },
         },
@@ -272,6 +336,25 @@ export class StockOpsService {
     try {
       await this.prisma.$transaction(async (tx) => {
         for (const line of transfer.lines) {
+          const sourceStock = await tx.productStoreStock.findUnique({
+            where: {
+              productId_storeId: {
+                productId: line.productId,
+                storeId: transfer.fromStoreId,
+              },
+            },
+            select: { avgCostVnd: true },
+          });
+          if (!sourceStock) {
+            throw new Error('stock_not_found');
+          }
+          await tx.stockTransferLine.update({
+            where: { id: line.id },
+            data: {
+              unitCostVnd:
+                sourceStock.avgCostVnd > 0 ? sourceStock.avgCostVnd : null,
+            },
+          });
           await this.adjustStock(tx, {
             storeId: transfer.fromStoreId,
             productId: line.productId,
@@ -375,7 +458,7 @@ export class StockOpsService {
     try {
       await this.prisma.$transaction(async (tx) => {
         for (const line of transfer.lines) {
-          const stock = await tx.productStoreStock.findUnique({
+          const destStock = await tx.productStoreStock.findUnique({
             where: {
               productId_storeId: {
                 productId: line.productId,
@@ -383,7 +466,9 @@ export class StockOpsService {
               },
             },
           });
-          if (!stock) {
+          const oldQty = destStock ? Number(destStock.qty) : 0;
+          const oldAvg = destStock?.avgCostVnd ?? 0;
+          if (!destStock) {
             await tx.productStoreStock.create({
               data: {
                 productId: line.productId,
@@ -404,6 +489,21 @@ export class StockOpsService {
             recordedById: user.userId,
             clientCreatedAt: actionAt,
           });
+          const nextAvg = weightedAverageCost(
+            oldQty,
+            oldAvg,
+            Number(line.qty),
+            line.unitCostVnd ?? 0,
+          );
+          await tx.productStoreStock.update({
+            where: {
+              productId_storeId: {
+                productId: line.productId,
+                storeId: transfer.toStoreId,
+              },
+            },
+            data: { avgCostVnd: nextAvg },
+          });
         }
         await tx.stockTransfer.update({
           where: { id: transfer.id },
@@ -414,6 +514,14 @@ export class StockOpsService {
           },
         });
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromStockTransfer(dto.id, user.userId),
+        {
+          sourceType: 'stock_transfer',
+          sourceId: dto.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {
@@ -549,6 +657,188 @@ export class StockOpsService {
     }
   }
 
+  async processPurchaseOrderCreate(
+    user: AuthUser,
+    dto: PushPurchaseOrderDto,
+  ): Promise<ProcessResult> {
+    if (!dto.id || !dto.storeId || !dto.supplierName?.trim()) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    if (!Array.isArray(dto.lines) || dto.lines.length === 0) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    if (Number.isNaN(Date.parse(dto.clientCreatedAt))) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    const status = dto.status ?? 'draft';
+    if (status !== 'draft' && status !== 'ordered') {
+      return { accepted: false, reason: 'invalid_status' };
+    }
+    if (dto.orderedAt && Number.isNaN(Date.parse(dto.orderedAt))) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    if (!this.canAccessStore(user, dto.storeId)) {
+      return { accepted: false, reason: 'store_forbidden' };
+    }
+
+    const existing = await this.prisma.purchaseOrder.findUnique({
+      where: { id: dto.id },
+    });
+    if (existing) {
+      return { accepted: true };
+    }
+
+    const lines: {
+      id: string;
+      productId: string;
+      qty: Prisma.Decimal;
+      unitCostVnd: number | null;
+    }[] = [];
+    const productIds = new Set<string>();
+    for (const line of dto.lines) {
+      const qty = this.parseQty(line.qty);
+      if (!line.productId || !qty) {
+        return { accepted: false, reason: 'invalid_qty' };
+      }
+      if (productIds.has(line.productId)) {
+        return { accepted: false, reason: 'duplicate_product' };
+      }
+      productIds.add(line.productId);
+      if (
+        line.unitCostVnd != null &&
+        (!Number.isSafeInteger(line.unitCostVnd) || line.unitCostVnd < 0)
+      ) {
+        return { accepted: false, reason: 'invalid_money' };
+      }
+      lines.push({
+        id: line.id?.trim() || randomUUID(),
+        productId: line.productId,
+        qty,
+        unitCostVnd: line.unitCostVnd ?? null,
+      });
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const supplierId = await this.resolveSupplierId(tx, {
+          supplierId: dto.supplierId,
+          supplierName: dto.supplierName,
+          supplierPhone: dto.supplierPhone,
+        });
+        await tx.purchaseOrder.create({
+          data: {
+            id: dto.id,
+            storeId: dto.storeId,
+            supplierName: dto.supplierName.trim(),
+            supplierPhone: dto.supplierPhone ?? null,
+            supplierId,
+            status: status as PurchaseOrderStatus,
+            note: dto.note ?? null,
+            createdById: user.userId,
+            clientCreatedAt: new Date(dto.clientCreatedAt),
+            orderedAt:
+              status === 'ordered'
+                ? dto.orderedAt
+                  ? new Date(dto.orderedAt)
+                  : new Date(dto.clientCreatedAt)
+                : null,
+            lines: {
+              create: lines.map((l) => ({
+                id: l.id,
+                productId: l.productId,
+                qty: l.qty,
+                unitCostVnd: l.unitCostVnd,
+              })),
+            },
+          },
+        });
+      });
+      return { accepted: true };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return { accepted: true };
+      }
+      throw error;
+    }
+  }
+
+  async processPurchaseOrderOrder(
+    user: AuthUser,
+    dto: PushPurchaseOrderActionDto,
+  ): Promise<ProcessResult> {
+    if (!dto.id) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    if (dto.actionAt && Number.isNaN(Date.parse(dto.actionAt))) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    const order = await this.prisma.purchaseOrder.findUnique({
+      where: { id: dto.id },
+    });
+    if (!order) {
+      return { accepted: false, reason: 'not_found' };
+    }
+    if (!this.canAccessStore(user, order.storeId)) {
+      return { accepted: false, reason: 'store_forbidden' };
+    }
+    if (
+      order.status === PurchaseOrderStatus.ordered ||
+      order.status === PurchaseOrderStatus.partial ||
+      order.status === PurchaseOrderStatus.received
+    ) {
+      return { accepted: true };
+    }
+    if (order.status !== PurchaseOrderStatus.draft) {
+      return { accepted: false, reason: 'invalid_status' };
+    }
+    await this.prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        status: PurchaseOrderStatus.ordered,
+        orderedAt: dto.actionAt ? new Date(dto.actionAt) : new Date(),
+      },
+    });
+    return { accepted: true };
+  }
+
+  async processPurchaseOrderClose(
+    user: AuthUser,
+    dto: PushPurchaseOrderActionDto,
+  ): Promise<ProcessResult> {
+    if (!dto.id) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    if (dto.actionAt && Number.isNaN(Date.parse(dto.actionAt))) {
+      return { accepted: false, reason: 'invalid_payload' };
+    }
+    const order = await this.prisma.purchaseOrder.findUnique({
+      where: { id: dto.id },
+    });
+    if (!order) {
+      return { accepted: false, reason: 'not_found' };
+    }
+    if (!this.canAccessStore(user, order.storeId)) {
+      return { accepted: false, reason: 'store_forbidden' };
+    }
+    if (order.status === PurchaseOrderStatus.closed) {
+      return { accepted: true };
+    }
+    if (order.status === PurchaseOrderStatus.received) {
+      return { accepted: false, reason: 'invalid_status' };
+    }
+    await this.prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        status: PurchaseOrderStatus.closed,
+        closedAt: dto.actionAt ? new Date(dto.actionAt) : new Date(),
+      },
+    });
+    return { accepted: true };
+  }
+
   async processPurchaseReceipt(
     user: AuthUser,
     dto: PushPurchaseReceiptDto,
@@ -579,11 +869,16 @@ export class StockOpsService {
       qty: Prisma.Decimal;
       unitCostVnd: number | null;
     }[] = [];
+    const receiptProductIds = new Set<string>();
     for (const line of dto.lines) {
       const qty = this.parseQty(line.qty);
       if (!line.productId || !qty) {
         return { accepted: false, reason: 'invalid_qty' };
       }
+      if (receiptProductIds.has(line.productId)) {
+        return { accepted: false, reason: 'duplicate_product' };
+      }
+      receiptProductIds.add(line.productId);
       if (
         line.unitCostVnd != null &&
         (!Number.isSafeInteger(line.unitCostVnd) || line.unitCostVnd < 0)
@@ -601,25 +896,67 @@ export class StockOpsService {
     const clientCreatedAt = new Date(dto.clientCreatedAt);
     try {
       await this.prisma.$transaction(async (tx) => {
-        let supplierId = dto.supplierId?.trim() || null;
-        if (supplierId) {
-          const exists = await tx.supplier.findUnique({
-            where: { id: supplierId },
+        const purchaseOrderId = dto.purchaseOrderId?.trim() || null;
+        let purchaseOrder = purchaseOrderId
+          ? await tx.purchaseOrder.findUnique({
+              where: { id: purchaseOrderId },
+              include: { lines: true },
+            })
+          : null;
+        if (purchaseOrderId && !purchaseOrder) {
+          throw new Error('purchase_order_not_found');
+        }
+        if (purchaseOrder) {
+          await tx.$queryRaw`
+            SELECT "id"
+            FROM "PurchaseOrder"
+            WHERE "id" = ${purchaseOrder.id}
+            FOR UPDATE
+          `;
+          purchaseOrder = await tx.purchaseOrder.findUniqueOrThrow({
+            where: { id: purchaseOrder.id },
+            include: { lines: true },
           });
-          if (!exists) {
-            supplierId = null;
+          if (purchaseOrder.storeId !== dto.storeId) {
+            throw new Error('purchase_order_store_mismatch');
+          }
+          if (purchaseOrder.status === PurchaseOrderStatus.closed) {
+            throw new Error('purchase_order_closed');
+          }
+          if (purchaseOrder.status === PurchaseOrderStatus.draft) {
+            throw new Error('purchase_order_not_ordered');
           }
         }
-        if (!supplierId) {
-          const created = await tx.supplier.create({
-            data: {
-              id: randomUUID(),
-              name: dto.supplierName.trim(),
-              phone: dto.supplierPhone ?? null,
-            },
-          });
-          supplierId = created.id;
+        const poLinesByProduct = new Map(
+          (purchaseOrder?.lines ?? []).map((line) => [line.productId, line]),
+        );
+        if (purchaseOrder && poLinesByProduct.size !== purchaseOrder.lines.length) {
+          throw new Error('purchase_order_duplicate_product');
         }
+        for (const line of lines) {
+          const poLine = poLinesByProduct.get(line.productId);
+          if (!purchaseOrder || !poLine) {
+            if (purchaseOrder) {
+              throw new Error('purchase_order_line_not_found');
+            }
+            continue;
+          }
+          const nextReceived = poLine.receivedQty.plus(line.qty);
+          if (nextReceived.greaterThan(poLine.qty)) {
+            throw new Error('purchase_order_over_received');
+          }
+          if (line.unitCostVnd == null && poLine.unitCostVnd != null) {
+            line.unitCostVnd = poLine.unitCostVnd;
+          }
+        }
+
+        const supplierId =
+          purchaseOrder?.supplierId ??
+          (await this.resolveSupplierId(tx, {
+            supplierId: dto.supplierId,
+            supplierName: dto.supplierName,
+            supplierPhone: dto.supplierPhone,
+          }));
 
         let apAmount = 0;
         for (const line of lines) {
@@ -654,6 +991,7 @@ export class StockOpsService {
             supplierName: dto.supplierName.trim(),
             supplierPhone: dto.supplierPhone ?? null,
             supplierId,
+            purchaseOrderId,
             note: dto.note ?? null,
             recordedById: user.userId,
             clientCreatedAt,
@@ -689,6 +1027,38 @@ export class StockOpsService {
             },
           },
         });
+
+        if (purchaseOrder) {
+          for (const poLine of purchaseOrder.lines) {
+            const receiptLine = lines.find((l) => l.productId === poLine.productId);
+            if (receiptLine) {
+              const updated = await tx.$queryRaw<
+                {
+                  id: string;
+                  qty: Prisma.Decimal;
+                  receivedQty: Prisma.Decimal;
+                }[]
+              >`
+                UPDATE "PurchaseOrderLine"
+                SET "receivedQty" = "receivedQty" + CAST(${receiptLine.qty.toString()} AS DECIMAL)
+                WHERE "id" = ${poLine.id}
+                  AND "receivedQty" + CAST(${receiptLine.qty.toString()} AS DECIMAL) <= "qty"
+                RETURNING "id", "qty", "receivedQty"
+              `;
+              if (updated.length === 0) {
+                throw new Error('purchase_order_over_received');
+              }
+            }
+          }
+          const updatedLines = await tx.purchaseOrderLine.findMany({
+            where: { purchaseOrderId: purchaseOrder.id },
+            select: { id: true, qty: true, receivedQty: true },
+          });
+          await tx.purchaseOrder.update({
+            where: { id: purchaseOrder.id },
+            data: { status: this.statusFromReceivedLines(updatedLines) },
+          });
+        }
 
         if (apAmount > 0) {
           await tx.supplierPayable.create({
@@ -780,6 +1150,20 @@ export class StockOpsService {
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {
         return { accepted: false, reason: 'stock_not_found' };
+      }
+      if (
+        error instanceof Error &&
+        [
+          'purchase_order_not_found',
+          'purchase_order_store_mismatch',
+          'purchase_order_closed',
+          'purchase_order_not_ordered',
+          'purchase_order_duplicate_product',
+          'purchase_order_line_not_found',
+          'purchase_order_over_received',
+        ].includes(error.message)
+      ) {
+        return { accepted: false, reason: error.message };
       }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -897,6 +1281,7 @@ export class StockOpsService {
     const [
       stockTransfers,
       stocktakes,
+      purchaseOrders,
       purchaseReceipts,
       wastageVouchers,
       stockMovements,
@@ -910,6 +1295,11 @@ export class StockOpsService {
         orderBy: { updatedAt: 'asc' },
       }),
       this.prisma.stocktake.findMany({
+        where: { storeId, updatedAt: { gt: since } },
+        include: { lines: true },
+        orderBy: { clientCreatedAt: 'asc' },
+      }),
+      this.prisma.purchaseOrder.findMany({
         where: { storeId, updatedAt: { gt: since } },
         include: { lines: true },
         orderBy: { clientCreatedAt: 'asc' },
@@ -948,6 +1338,7 @@ export class StockOpsService {
           id: l.id,
           productId: l.productId,
           qty: l.qty.toString(),
+          unitCostVnd: l.unitCostVnd,
         })),
       })),
       stocktakes: stocktakes.map((s) => ({
@@ -967,11 +1358,34 @@ export class StockOpsService {
           reasonNote: l.reasonNote,
         })),
       })),
+      purchaseOrders: purchaseOrders.map((o) => ({
+        id: o.id,
+        storeId: o.storeId,
+        supplierName: o.supplierName,
+        supplierPhone: o.supplierPhone,
+        supplierId: o.supplierId,
+        status: o.status,
+        note: o.note,
+        createdById: o.createdById,
+        clientCreatedAt: o.clientCreatedAt.toISOString(),
+        orderedAt: o.orderedAt?.toISOString() ?? null,
+        closedAt: o.closedAt?.toISOString() ?? null,
+        updatedAt: o.updatedAt.toISOString(),
+        lines: o.lines.map((l) => ({
+          id: l.id,
+          productId: l.productId,
+          qty: l.qty.toString(),
+          receivedQty: l.receivedQty.toString(),
+          unitCostVnd: l.unitCostVnd,
+        })),
+      })),
       purchaseReceipts: purchaseReceipts.map((r) => ({
         id: r.id,
         storeId: r.storeId,
         supplierName: r.supplierName,
         supplierPhone: r.supplierPhone,
+        supplierId: r.supplierId,
+        purchaseOrderId: r.purchaseOrderId,
         note: r.note,
         recordedById: r.recordedById,
         clientCreatedAt: r.clientCreatedAt.toISOString(),
