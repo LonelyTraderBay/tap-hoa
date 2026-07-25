@@ -80,6 +80,8 @@ class PosPage extends StatefulWidget {
 }
 
 class _PosPageState extends State<PosPage> {
+  static final Decimal _weightedQtyStep = Decimal.parse('0.001');
+
   final _searchController = TextEditingController();
   final _cart = Cart();
   String _query = '';
@@ -108,11 +110,131 @@ class _PosPageState extends State<PosPage> {
             name: product.name,
             unitPrice: product.basePriceVnd,
             qty: Decimal.one,
+            isWeighted: product.isWeighted,
           ),
         );
       }
       _message = null;
     });
+  }
+
+  Decimal _qtyStep(CartLine line) =>
+      line.isWeighted ? _weightedQtyStep : Decimal.one;
+
+  String _formatLineQty(CartLine line) {
+    if (line.isWeighted) {
+      return line.qty.toStringAsFixed(3);
+    }
+    return line.qty.truncate().toString();
+  }
+
+  int _decimalPlaces(String raw) {
+    final normalized = raw.replaceAll(',', '.');
+    final dotIndex = normalized.indexOf('.');
+    if (dotIndex == -1) return 0;
+    return normalized.length - dotIndex - 1;
+  }
+
+  void _adjustLineQty(CartLine line, Decimal delta) {
+    final nextQty = line.qty + delta;
+    if (nextQty <= Decimal.zero) return;
+    setState(() => _cart.update(line.productId, nextQty));
+  }
+
+  Future<void> _editLineQty(CartLine line) async {
+    final controller = TextEditingController(text: _formatLineQty(line));
+    String errorText = '';
+    try {
+      final value = await showDialog<Decimal>(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text('Sửa SL: ${line.name}'),
+                content: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: line.isWeighted
+                      ? const TextInputType.numberWithOptions(decimal: true)
+                      : TextInputType.number,
+                  inputFormatters: [
+                    line.isWeighted
+                        ? FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))
+                        : FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Số lượng',
+                    helperText: line.isWeighted
+                        ? 'Hàng cân: tối đa 3 chữ số thập phân'
+                        : 'Hàng thường: số nguyên',
+                    errorText: errorText.isEmpty ? null : errorText,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Hủy'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final raw = controller.text.trim().replaceAll(',', '.');
+                      final qty = Decimal.tryParse(raw);
+                      if (qty == null || qty <= Decimal.zero) {
+                        setDialogState(() {
+                          errorText = 'Số lượng phải lớn hơn 0';
+                        });
+                        return;
+                      }
+                      if (!line.isWeighted && qty != qty.truncate()) {
+                        setDialogState(() {
+                          errorText = 'Hàng thường phải là số nguyên';
+                        });
+                        return;
+                      }
+                      if (line.isWeighted && _decimalPlaces(raw) > 3) {
+                        setDialogState(() {
+                          errorText = 'Tối đa 3 chữ số thập phân';
+                        });
+                        return;
+                      }
+                      Navigator.of(context).pop(qty);
+                    },
+                    child: const Text('Lưu'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      if (value == null || !mounted) return;
+      setState(() => _cart.update(line.productId, value));
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _removeLine(CartLine line) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa dòng?'),
+        content: Text('Xóa ${line.name} khỏi giỏ hàng?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _cart.remove(line.productId));
   }
 
   void _openPayment() {
@@ -650,22 +772,50 @@ class _PosPageState extends State<PosPage> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final line = _cart.lines[index];
+                      final qtyLabel = _formatLineQty(line);
                       return ListTile(
                         title: Text(line.name),
                         subtitle: Text(
                           line.discountVnd > 0
-                              ? '${line.qty} × ${line.unitPrice} VND = ${line.grossTotalVnd} VND\nGiảm dòng: ${line.discountVnd} VND'
-                              : '${line.qty} × ${line.unitPrice} VND',
+                              ? '$qtyLabel × ${line.unitPrice} VND = ${line.grossTotalVnd} VND\nGiảm dòng: ${line.discountVnd} VND'
+                              : '$qtyLabel × ${line.unitPrice} VND',
                         ),
                         isThreeLine: line.discountVnd > 0,
-                        trailing: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        trailing: Wrap(
+                          spacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          alignment: WrapAlignment.end,
                           children: [
                             Text('${line.lineTotal} VND'),
+                            IconButton(
+                              tooltip: 'Giảm SL',
+                              visualDensity: VisualDensity.compact,
+                              onPressed:
+                                  line.qty - _qtyStep(line) <= Decimal.zero
+                                  ? null
+                                  : () => _adjustLineQty(line, -_qtyStep(line)),
+                              icon: const Icon(Icons.remove),
+                            ),
+                            TextButton(
+                              onPressed: () => _editLineQty(line),
+                              child: Text(qtyLabel),
+                            ),
+                            IconButton(
+                              tooltip: 'Tăng SL',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () =>
+                                  _adjustLineQty(line, _qtyStep(line)),
+                              icon: const Icon(Icons.add),
+                            ),
                             TextButton(
                               onPressed: () => _editLineDiscount(line),
                               child: const Text('Giảm'),
+                            ),
+                            IconButton(
+                              tooltip: 'Xóa dòng',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _removeLine(line),
+                              icon: const Icon(Icons.delete_outline),
                             ),
                           ],
                         ),

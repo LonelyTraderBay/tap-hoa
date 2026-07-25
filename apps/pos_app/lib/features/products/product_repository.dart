@@ -13,6 +13,7 @@ class ProductWithStock {
     this.packSize,
     this.kind = 'normal',
     this.groupId,
+    required this.isWeighted,
     required this.basePriceVnd,
     required this.qty,
   });
@@ -26,6 +27,7 @@ class ProductWithStock {
   final String? packSize;
   final String kind;
   final String? groupId;
+  final bool isWeighted;
   final int basePriceVnd;
   final String qty;
 
@@ -144,6 +146,7 @@ class ProductRepository {
           packSize: product.packSize,
           kind: product.kind,
           groupId: product.groupId,
+          isWeighted: product.isWeighted,
           basePriceVnd: product.basePriceVnd,
           qty: stock.qty,
         );

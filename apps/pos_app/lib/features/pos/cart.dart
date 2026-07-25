@@ -24,6 +24,7 @@ class CartLine {
     required this.name,
     required this.unitPrice,
     required this.qty,
+    this.isWeighted = false,
     int discountVnd = 0,
   }) : discountVnd = _clampVnd(
          discountVnd,
@@ -34,19 +35,22 @@ class CartLine {
   final String name;
   final int unitPrice;
   final Decimal qty;
+  final bool isWeighted;
   final int discountVnd;
 
   int get grossTotalVnd => _lineGrossVnd(unitPrice: unitPrice, qty: qty);
 
   int get lineTotal => grossTotalVnd - discountVnd;
 
-  CartLine copyWith({Decimal? qty, int? discountVnd}) => CartLine(
-    productId: productId,
-    name: name,
-    unitPrice: unitPrice,
-    qty: qty ?? this.qty,
-    discountVnd: discountVnd ?? this.discountVnd,
-  );
+  CartLine copyWith({Decimal? qty, bool? isWeighted, int? discountVnd}) =>
+      CartLine(
+        productId: productId,
+        name: name,
+        unitPrice: unitPrice,
+        qty: qty ?? this.qty,
+        isWeighted: isWeighted ?? this.isWeighted,
+        discountVnd: discountVnd ?? this.discountVnd,
+      );
 }
 
 class SaleDraftLine {
