@@ -4,8 +4,10 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import ExcelJS from 'exceljs';
 import { AuthUser } from '../auth/jwt.strategy';
+import { periodYmFromDate } from '../ledger/journal-builders';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type StoreDayReport = {
@@ -561,5 +563,200 @@ export class ReportsService {
       voucherOutVnd: voucherOut,
       netCashVnd: saleCash + voucherIn - voucherOut,
     };
+  }
+
+  /**
+   * Import CSV lines: date,amountVnd,memo (header optional).
+   * date = YYYY-MM-DD; amount positive = store inbound transfer.
+   */
+  async importBankStatement(
+    user: AuthUser,
+    storeId: string,
+    periodYm: string,
+    csv: string,
+    bankAccountId?: string,
+  ) {
+    this.assertStoreAccess(user, storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const lock = await this.prisma.bankReconLock.findUnique({
+      where: { storeId_periodYm: { storeId, periodYm } },
+    });
+    if (lock) {
+      throw new BadRequestException('bank_recon_locked');
+    }
+    const lines: {
+      id: string;
+      storeId: string;
+      bankAccountId: string | null;
+      periodYm: string;
+      bookedAt: Date;
+      amountVnd: number;
+      memo: string | null;
+    }[] = [];
+    for (const raw of csv.split(/\r?\n/)) {
+      const row = raw.trim();
+      if (!row || /^date[,;]/i.test(row)) continue;
+      const parts = row.split(/[,;]/).map((p) => p.trim());
+      if (parts.length < 2) continue;
+      const bookedAt = new Date(`${parts[0]}T12:00:00.000Z`);
+      const amountVnd = Number(parts[1]);
+      if (Number.isNaN(bookedAt.getTime()) || !Number.isSafeInteger(amountVnd)) {
+        continue;
+      }
+      if (periodYmFromDate(bookedAt) !== periodYm) {
+        continue;
+      }
+      lines.push({
+        id: randomUUID(),
+        storeId,
+        bankAccountId: bankAccountId ?? null,
+        periodYm,
+        bookedAt,
+        amountVnd,
+        memo: parts[2] || null,
+      });
+    }
+    if (lines.length === 0) {
+      throw new BadRequestException('no_valid_statement_lines');
+    }
+    await this.prisma.bankStatementLine.createMany({ data: lines });
+    return { imported: lines.length, periodYm };
+  }
+
+  async bankReconSummary(user: AuthUser, storeId: string, periodYm: string) {
+    this.assertStoreAccess(user, storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const [y, m] = periodYm.split('-').map(Number);
+    const from = new Date(Date.UTC(y, m - 1, 1) - 7 * 3600_000);
+    const to = new Date(Date.UTC(y, m, 1) - 7 * 3600_000 - 1);
+
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        storeId,
+        clientCreatedAt: { gte: from, lte: to },
+        transferAmount: { gt: 0 },
+      },
+    });
+    const vouchers = await this.prisma.cashVoucher.findMany({
+      where: {
+        storeId,
+        channel: 'transfer',
+        clientCreatedAt: { gte: from, lte: to },
+      },
+    });
+    const supplierPays = await this.prisma.supplierPayment.findMany({
+      where: {
+        storeId,
+        channel: 'transfer',
+        clientCreatedAt: { gte: from, lte: to },
+      },
+    });
+    const statements = await this.prisma.bankStatementLine.findMany({
+      where: { storeId, periodYm },
+      orderBy: { bookedAt: 'asc' },
+    });
+    const lock = await this.prisma.bankReconLock.findUnique({
+      where: { storeId_periodYm: { storeId, periodYm } },
+    });
+
+    type BookLine = {
+      ref: string;
+      kind: string;
+      amountVnd: number;
+      at: string;
+    };
+    const book: BookLine[] = [
+      ...sales.map((s) => ({
+        ref: `sale:${s.id}`,
+        kind: 'sale_transfer',
+        amountVnd: s.transferAmount,
+        at: s.clientCreatedAt.toISOString(),
+      })),
+      ...vouchers.map((v) => ({
+        ref: `voucher:${v.id}`,
+        kind: `voucher_${v.direction}`,
+        amountVnd: v.direction === 'in' ? v.amountVnd : -v.amountVnd,
+        at: v.clientCreatedAt.toISOString(),
+      })),
+      ...supplierPays.map((p) => ({
+        ref: `supplier_pay:${p.id}`,
+        kind: 'supplier_payment',
+        amountVnd: -p.amountVnd,
+        at: p.clientCreatedAt.toISOString(),
+      })),
+    ];
+
+    const bookTotal = book.reduce((s, b) => s + b.amountVnd, 0);
+    const statementTotal = statements.reduce((s, l) => s + l.amountVnd, 0);
+
+    const unmatchedBook = [...book];
+    const matched: {
+      statementId: string;
+      bookRef: string;
+      amountVnd: number;
+    }[] = [];
+    for (const st of statements) {
+      const idx = unmatchedBook.findIndex((b) => b.amountVnd === st.amountVnd);
+      if (idx >= 0) {
+        const [b] = unmatchedBook.splice(idx, 1);
+        matched.push({
+          statementId: st.id,
+          bookRef: b.ref,
+          amountVnd: st.amountVnd,
+        });
+        if (!st.matchedRef) {
+          await this.prisma.bankStatementLine.update({
+            where: { id: st.id },
+            data: { matchedRef: b.ref },
+          });
+        }
+      }
+    }
+
+    return {
+      storeId,
+      periodYm,
+      locked: !!lock,
+      bookTotalVnd: bookTotal,
+      statementTotalVnd: statementTotal,
+      varianceVnd: statementTotal - bookTotal,
+      matchedCount: matched.length,
+      unmatchedBookCount: unmatchedBook.length,
+      unmatchedStatementCount: statements.length - matched.length,
+      book,
+      statements,
+      matched,
+      unmatchedBook,
+    };
+  }
+
+  async lockBankRecon(user: AuthUser, storeId: string, periodYm: string) {
+    this.assertStoreAccess(user, storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    return this.prisma.bankReconLock.upsert({
+      where: { storeId_periodYm: { storeId, periodYm } },
+      create: {
+        id: randomUUID(),
+        storeId,
+        periodYm,
+        lockedById: user.userId,
+      },
+      update: {},
+    });
   }
 }

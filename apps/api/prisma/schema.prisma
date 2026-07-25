@@ -105,6 +105,8 @@ model Store {
   saleReturns        SaleReturn[]
   supplierPayables   SupplierPayable[]
   supplierPayments   SupplierPayment[]
+  bankStatementLines BankStatementLine[]
+  bankReconLocks     BankReconLock[]
 }
 
 model User {
@@ -636,6 +638,33 @@ model BankAccount {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  statementLines BankStatementLine[]
+}
+
+/** Imported bank statement line for transfer reconciliation. */
+model BankStatementLine {
+  id            String   @id @default(uuid())
+  storeId       String
+  bankAccountId String?
+  periodYm      String
+  bookedAt      DateTime
+  amountVnd     Int
+  memo          String?
+  matchedRef    String?
+  createdAt     DateTime @default(now())
+  store         Store    @relation(fields: [storeId], references: [id])
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id])
+  @@index([storeId, periodYm])
+}
+
+model BankReconLock {
+  id         String   @id @default(uuid())
+  storeId    String
+  periodYm   String
+  lockedById String
+  lockedAt   DateTime @default(now())
+  store      Store    @relation(fields: [storeId], references: [id])
+  @@unique([storeId, periodYm])
 }
 
 model SupplierPayable {

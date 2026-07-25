@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
+  Post,
   Query,
   Req,
   StreamableFile,
@@ -138,5 +140,55 @@ export class ReportsController {
       throw new BadRequestException('storeId, from, to required');
     }
     return this.reportsService.cashFundSummary(req.user, storeId, from, to);
+  }
+
+  @Post('bank-recon/import')
+  importBankRecon(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      periodYm?: string;
+      csv?: string;
+      bankAccountId?: string;
+    },
+  ) {
+    if (!body.storeId || !body.periodYm || !body.csv) {
+      throw new BadRequestException('storeId, periodYm, csv required');
+    }
+    return this.reportsService.importBankStatement(
+      req.user,
+      body.storeId,
+      body.periodYm,
+      body.csv,
+      body.bankAccountId,
+    );
+  }
+
+  @Get('bank-recon')
+  bankRecon(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!storeId || !periodYm) {
+      throw new BadRequestException('storeId and periodYm required');
+    }
+    return this.reportsService.bankReconSummary(req.user, storeId, periodYm);
+  }
+
+  @Post('bank-recon/lock')
+  lockBankRecon(
+    @Req() req: { user: AuthUser },
+    @Body() body: { storeId?: string; periodYm?: string },
+  ) {
+    if (!body.storeId || !body.periodYm) {
+      throw new BadRequestException('storeId and periodYm required');
+    }
+    return this.reportsService.lockBankRecon(
+      req.user,
+      body.storeId,
+      body.periodYm,
+    );
   }
 }

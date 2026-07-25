@@ -19,6 +19,7 @@ import '../inventory/inventory_service.dart';
 import '../ledger/ledger_page.dart';
 import '../suppliers/suppliers_page.dart';
 import '../einvoice/einvoice_page.dart';
+import '../cash/bank_recon_page.dart';
 import '../cash/cash_fund_page.dart';
 import '../sync/outbox_conflict_service.dart';
 import '../sync/outbox_conflicts_page.dart';
@@ -395,6 +396,23 @@ class _PosPageState extends State<PosPage> {
               },
               icon: const Icon(Icons.account_balance_wallet_outlined),
               tooltip: 'Sổ quỹ kỳ',
+            ),
+          if (widget.role == 'owner' || widget.role == 'store_manager')
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => BankReconPage(
+                      repository: BankReconRepository(
+                        dio: widget.dayReportRepository.dio,
+                      ),
+                      storeId: widget.storeId,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.compare_arrows_outlined),
+              tooltip: 'Đối chiếu CK',
             ),
           if (widget.role == 'owner' || widget.role == 'store_manager')
             IconButton(

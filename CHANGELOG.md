@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Phase 3 — Đối chiếu CK
+
+- Import sao kê CSV, khớp amount với sale/voucher/NCC transfer, khóa kỳ
+- Flutter: màn Đối chiếu CK
+
 ### Phase 3 — Trả hàng NCC
 
 - `POST /suppliers/:id/returns` — giảm tồn, FIFO giảm AP, journal đảo nhập (VAT-aware)
