@@ -59,6 +59,14 @@ enum TransferStatus {
   received
 }
 
+enum PurchaseOrderStatus {
+  draft
+  ordered
+  partial
+  received
+  closed
+}
+
 enum StocktakeLineReason {
   increase
   decrease
@@ -99,6 +107,7 @@ model Store {
   stockTransfersFrom StockTransfer[] @relation("TransferFrom")
   stockTransfersTo   StockTransfer[] @relation("TransferTo")
   stocktakes         Stocktake[]
+  purchaseOrders     PurchaseOrder[]
   purchaseReceipts   PurchaseReceipt[]
   supplierReturns    SupplierReturn[]
   wastageVouchers    WastageVoucher[]
@@ -128,6 +137,7 @@ model User {
   transfersApproved StockTransfer[] @relation("TransferApprovedBy")
   transfersReceived StockTransfer[] @relation("TransferReceivedBy")
   stocktakes        Stocktake[]
+  purchaseOrders    PurchaseOrder[]
   purchaseReceipts  PurchaseReceipt[]
   supplierReturns   SupplierReturn[]
   wastageVouchers   WastageVoucher[]
@@ -177,6 +187,7 @@ model Product {
   stocks       ProductStoreStock[]
   transferLines StockTransferLine[]
   stocktakeLines StocktakeLine[]
+  purchaseOrderLines PurchaseOrderLine[]
   purchaseLines  PurchaseReceiptLine[]
   saleLines      SaleLine[]
   supplierReturnLines SupplierReturnLine[]
@@ -460,12 +471,50 @@ model StocktakeLine {
   @@index([stocktakeId])
 }
 
+model PurchaseOrder {
+  id              String              @id @default(uuid())
+  storeId         String
+  supplierName    String
+  supplierPhone   String?
+  supplierId      String?
+  status          PurchaseOrderStatus @default(draft)
+  note            String?
+  createdById     String
+  clientCreatedAt DateTime
+  orderedAt       DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  store           Store               @relation(fields: [storeId], references: [id])
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id])
+  createdBy       User                @relation(fields: [createdById], references: [id])
+  lines           PurchaseOrderLine[]
+  receipts        PurchaseReceipt[]
+  @@index([storeId, updatedAt])
+  @@index([storeId, status])
+  @@index([supplierId])
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  qty             Decimal       @db.Decimal(18, 3)
+  receivedQty     Decimal       @default(0) @db.Decimal(18, 3)
+  unitCostVnd     Int?
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id])
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
 model PurchaseReceipt {
   id              String   @id @default(uuid())
   storeId         String
   supplierName    String
   supplierPhone   String?
   supplierId      String?
+  purchaseOrderId String?
   note            String?
   recordedById    String
   clientCreatedAt DateTime
@@ -474,9 +523,11 @@ model PurchaseReceipt {
   store           Store    @relation(fields: [storeId], references: [id])
   recordedBy      User     @relation(fields: [recordedById], references: [id])
   supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   lines           PurchaseReceiptLine[]
   payable         SupplierPayable?
   @@index([storeId, clientCreatedAt])
+  @@index([purchaseOrderId])
 }
 
 model PurchaseReceiptLine {
@@ -611,6 +662,7 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   receipts  PurchaseReceipt[]
+  purchaseOrders PurchaseOrder[]
   returns   SupplierReturn[]
   payables  SupplierPayable[]
   payments  SupplierPayment[]

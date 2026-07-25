@@ -34,6 +34,8 @@ const lastBackupAtMetaKey = 'lastBackupAt';
     StockTransferLinesLocal,
     StocktakesLocal,
     StocktakeLinesLocal,
+    PurchaseOrdersLocal,
+    PurchaseOrderLinesLocal,
     PurchaseReceiptsLocal,
     PurchaseReceiptLinesLocal,
     WastageVouchersLocal,
@@ -45,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -95,6 +97,18 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 8) {
         await migrator.addColumn(saleLinesLocal, saleLinesLocal.discountVnd);
+      }
+      if (from < 9) {
+        await migrator.createTable(purchaseOrdersLocal);
+        await migrator.createTable(purchaseOrderLinesLocal);
+        await migrator.addColumn(
+          purchaseReceiptsLocal,
+          purchaseReceiptsLocal.supplierId,
+        );
+        await migrator.addColumn(
+          purchaseReceiptsLocal,
+          purchaseReceiptsLocal.purchaseOrderId,
+        );
       }
     },
   );
@@ -175,6 +189,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> upsertInventoryFromPull({
     required List<Map<String, dynamic>> stockTransfers,
     required List<Map<String, dynamic>> stocktakes,
+    required List<Map<String, dynamic>> purchaseOrders,
     required List<Map<String, dynamic>> purchaseReceipts,
     required List<Map<String, dynamic>> wastageVouchers,
     required List<Map<String, dynamic>> stockMovements,
@@ -206,7 +221,8 @@ class AppDatabase extends _$AppDatabase {
           ),
         );
         for (final line
-            in (t['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+            in (t['lines'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>()) {
           await into(stockTransferLinesLocal).insertOnConflictUpdate(
             StockTransferLinesLocalCompanion.insert(
               id: line['id'] as String,
@@ -229,7 +245,8 @@ class AppDatabase extends _$AppDatabase {
           ),
         );
         for (final line
-            in (s['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+            in (s['lines'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>()) {
           await into(stocktakeLinesLocal).insertOnConflictUpdate(
             StocktakeLinesLocalCompanion.insert(
               id: line['id'] as String,
@@ -244,6 +261,46 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      for (final o in purchaseOrders) {
+        await into(purchaseOrdersLocal).insertOnConflictUpdate(
+          PurchaseOrdersLocalCompanion.insert(
+            id: o['id'] as String,
+            storeId: o['storeId'] as String,
+            supplierName: o['supplierName'] as String,
+            supplierPhone: Value(o['supplierPhone'] as String?),
+            supplierId: Value(o['supplierId'] as String?),
+            status: o['status'] as String,
+            note: Value(o['note'] as String?),
+            createdById: o['createdById'] as String,
+            clientCreatedAt: DateTime.parse(o['clientCreatedAt'] as String),
+            orderedAt: Value(
+              o['orderedAt'] != null
+                  ? DateTime.parse(o['orderedAt'] as String)
+                  : null,
+            ),
+            closedAt: Value(
+              o['closedAt'] != null
+                  ? DateTime.parse(o['closedAt'] as String)
+                  : null,
+            ),
+            updatedAt: DateTime.parse(o['updatedAt'] as String),
+          ),
+        );
+        for (final line
+            in (o['lines'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>()) {
+          await into(purchaseOrderLinesLocal).insertOnConflictUpdate(
+            PurchaseOrderLinesLocalCompanion.insert(
+              id: line['id'] as String,
+              purchaseOrderId: o['id'] as String,
+              productId: line['productId'] as String,
+              qty: line['qty'] as String,
+              receivedQty: Value(line['receivedQty'] as String? ?? '0'),
+              unitCostVnd: Value(line['unitCostVnd'] as int?),
+            ),
+          );
+        }
+      }
       for (final r in purchaseReceipts) {
         await into(purchaseReceiptsLocal).insertOnConflictUpdate(
           PurchaseReceiptsLocalCompanion.insert(
@@ -251,6 +308,8 @@ class AppDatabase extends _$AppDatabase {
             storeId: r['storeId'] as String,
             supplierName: r['supplierName'] as String,
             supplierPhone: Value(r['supplierPhone'] as String?),
+            supplierId: Value(r['supplierId'] as String?),
+            purchaseOrderId: Value(r['purchaseOrderId'] as String?),
             note: Value(r['note'] as String?),
             recordedById: r['recordedById'] as String,
             clientCreatedAt: DateTime.parse(r['clientCreatedAt'] as String),
@@ -258,7 +317,8 @@ class AppDatabase extends _$AppDatabase {
           ),
         );
         for (final line
-            in (r['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+            in (r['lines'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>()) {
           await into(purchaseReceiptLinesLocal).insertOnConflictUpdate(
             PurchaseReceiptLinesLocalCompanion.insert(
               id: line['id'] as String,
@@ -283,7 +343,8 @@ class AppDatabase extends _$AppDatabase {
           ),
         );
         for (final line
-            in (w['lines'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>()) {
+            in (w['lines'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>()) {
           await into(wastageVoucherLinesLocal).insertOnConflictUpdate(
             WastageVoucherLinesLocalCompanion.insert(
               id: line['id'] as String,
@@ -426,7 +487,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> requeueOutbox(String outboxId) async {
-    await (update(outboxEntries)..where((row) => row.id.equals(outboxId))).write(
+    await (update(
+      outboxEntries,
+    )..where((row) => row.id.equals(outboxId))).write(
       const OutboxEntriesCompanion(
         status: Value('pending'),
         lastError: Value(null),
@@ -448,9 +511,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> updateOutboxPayload(String outboxId, String payloadJson) {
-    return (update(outboxEntries)..where((row) => row.id.equals(outboxId))).write(
-      OutboxEntriesCompanion(payloadJson: Value(payloadJson)),
-    );
+    return (update(outboxEntries)..where((row) => row.id.equals(outboxId)))
+        .write(OutboxEntriesCompanion(payloadJson: Value(payloadJson)));
   }
 
   Future<void> markOutboxDone(List<String> saleIds) async {

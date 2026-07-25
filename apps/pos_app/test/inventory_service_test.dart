@@ -23,33 +23,39 @@ void main() {
       'currentUser',
       '{"id":"$userId","role":"owner","name":"Chu"}',
     );
-    await db.into(db.storesLocal).insert(
-      StoresLocalCompanion.insert(
-        id: storeId,
-        code: 'CH1',
-        name: 'Cua hang 1',
-        updatedAt: DateTime.now(),
-      ),
-    );
-    await db.into(db.products).insert(
-      ProductsCompanion.insert(
-        id: productId,
-        sku: 'SKU-1',
-        name: 'Sting',
-        unit: 'chai',
-        basePriceVnd: 10000,
-        updatedAt: DateTime.now(),
-      ),
-    );
-    await db.into(db.productStocks).insert(
-      ProductStocksCompanion.insert(
-        productId: productId,
-        storeId: storeId,
-        qty: '10',
-        minQty: '0',
-        updatedAt: DateTime.now(),
-      ),
-    );
+    await db
+        .into(db.storesLocal)
+        .insert(
+          StoresLocalCompanion.insert(
+            id: storeId,
+            code: 'CH1',
+            name: 'Cua hang 1',
+            updatedAt: DateTime.now(),
+          ),
+        );
+    await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: productId,
+            sku: 'SKU-1',
+            name: 'Sting',
+            unit: 'chai',
+            basePriceVnd: 10000,
+            updatedAt: DateTime.now(),
+          ),
+        );
+    await db
+        .into(db.productStocks)
+        .insert(
+          ProductStocksCompanion.insert(
+            productId: productId,
+            storeId: storeId,
+            qty: '10',
+            minQty: '0',
+            updatedAt: DateTime.now(),
+          ),
+        );
   });
 
   tearDown(() async {
@@ -67,12 +73,11 @@ void main() {
       ],
     );
 
-    final stock = await (db.select(db.productStocks)
-          ..where(
-            (s) =>
-                s.productId.equals(product.id) & s.storeId.equals(storeId),
-          ))
-        .getSingle();
+    final stock =
+        await (db.select(db.productStocks)..where(
+              (s) => s.productId.equals(product.id) & s.storeId.equals(storeId),
+            ))
+            .getSingle();
     expect(stock.qty, '13');
 
     final outbox = await db.pendingOutbox();
@@ -82,6 +87,63 @@ void main() {
     expect(movements, hasLength(1));
     expect(movements.first.docType, 'purchase');
   });
+
+  test(
+    'purchase order partial receive updates PO and enqueues receipt',
+    () async {
+      final storeId = (await db.metaValue('currentStoreId'))!;
+      final product = await db.select(db.products).getSingle();
+
+      final poId = await service.createPurchaseOrder(
+        supplierName: 'NCC PO',
+        status: 'ordered',
+        lines: [
+          InventoryLineInput(
+            productId: product.id,
+            qty: Decimal.fromInt(10),
+            unitCostVnd: 8000,
+          ),
+        ],
+      );
+
+      final afterCreateStock =
+          await (db.select(db.productStocks)..where(
+                (s) =>
+                    s.productId.equals(product.id) & s.storeId.equals(storeId),
+              ))
+              .getSingle();
+      expect(afterCreateStock.qty, '10');
+
+      await service.receivePurchaseOrder(
+        purchaseOrderId: poId,
+        lines: [
+          InventoryLineInput(productId: product.id, qty: Decimal.fromInt(4)),
+        ],
+      );
+
+      final order = await (db.select(
+        db.purchaseOrdersLocal,
+      )..where((o) => o.id.equals(poId))).getSingle();
+      expect(order.status, 'partial');
+      final orderLine = await db.select(db.purchaseOrderLinesLocal).getSingle();
+      expect(orderLine.receivedQty, '4');
+
+      final stock =
+          await (db.select(db.productStocks)..where(
+                (s) =>
+                    s.productId.equals(product.id) & s.storeId.equals(storeId),
+              ))
+              .getSingle();
+      expect(stock.qty, '14');
+
+      final outbox = await db.pendingOutbox();
+      expect(
+        outbox.any((e) => e.entityType == 'purchase_order_create'),
+        isTrue,
+      );
+      expect(outbox.any((e) => e.entityType == 'purchase_receipt'), isTrue);
+    },
+  );
 
   test('recordWastage rejects insufficient stock', () async {
     final product = await db.select(db.products).getSingle();

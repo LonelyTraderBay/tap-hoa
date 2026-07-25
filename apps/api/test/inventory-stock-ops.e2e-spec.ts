@@ -47,8 +47,11 @@ describe('Inventory stock ops sync', () => {
     await prisma.stockTransfer.deleteMany();
     await prisma.stocktakeLine.deleteMany();
     await prisma.stocktake.deleteMany();
+    await prisma.supplierPayable.deleteMany();
     await prisma.purchaseReceiptLine.deleteMany();
     await prisma.purchaseReceipt.deleteMany();
+    await prisma.purchaseOrderLine.deleteMany();
+    await prisma.purchaseOrder.deleteMany();
     await prisma.wastageVoucherLine.deleteMany();
     await prisma.wastageVoucher.deleteMany();
     await prisma.debtLedgerEntry.deleteMany();
@@ -109,6 +112,106 @@ describe('Inventory stock ops sync', () => {
     });
     expect(movements).toHaveLength(1);
     expect(movements[0]?.qtyDelta.toString()).toBe('5');
+  });
+
+  it('purchase order partial receive creates AP and stock only on receipt', async () => {
+    const login = await loginAsOwner(app);
+    const purchaseOrderId = randomUUID();
+    const orderLineId = randomUUID();
+
+    const create = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'po-1',
+        sales: [],
+        purchaseOrderCreates: [
+          {
+            id: purchaseOrderId,
+            storeId: storeCh1,
+            supplierName: 'NCC PO',
+            status: 'ordered',
+            clientCreatedAt: new Date().toISOString(),
+            lines: [
+              {
+                id: orderLineId,
+                productId,
+                qty: '10',
+                unitCostVnd: 8000,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201);
+    expect(create.body.acceptedPurchaseOrderCreateIds).toContain(purchaseOrderId);
+
+    let stock = await prisma.productStoreStock.findUniqueOrThrow({
+      where: { productId_storeId: { productId, storeId: storeCh1 } },
+    });
+    expect(stock.qty.toString()).toBe('100');
+    expect(await prisma.supplierPayable.count()).toBe(0);
+
+    const receiptId = randomUUID();
+    const receive = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'po-1',
+        sales: [],
+        purchaseReceipts: [
+          {
+            id: receiptId,
+            storeId: storeCh1,
+            supplierName: 'NCC PO',
+            purchaseOrderId,
+            clientCreatedAt: new Date().toISOString(),
+            lines: [{ id: randomUUID(), productId, qty: '4' }],
+          },
+        ],
+      })
+      .expect(201);
+    expect(receive.body.acceptedPurchaseReceiptIds).toContain(receiptId);
+
+    const order = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: purchaseOrderId },
+      include: { lines: true },
+    });
+    expect(order.status).toBe('partial');
+    expect(order.lines[0]?.receivedQty.toString()).toBe('4');
+
+    stock = await prisma.productStoreStock.findUniqueOrThrow({
+      where: { productId_storeId: { productId, storeId: storeCh1 } },
+    });
+    expect(stock.qty.toString()).toBe('104');
+    const payable = await prisma.supplierPayable.findFirst({
+      where: { purchaseReceiptId: receiptId },
+    });
+    expect(payable?.amountVnd).toBe(32000);
+
+    const directReceiptId = randomUUID();
+    const direct = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'po-2',
+        sales: [],
+        purchaseReceipts: [
+          {
+            id: directReceiptId,
+            storeId: storeCh1,
+            supplierName: 'NCC Direct',
+            clientCreatedAt: new Date().toISOString(),
+            lines: [{ id: randomUUID(), productId, qty: '1', unitCostVnd: 7000 }],
+          },
+        ],
+      })
+      .expect(201);
+    expect(direct.body.acceptedPurchaseReceiptIds).toContain(directReceiptId);
+    const directReceipt = await prisma.purchaseReceipt.findUniqueOrThrow({
+      where: { id: directReceiptId },
+    });
+    expect(directReceipt.purchaseOrderId).toBeNull();
   });
 
   it('wastage rejects insufficient stock', async () => {

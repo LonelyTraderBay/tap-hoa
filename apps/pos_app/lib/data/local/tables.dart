@@ -256,10 +256,42 @@ class PurchaseReceiptsLocal extends Table {
   TextColumn get storeId => text()();
   TextColumn get supplierName => text()();
   TextColumn get supplierPhone => text().nullable()();
+  TextColumn get supplierId => text().nullable()();
+  TextColumn get purchaseOrderId => text().nullable()();
   TextColumn get note => text().nullable()();
   TextColumn get recordedById => text()();
   DateTimeColumn get clientCreatedAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class PurchaseOrdersLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get storeId => text()();
+  TextColumn get supplierName => text()();
+  TextColumn get supplierPhone => text().nullable()();
+  TextColumn get supplierId => text().nullable()();
+  TextColumn get status => text()(); // draft|ordered|partial|received|closed
+  TextColumn get note => text().nullable()();
+  TextColumn get createdById => text()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get orderedAt => dateTime().nullable()();
+  DateTimeColumn get closedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class PurchaseOrderLinesLocal extends Table {
+  TextColumn get id => text()();
+  TextColumn get purchaseOrderId => text()();
+  TextColumn get productId => text()();
+  TextColumn get qty => text()();
+  TextColumn get receivedQty => text().withDefault(const Constant('0'))();
+  IntColumn get unitCostVnd => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

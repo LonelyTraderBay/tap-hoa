@@ -37,7 +37,7 @@ class _InventoryHubPageState extends State<InventoryHubPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -48,11 +48,15 @@ class _InventoryHubPageState extends State<InventoryHubPage>
 
   Future<void> _snack(String message) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<ProductWithStock?> _pickProduct() async {
-    final products = await widget.productRepository.listWithStock(widget.storeId);
+    final products = await widget.productRepository.listWithStock(
+      widget.storeId,
+    );
     if (!mounted || products.isEmpty) {
       await _snack('Chưa có sản phẩm');
       return null;
@@ -97,8 +101,14 @@ class _InventoryHubPageState extends State<InventoryHubPage>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lưu')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lưu'),
+          ),
         ],
       ),
     );
@@ -114,6 +124,120 @@ class _InventoryHubPageState extends State<InventoryHubPage>
         ],
       );
       await _snack('Đã ghi phiếu nhập');
+    } catch (e) {
+      await _snack('Lỗi: $e');
+    }
+  }
+
+  Future<void> _createPurchaseOrder() async {
+    final product = await _pickProduct();
+    if (product == null || !mounted) return;
+    final qtyCtrl = TextEditingController(text: '1');
+    final costCtrl = TextEditingController();
+    final supplierCtrl = TextEditingController(text: 'NCC');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tạo PO'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: supplierCtrl,
+              decoration: const InputDecoration(labelText: 'Nhà cung cấp'),
+            ),
+            Text(product.name),
+            TextField(
+              controller: qtyCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Số lượng đặt'),
+            ),
+            TextField(
+              controller: costCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Giá nhập dự kiến'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.inventoryService.createPurchaseOrder(
+        supplierName: supplierCtrl.text,
+        lines: [
+          InventoryLineInput(
+            productId: product.id,
+            qty: Decimal.parse(qtyCtrl.text.trim()),
+            unitCostVnd: int.tryParse(costCtrl.text.trim()),
+          ),
+        ],
+      );
+      await _snack('Đã tạo PO draft');
+    } catch (e) {
+      await _snack('Lỗi: $e');
+    }
+  }
+
+  Future<void> _receivePurchaseOrder(PurchaseOrdersLocalData order) async {
+    final lines = await (widget.db.select(
+      widget.db.purchaseOrderLinesLocal,
+    )..where((l) => l.purchaseOrderId.equals(order.id))).get();
+    final line = lines
+        .where((l) => Decimal.parse(l.receivedQty) < Decimal.parse(l.qty))
+        .firstOrNull;
+    if (line == null) {
+      await _snack('PO đã nhận đủ');
+      return;
+    }
+    final remaining = Decimal.parse(line.qty) - Decimal.parse(line.receivedQty);
+    final qtyCtrl = TextEditingController(text: formatInventoryQty(remaining));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Nhận PO ${order.supplierName}'),
+        content: TextField(
+          controller: qtyCtrl,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Số lượng nhận (còn ${formatInventoryQty(remaining)})',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Nhận'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.inventoryService.receivePurchaseOrder(
+        purchaseOrderId: order.id,
+        lines: [
+          InventoryLineInput(
+            productId: line.productId,
+            qty: Decimal.parse(qtyCtrl.text.trim()),
+            unitCostVnd: line.unitCostVnd,
+          ),
+        ],
+      );
+      await _snack('Đã nhận PO');
     } catch (e) {
       await _snack('Lỗi: $e');
     }
@@ -139,8 +263,14 @@ class _InventoryHubPageState extends State<InventoryHubPage>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lưu')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lưu'),
+          ),
         ],
       ),
     );
@@ -181,8 +311,14 @@ class _InventoryHubPageState extends State<InventoryHubPage>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lưu')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lưu'),
+          ),
         ],
       ),
     );
@@ -244,8 +380,14 @@ class _InventoryHubPageState extends State<InventoryHubPage>
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Tạo')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Tạo'),
+            ),
           ],
         ),
       ),
@@ -272,9 +414,7 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     if (widget.role == 'owner') {
       final rows = await widget.db.select(widget.db.storesLocal).get();
       stores = rows
-          .map(
-            (s) => StoreOption(id: s.id, code: s.code, name: s.name),
-          )
+          .map((s) => StoreOption(id: s.id, code: s.code, name: s.name))
           .toList();
     }
     if (!mounted) return;
@@ -307,6 +447,7 @@ class _InventoryHubPageState extends State<InventoryHubPage>
           controller: _tabs,
           tabs: const [
             Tab(text: 'Chứng từ'),
+            Tab(text: 'Đơn mua'),
             Tab(text: 'Chuyển kho'),
             Tab(text: 'Lịch sử tồn'),
           ],
@@ -322,6 +463,11 @@ class _InventoryHubPageState extends State<InventoryHubPage>
                 leading: const Icon(Icons.move_to_inbox_outlined),
                 title: const Text('Nhập NCC'),
                 onTap: _createPurchase,
+              ),
+              ListTile(
+                leading: const Icon(Icons.assignment_outlined),
+                title: const Text('Tạo đơn mua (PO)'),
+                onTap: _createPurchaseOrder,
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline),
@@ -341,6 +487,63 @@ class _InventoryHubPageState extends State<InventoryHubPage>
                 ),
             ],
           ),
+          StreamBuilder<List<PurchaseOrdersLocalData>>(
+            stream: widget.inventoryService.watchPurchaseOrders(widget.storeId),
+            builder: (context, snap) {
+              final rows = snap.data ?? [];
+              if (rows.isEmpty) {
+                return const Center(child: Text('Chưa có PO'));
+              }
+              return ListView.builder(
+                itemCount: rows.length,
+                itemBuilder: (context, i) {
+                  final o = rows[i];
+                  return ListTile(
+                    title: Text(o.supplierName),
+                    subtitle: Text(o.status),
+                    trailing: Wrap(
+                      spacing: 4,
+                      children: [
+                        if (o.status == 'draft')
+                          TextButton(
+                            onPressed: () async {
+                              try {
+                                await widget.inventoryService
+                                    .orderPurchaseOrder(o.id);
+                                await _snack('Đã đặt PO');
+                              } catch (e) {
+                                await _snack('Lỗi: $e');
+                              }
+                            },
+                            child: const Text('Đặt'),
+                          ),
+                        if (o.status == 'ordered' || o.status == 'partial')
+                          TextButton(
+                            onPressed: () => _receivePurchaseOrder(o),
+                            child: const Text('Nhận'),
+                          ),
+                        if (o.status == 'draft' ||
+                            o.status == 'ordered' ||
+                            o.status == 'partial')
+                          TextButton(
+                            onPressed: () async {
+                              try {
+                                await widget.inventoryService
+                                    .closePurchaseOrder(o.id);
+                                await _snack('Đã đóng PO');
+                              } catch (e) {
+                                await _snack('Lỗi: $e');
+                              }
+                            },
+                            child: const Text('Đóng'),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
           StreamBuilder<List<StockTransfersLocalData>>(
             stream: widget.inventoryService.watchTransfers(widget.storeId),
             builder: (context, snap) {
@@ -353,7 +556,9 @@ class _InventoryHubPageState extends State<InventoryHubPage>
                 itemBuilder: (context, i) {
                   final t = rows[i];
                   return ListTile(
-                    title: Text('${t.fromStoreId.substring(0, 8)} → ${t.toStoreId.substring(0, 8)}'),
+                    title: Text(
+                      '${t.fromStoreId.substring(0, 8)} → ${t.toStoreId.substring(0, 8)}',
+                    ),
                     subtitle: Text(t.status),
                     trailing: Wrap(
                       spacing: 4,
@@ -362,7 +567,9 @@ class _InventoryHubPageState extends State<InventoryHubPage>
                           TextButton(
                             onPressed: () async {
                               try {
-                                await widget.inventoryService.approveTransfer(t.id);
+                                await widget.inventoryService.approveTransfer(
+                                  t.id,
+                                );
                                 await _snack('Đã duyệt');
                               } catch (e) {
                                 await _snack('Lỗi: $e');
@@ -373,7 +580,9 @@ class _InventoryHubPageState extends State<InventoryHubPage>
                           TextButton(
                             onPressed: () async {
                               try {
-                                await widget.inventoryService.rejectTransfer(t.id);
+                                await widget.inventoryService.rejectTransfer(
+                                  t.id,
+                                );
                                 await _snack('Đã từ chối');
                               } catch (e) {
                                 await _snack('Lỗi: $e');
@@ -388,7 +597,9 @@ class _InventoryHubPageState extends State<InventoryHubPage>
                           TextButton(
                             onPressed: () async {
                               try {
-                                await widget.inventoryService.receiveTransfer(t.id);
+                                await widget.inventoryService.receiveTransfer(
+                                  t.id,
+                                );
                                 await _snack('Đã nhận hàng');
                               } catch (e) {
                                 await _snack('Lỗi: $e');

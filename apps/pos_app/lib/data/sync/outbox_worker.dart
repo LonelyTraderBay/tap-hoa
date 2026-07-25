@@ -39,19 +39,14 @@ class ClosedShiftSnapshot {
 }
 
 List<String> _stringIds(Map<String, dynamic> json, String key) {
-  return (json[key] as List<dynamic>? ?? [])
-      .map((id) => id as String)
-      .toList();
+  return (json[key] as List<dynamic>? ?? []).map((id) => id as String).toList();
 }
 
 List<RejectedSale> _rejectedItems(Map<String, dynamic> json, String key) {
   return [
     for (final item
         in (json[key] as List<dynamic>? ?? []).cast<Map<String, dynamic>>())
-      RejectedSale(
-        id: item['id'] as String,
-        reason: item['reason'] as String,
-      ),
+      RejectedSale(id: item['id'] as String, reason: item['reason'] as String),
   ];
 }
 
@@ -72,6 +67,9 @@ class PushSyncResult {
     required this.acceptedStockTransferRejectIds,
     required this.acceptedStockTransferReceiveIds,
     required this.acceptedStocktakeIds,
+    required this.acceptedPurchaseOrderCreateIds,
+    required this.acceptedPurchaseOrderOrderIds,
+    required this.acceptedPurchaseOrderCloseIds,
     required this.acceptedPurchaseReceiptIds,
     required this.acceptedWastageIds,
     required this.rejected,
@@ -86,6 +84,9 @@ class PushSyncResult {
     required this.rejectedStockTransferRejects,
     required this.rejectedStockTransferReceives,
     required this.rejectedStocktakes,
+    required this.rejectedPurchaseOrderCreates,
+    required this.rejectedPurchaseOrderOrders,
+    required this.rejectedPurchaseOrderCloses,
     required this.rejectedPurchaseReceipts,
     required this.rejectedWastages,
   });
@@ -105,6 +106,9 @@ class PushSyncResult {
   final List<String> acceptedStockTransferRejectIds;
   final List<String> acceptedStockTransferReceiveIds;
   final List<String> acceptedStocktakeIds;
+  final List<String> acceptedPurchaseOrderCreateIds;
+  final List<String> acceptedPurchaseOrderOrderIds;
+  final List<String> acceptedPurchaseOrderCloseIds;
   final List<String> acceptedPurchaseReceiptIds;
   final List<String> acceptedWastageIds;
   final List<RejectedSale> rejected;
@@ -119,6 +123,9 @@ class PushSyncResult {
   final List<RejectedSale> rejectedStockTransferRejects;
   final List<RejectedSale> rejectedStockTransferReceives;
   final List<RejectedSale> rejectedStocktakes;
+  final List<RejectedSale> rejectedPurchaseOrderCreates;
+  final List<RejectedSale> rejectedPurchaseOrderOrders;
+  final List<RejectedSale> rejectedPurchaseOrderCloses;
   final List<RejectedSale> rejectedPurchaseReceipts;
   final List<RejectedSale> rejectedWastages;
 
@@ -159,7 +166,22 @@ class PushSyncResult {
         'acceptedStockTransferReceiveIds',
       ),
       acceptedStocktakeIds: _stringIds(json, 'acceptedStocktakeIds'),
-      acceptedPurchaseReceiptIds: _stringIds(json, 'acceptedPurchaseReceiptIds'),
+      acceptedPurchaseOrderCreateIds: _stringIds(
+        json,
+        'acceptedPurchaseOrderCreateIds',
+      ),
+      acceptedPurchaseOrderOrderIds: _stringIds(
+        json,
+        'acceptedPurchaseOrderOrderIds',
+      ),
+      acceptedPurchaseOrderCloseIds: _stringIds(
+        json,
+        'acceptedPurchaseOrderCloseIds',
+      ),
+      acceptedPurchaseReceiptIds: _stringIds(
+        json,
+        'acceptedPurchaseReceiptIds',
+      ),
       acceptedWastageIds: _stringIds(json, 'acceptedWastageIds'),
       rejected: _rejectedItems(json, 'rejected'),
       rejectedShifts: _rejectedItems(json, 'rejectedShifts'),
@@ -188,7 +210,22 @@ class PushSyncResult {
         'rejectedStockTransferReceives',
       ),
       rejectedStocktakes: _rejectedItems(json, 'rejectedStocktakes'),
-      rejectedPurchaseReceipts: _rejectedItems(json, 'rejectedPurchaseReceipts'),
+      rejectedPurchaseOrderCreates: _rejectedItems(
+        json,
+        'rejectedPurchaseOrderCreates',
+      ),
+      rejectedPurchaseOrderOrders: _rejectedItems(
+        json,
+        'rejectedPurchaseOrderOrders',
+      ),
+      rejectedPurchaseOrderCloses: _rejectedItems(
+        json,
+        'rejectedPurchaseOrderCloses',
+      ),
+      rejectedPurchaseReceipts: _rejectedItems(
+        json,
+        'rejectedPurchaseReceipts',
+      ),
       rejectedWastages: _rejectedItems(json, 'rejectedWastages'),
     );
   }
@@ -226,6 +263,9 @@ class OutboxWorker {
     final stockTransferRejects = <Map<String, dynamic>>[];
     final stockTransferReceives = <Map<String, dynamic>>[];
     final stocktakes = <Map<String, dynamic>>[];
+    final purchaseOrderCreates = <Map<String, dynamic>>[];
+    final purchaseOrderOrders = <Map<String, dynamic>>[];
+    final purchaseOrderCloses = <Map<String, dynamic>>[];
     final purchaseReceipts = <Map<String, dynamic>>[];
     final wastages = <Map<String, dynamic>>[];
 
@@ -260,6 +300,12 @@ class OutboxWorker {
           stockTransferReceives.add(payload);
         case 'stocktake':
           stocktakes.add(payload);
+        case 'purchase_order_create':
+          purchaseOrderCreates.add(payload);
+        case 'purchase_order_order':
+          purchaseOrderOrders.add(payload);
+        case 'purchase_order_close':
+          purchaseOrderCloses.add(payload);
         case 'purchase_receipt':
           purchaseReceipts.add(payload);
         case 'wastage':
@@ -280,6 +326,9 @@ class OutboxWorker {
         stockTransferRejects.isEmpty &&
         stockTransferReceives.isEmpty &&
         stocktakes.isEmpty &&
+        purchaseOrderCreates.isEmpty &&
+        purchaseOrderOrders.isEmpty &&
+        purchaseOrderCloses.isEmpty &&
         purchaseReceipts.isEmpty &&
         wastages.isEmpty) {
       return;
@@ -305,6 +354,9 @@ class OutboxWorker {
           'stockTransferRejects': stockTransferRejects,
           'stockTransferReceives': stockTransferReceives,
           'stocktakes': stocktakes,
+          'purchaseOrderCreates': purchaseOrderCreates,
+          'purchaseOrderOrders': purchaseOrderOrders,
+          'purchaseOrderCloses': purchaseOrderCloses,
           'purchaseReceipts': purchaseReceipts,
           'wastages': wastages,
         },
@@ -361,7 +413,22 @@ class OutboxWorker {
         'stock_transfer_receive',
         result.acceptedStockTransferReceiveIds,
       );
-      await _db.markOutboxEntitiesDone('stocktake', result.acceptedStocktakeIds);
+      await _db.markOutboxEntitiesDone(
+        'stocktake',
+        result.acceptedStocktakeIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'purchase_order_create',
+        result.acceptedPurchaseOrderCreateIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'purchase_order_order',
+        result.acceptedPurchaseOrderOrderIds,
+      );
+      await _db.markOutboxEntitiesDone(
+        'purchase_order_close',
+        result.acceptedPurchaseOrderCloseIds,
+      );
       await _db.markOutboxEntitiesDone(
         'purchase_receipt',
         result.acceptedPurchaseReceiptIds,
@@ -407,10 +474,7 @@ class OutboxWorker {
         result.rejectedProductGroupUpserts,
         entityType: 'product_group_upsert',
       );
-      await markRejected(
-        result.rejectedSaleReturns,
-        entityType: 'sale_return',
-      );
+      await markRejected(result.rejectedSaleReturns, entityType: 'sale_return');
       await markRejected(
         result.rejectedStockTransferCreates,
         entityType: 'stock_transfer_create',
@@ -429,6 +493,18 @@ class OutboxWorker {
       );
       await markRejected(result.rejectedStocktakes, entityType: 'stocktake');
       await markRejected(
+        result.rejectedPurchaseOrderCreates,
+        entityType: 'purchase_order_create',
+      );
+      await markRejected(
+        result.rejectedPurchaseOrderOrders,
+        entityType: 'purchase_order_order',
+      );
+      await markRejected(
+        result.rejectedPurchaseOrderCloses,
+        entityType: 'purchase_order_close',
+      );
+      await markRejected(
         result.rejectedPurchaseReceipts,
         entityType: 'purchase_receipt',
       );
@@ -442,8 +518,9 @@ class OutboxWorker {
     List<ClosedShiftSnapshot> snapshots,
   ) async {
     for (final snapshot in snapshots) {
-      await (_db.update(_db.shiftsLocal)..where((s) => s.id.equals(snapshot.id)))
-          .write(
+      await (_db.update(
+        _db.shiftsLocal,
+      )..where((s) => s.id.equals(snapshot.id))).write(
         ShiftsLocalCompanion(
           closedAt: Value(snapshot.closedAt),
           closingCash: Value(snapshot.closingCash),

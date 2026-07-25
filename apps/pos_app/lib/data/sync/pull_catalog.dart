@@ -13,8 +13,7 @@ class PullCatalog {
 
   Future<void> pullCatalog(String storeId) async {
     final since =
-        await _db.lastPullAt(storeId) ??
-        DateTime.fromMillisecondsSinceEpoch(0);
+        await _db.lastPullAt(storeId) ?? DateTime.fromMillisecondsSinceEpoch(0);
     final response = await _dio.get<Map<String, dynamic>>(
       '/sync/pull',
       queryParameters: {
@@ -47,6 +46,8 @@ class PullCatalog {
         .cast<Map<String, dynamic>>();
     final stocktakes = (data['stocktakes'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
+    final purchaseOrders = (data['purchaseOrders'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
     final purchaseReceipts = (data['purchaseReceipts'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
     final wastageVouchers = (data['wastageVouchers'] as List<dynamic>? ?? [])
@@ -63,16 +64,18 @@ class PullCatalog {
       comboComponents: comboComponents,
     );
     if (store != null) {
-      await _db.into(_db.storesLocal).insertOnConflictUpdate(
-        StoresLocalCompanion.insert(
-          id: store['id'] as String,
-          code: store['code'] as String,
-          name: store['name'] as String,
-          active: Value(store['active'] as bool? ?? true),
-          debtOverdueDays: Value(store['debtOverdueDays'] as int? ?? 30),
-          updatedAt: DateTime.parse(store['updatedAt'] as String),
-        ),
-      );
+      await _db
+          .into(_db.storesLocal)
+          .insertOnConflictUpdate(
+            StoresLocalCompanion.insert(
+              id: store['id'] as String,
+              code: store['code'] as String,
+              name: store['name'] as String,
+              active: Value(store['active'] as bool? ?? true),
+              debtOverdueDays: Value(store['debtOverdueDays'] as int? ?? 30),
+              updatedAt: DateTime.parse(store['updatedAt'] as String),
+            ),
+          );
     }
     await _db.upsertCustomersAndDebtLedger(
       customers: customers,
@@ -87,6 +90,7 @@ class PullCatalog {
     await _db.upsertInventoryFromPull(
       stockTransfers: stockTransfers,
       stocktakes: stocktakes,
+      purchaseOrders: purchaseOrders,
       purchaseReceipts: purchaseReceipts,
       wastageVouchers: wastageVouchers,
       stockMovements: stockMovements,

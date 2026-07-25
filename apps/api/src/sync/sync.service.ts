@@ -383,6 +383,39 @@ export class SyncService {
       }
     }
 
+    const acceptedPurchaseOrderCreateIds: string[] = [];
+    const rejectedPurchaseOrderCreates: { id: string; reason: string }[] = [];
+    for (const dto of body.purchaseOrderCreates ?? []) {
+      const result = await this.stockOps.processPurchaseOrderCreate(user, dto);
+      if (result.accepted) {
+        acceptedPurchaseOrderCreateIds.push(dto.id);
+      } else {
+        rejectedPurchaseOrderCreates.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedPurchaseOrderOrderIds: string[] = [];
+    const rejectedPurchaseOrderOrders: { id: string; reason: string }[] = [];
+    for (const dto of body.purchaseOrderOrders ?? []) {
+      const result = await this.stockOps.processPurchaseOrderOrder(user, dto);
+      if (result.accepted) {
+        acceptedPurchaseOrderOrderIds.push(dto.id);
+      } else {
+        rejectedPurchaseOrderOrders.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
+    const acceptedPurchaseOrderCloseIds: string[] = [];
+    const rejectedPurchaseOrderCloses: { id: string; reason: string }[] = [];
+    for (const dto of body.purchaseOrderCloses ?? []) {
+      const result = await this.stockOps.processPurchaseOrderClose(user, dto);
+      if (result.accepted) {
+        acceptedPurchaseOrderCloseIds.push(dto.id);
+      } else {
+        rejectedPurchaseOrderCloses.push({ id: dto.id, reason: result.reason });
+      }
+    }
+
     const acceptedPurchaseReceiptIds: string[] = [];
     const rejectedPurchaseReceipts: { id: string; reason: string }[] = [];
     for (const dto of body.purchaseReceipts ?? []) {
@@ -416,6 +449,12 @@ export class SyncService {
       rejectedStockTransferReceives,
       acceptedStocktakeIds,
       rejectedStocktakes,
+      acceptedPurchaseOrderCreateIds,
+      rejectedPurchaseOrderCreates,
+      acceptedPurchaseOrderOrderIds,
+      rejectedPurchaseOrderOrders,
+      acceptedPurchaseOrderCloseIds,
+      rejectedPurchaseOrderCloses,
       acceptedPurchaseReceiptIds,
       rejectedPurchaseReceipts,
       acceptedWastageIds,
