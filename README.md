@@ -79,6 +79,8 @@ flutter pub get
 flutter run -d windows --dart-define=API_URL=http://localhost:3000
 ```
 
+Signed Android release APKs require a local keystore and `apps/pos_app/android/key.properties`; see `docs/ops/android-release.md`.
+
 | Platform | `API_URL` |
 |----------|-----------|
 | Windows / iOS simulator | `http://localhost:3000` |

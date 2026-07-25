@@ -5,6 +5,9 @@ node_modules/
 .env.production
 apps/api/.env.production
 *.log
+key.properties
+*.jks
+*.keystore
 apps/api/dist/
 apps/api/supabase/
 apps/pos_app/build/

@@ -1,0 +1,5 @@
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=tap-hoa-release
+# Absolute path, or relative to apps/pos_app/android.
+storeFile=C:\\Users\\YOUR_USER\\keystores\\tap-hoa-release.jks
