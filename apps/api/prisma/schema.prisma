@@ -49,6 +49,7 @@ enum StockDocType {
   purchase
   wastage
   sale_return
+  supplier_return
 }
 
 enum TransferStatus {
@@ -98,6 +99,7 @@ model Store {
   stockTransfersTo   StockTransfer[] @relation("TransferTo")
   stocktakes         Stocktake[]
   purchaseReceipts   PurchaseReceipt[]
+  supplierReturns    SupplierReturn[]
   wastageVouchers    WastageVoucher[]
   stockMovements     StockMovement[]
   saleReturns        SaleReturn[]
@@ -124,6 +126,7 @@ model User {
   transfersReceived StockTransfer[] @relation("TransferReceivedBy")
   stocktakes        Stocktake[]
   purchaseReceipts  PurchaseReceipt[]
+  supplierReturns   SupplierReturn[]
   wastageVouchers   WastageVoucher[]
   stockMovements    StockMovement[]
   saleReturns       SaleReturn[]
@@ -172,6 +175,7 @@ model Product {
   transferLines StockTransferLine[]
   stocktakeLines StocktakeLine[]
   purchaseLines  PurchaseReceiptLine[]
+  supplierReturnLines SupplierReturnLine[]
   wastageLines   WastageVoucherLine[]
   stockMovements StockMovement[]
   comboComponents ProductComboComponent[] @relation("ComboProduct")
@@ -588,8 +592,40 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   receipts  PurchaseReceipt[]
+  returns   SupplierReturn[]
   payables  SupplierPayable[]
   payments  SupplierPayment[]
+}
+
+/** Return goods to supplier — reduces stock and AP (gross). */
+model SupplierReturn {
+  id              String   @id @default(uuid())
+  storeId         String
+  supplierId      String
+  purchaseReceiptId String?
+  note            String?
+  amountVnd       Int
+  recordedById    String
+  clientCreatedAt DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  store           Store    @relation(fields: [storeId], references: [id])
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+  recordedBy      User     @relation(fields: [recordedById], references: [id])
+  lines           SupplierReturnLine[]
+  @@index([storeId, clientCreatedAt])
+  @@index([supplierId])
+}
+
+model SupplierReturnLine {
+  id          String         @id @default(uuid())
+  returnId    String
+  productId   String
+  qty         Decimal        @db.Decimal(18, 3)
+  unitCostVnd Int
+  supplierReturn SupplierReturn @relation(fields: [returnId], references: [id])
+  product     Product        @relation(fields: [productId], references: [id])
+  @@index([returnId])
 }
 
 model BankAccount {

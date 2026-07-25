@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Phase 3 — Trả hàng NCC
+
+- `POST /suppliers/:id/returns` — giảm tồn, FIFO giảm AP, journal đảo nhập (VAT-aware)
+- Flutter: nút Trả hàng trên màn Công nợ NCC
+
 ### Phase 3 — HĐĐT HTTP
 
 - `EINVOICE_PROVIDER=stub|http` + `EINVOICE_HTTP_URL` / optional API key
