@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EInvoiceStatus, Role } from '@prisma/client';
+import { EInvoiceStatus, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
@@ -67,6 +67,13 @@ export class EInvoiceService {
     return result.status === 'issued'
       ? EInvoiceStatus.issued
       : EInvoiceStatus.pending_sign;
+  }
+
+  private isUniqueViolation(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
   }
 
   private invoiceLines(
@@ -156,22 +163,35 @@ export class EInvoiceService {
     },
   ) {
     const primarySale = sales[0];
-    const claim = await this.prisma.eInvoice.create({
-      data: {
-        id: randomUUID(),
-        saleId: primarySale.id,
-        status: EInvoiceStatus.draft,
-        provider: this.adapter.providerName,
-        buyerTaxCode: body.buyerTaxCode ?? null,
-        templateCode: body.templateCode ?? null,
-        serial: body.serial ?? null,
-        lastAttemptAt: new Date(),
-        retryCount: 0,
-        saleLinks: {
-          create: saleIds.map((saleId) => ({ saleId })),
+    let claim: { id: string };
+    try {
+      claim = await this.prisma.eInvoice.create({
+        data: {
+          id: randomUUID(),
+          saleId: primarySale.id,
+          status: EInvoiceStatus.draft,
+          provider: this.adapter.providerName,
+          buyerTaxCode: body.buyerTaxCode ?? null,
+          templateCode: body.templateCode ?? null,
+          serial: body.serial ?? null,
+          lastAttemptAt: new Date(),
+          retryCount: 0,
+          saleLinks: {
+            create: saleIds.map((saleId) => ({
+              saleId,
+              isAdjustment: false,
+              claimActive: true,
+              claimKey: saleId,
+            })),
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        throw new BadRequestException('einvoice_sale_already_issued');
+      }
+      throw error;
+    }
 
     let result: IssueEInvoiceResult;
     try {
@@ -190,6 +210,12 @@ export class EInvoiceService {
         data: {
           status: EInvoiceStatus.failed,
           errorMessage: String(err).slice(0, 500),
+          saleLinks: {
+            updateMany: {
+              where: {},
+              data: { claimActive: false, claimKey: null },
+            },
+          },
         },
       });
       throw err;
@@ -405,7 +431,12 @@ export class EInvoiceService {
           templateCode: invoice.templateCode,
           serial: invoice.serial,
           saleLinks: {
-            create: saleIds.map((saleId) => ({ saleId })),
+            create: saleIds.map((saleId) => ({
+              saleId,
+              isAdjustment: true,
+              claimActive: false,
+              claimKey: null,
+            })),
           },
         },
       });

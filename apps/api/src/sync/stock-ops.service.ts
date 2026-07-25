@@ -237,16 +237,32 @@ export class StockOpsService {
       return { accepted: true };
     }
 
-    const lines: { id: string; productId: string; qty: Prisma.Decimal }[] = [];
+    const lines: {
+      id: string;
+      productId: string;
+      qty: Prisma.Decimal;
+      unitCostVnd: number | null;
+    }[] = [];
     for (const line of dto.lines) {
       const qty = this.parseQty(line.qty);
       if (!line.productId || !qty) {
         return { accepted: false, reason: 'invalid_qty' };
       }
+      const stock = await this.prisma.productStoreStock.findUnique({
+        where: {
+          productId_storeId: {
+            productId: line.productId,
+            storeId: dto.fromStoreId,
+          },
+        },
+        select: { avgCostVnd: true },
+      });
       lines.push({
         id: line.id?.trim() || randomUUID(),
         productId: line.productId,
         qty,
+        unitCostVnd:
+          stock && stock.avgCostVnd > 0 ? stock.avgCostVnd : null,
       });
     }
 
@@ -265,6 +281,7 @@ export class StockOpsService {
               id: l.id,
               productId: l.productId,
               qty: l.qty,
+              unitCostVnd: l.unitCostVnd,
             })),
           },
         },
@@ -319,6 +336,25 @@ export class StockOpsService {
     try {
       await this.prisma.$transaction(async (tx) => {
         for (const line of transfer.lines) {
+          const sourceStock = await tx.productStoreStock.findUnique({
+            where: {
+              productId_storeId: {
+                productId: line.productId,
+                storeId: transfer.fromStoreId,
+              },
+            },
+            select: { avgCostVnd: true },
+          });
+          if (!sourceStock) {
+            throw new Error('stock_not_found');
+          }
+          await tx.stockTransferLine.update({
+            where: { id: line.id },
+            data: {
+              unitCostVnd:
+                sourceStock.avgCostVnd > 0 ? sourceStock.avgCostVnd : null,
+            },
+          });
           await this.adjustStock(tx, {
             storeId: transfer.fromStoreId,
             productId: line.productId,
@@ -422,17 +458,6 @@ export class StockOpsService {
     try {
       await this.prisma.$transaction(async (tx) => {
         for (const line of transfer.lines) {
-          const sourceStock = await tx.productStoreStock.findUnique({
-            where: {
-              productId_storeId: {
-                productId: line.productId,
-                storeId: transfer.fromStoreId,
-              },
-            },
-          });
-          if (!sourceStock) {
-            throw new Error('stock_not_found');
-          }
           const destStock = await tx.productStoreStock.findUnique({
             where: {
               productId_storeId: {
@@ -468,7 +493,7 @@ export class StockOpsService {
             oldQty,
             oldAvg,
             Number(line.qty),
-            sourceStock.avgCostVnd,
+            line.unitCostVnd ?? 0,
           );
           await tx.productStoreStock.update({
             where: {
@@ -872,7 +897,7 @@ export class StockOpsService {
     try {
       await this.prisma.$transaction(async (tx) => {
         const purchaseOrderId = dto.purchaseOrderId?.trim() || null;
-        const purchaseOrder = purchaseOrderId
+        let purchaseOrder = purchaseOrderId
           ? await tx.purchaseOrder.findUnique({
               where: { id: purchaseOrderId },
               include: { lines: true },
@@ -882,6 +907,16 @@ export class StockOpsService {
           throw new Error('purchase_order_not_found');
         }
         if (purchaseOrder) {
+          await tx.$queryRaw`
+            SELECT "id"
+            FROM "PurchaseOrder"
+            WHERE "id" = ${purchaseOrder.id}
+            FOR UPDATE
+          `;
+          purchaseOrder = await tx.purchaseOrder.findUniqueOrThrow({
+            where: { id: purchaseOrder.id },
+            include: { lines: true },
+          });
           if (purchaseOrder.storeId !== dto.storeId) {
             throw new Error('purchase_order_store_mismatch');
           }
@@ -994,24 +1029,31 @@ export class StockOpsService {
         });
 
         if (purchaseOrder) {
-          const updatedLines: {
-            id: string;
-            qty: Prisma.Decimal;
-            receivedQty: Prisma.Decimal;
-          }[] = [];
           for (const poLine of purchaseOrder.lines) {
             const receiptLine = lines.find((l) => l.productId === poLine.productId);
-            const receivedQty = receiptLine
-              ? poLine.receivedQty.plus(receiptLine.qty)
-              : poLine.receivedQty;
-            updatedLines.push({ id: poLine.id, qty: poLine.qty, receivedQty });
             if (receiptLine) {
-              await tx.purchaseOrderLine.update({
-                where: { id: poLine.id },
-                data: { receivedQty },
-              });
+              const updated = await tx.$queryRaw<
+                {
+                  id: string;
+                  qty: Prisma.Decimal;
+                  receivedQty: Prisma.Decimal;
+                }[]
+              >`
+                UPDATE "PurchaseOrderLine"
+                SET "receivedQty" = "receivedQty" + CAST(${receiptLine.qty.toString()} AS DECIMAL)
+                WHERE "id" = ${poLine.id}
+                  AND "receivedQty" + CAST(${receiptLine.qty.toString()} AS DECIMAL) <= "qty"
+                RETURNING "id", "qty", "receivedQty"
+              `;
+              if (updated.length === 0) {
+                throw new Error('purchase_order_over_received');
+              }
             }
           }
+          const updatedLines = await tx.purchaseOrderLine.findMany({
+            where: { purchaseOrderId: purchaseOrder.id },
+            select: { id: true, qty: true, receivedQty: true },
+          });
           await tx.purchaseOrder.update({
             where: { id: purchaseOrder.id },
             data: { status: this.statusFromReceivedLines(updatedLines) },
@@ -1296,6 +1338,7 @@ export class StockOpsService {
           id: l.id,
           productId: l.productId,
           qty: l.qty.toString(),
+          unitCostVnd: l.unitCostVnd,
         })),
       })),
       stocktakes: stocktakes.map((s) => ({

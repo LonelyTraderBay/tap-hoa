@@ -521,6 +521,29 @@ export function buildStockTransferJournal(input: {
   return out;
 }
 
+/** Store-scoped transfer journals use 151 as in-transit clearing. */
+export function buildStockTransferStoreJournals(input: {
+  lines: { qty: number; unitCostVnd: number | null }[];
+}): { sourceLines: JournalLineDraft[]; destinationLines: JournalLineDraft[] } {
+  let total = 0;
+  for (const line of input.lines) {
+    if (line.unitCostVnd == null || line.unitCostVnd <= 0) continue;
+    total += Math.round(line.qty * line.unitCostVnd);
+  }
+  if (total <= 0) {
+    return { sourceLines: [], destinationLines: [] };
+  }
+  const sourceLines: JournalLineDraft[] = [];
+  const destinationLines: JournalLineDraft[] = [];
+  pushDr(sourceLines, '151', total);
+  pushCr(sourceLines, '156', total);
+  pushDr(destinationLines, '156', total);
+  pushCr(destinationLines, '151', total);
+  assertBalanced(sourceLines);
+  assertBalanced(destinationLines);
+  return { sourceLines, destinationLines };
+}
+
 /** Wastage decreases inventory at WAC: Dr 642 / Cr 156. */
 export function buildWastageJournal(input: {
   lines: { qty: number; avgCostVnd: number | null }[];

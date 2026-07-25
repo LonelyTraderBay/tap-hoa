@@ -441,6 +441,7 @@ model StockTransferLine {
   transferId String
   productId  String
   qty        Decimal       @db.Decimal(18, 3)
+  unitCostVnd Int?
   transfer   StockTransfer @relation(fields: [transferId], references: [id])
   product    Product       @relation(fields: [productId], references: [id])
   @@index([transferId])
@@ -814,11 +815,15 @@ model EInvoice {
 }
 
 model EInvoiceSale {
-  invoiceId String
-  saleId    String
-  invoice   EInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  sale      Sale     @relation(fields: [saleId], references: [id])
+  invoiceId   String
+  saleId      String
+  isAdjustment Boolean @default(false)
+  claimActive Boolean @default(true)
+  claimKey    String?  @unique
+  invoice     EInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sale        Sale     @relation(fields: [saleId], references: [id])
 
   @@id([invoiceId, saleId])
   @@index([saleId])
+  @@index([saleId, isAdjustment, claimActive])
 }

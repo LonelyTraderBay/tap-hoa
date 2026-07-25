@@ -242,9 +242,9 @@ export class SyncService {
       }
     }
 
-    const salesResult = await this.pushSales(user, body.deviceId, body.sales);
-
     const inventoryResult = await this.pushInventory(user, body);
+
+    const salesResult = await this.pushSales(user, body.deviceId, body.sales);
 
     const voucherResult = await this.pushCashVouchers(
       user,

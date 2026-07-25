@@ -6,6 +6,7 @@ import {
   buildSaleJournal,
   buildSaleReturnJournal,
   buildStockTransferJournal,
+  buildStockTransferStoreJournals,
   buildStocktakeJournal,
   buildWastageJournal,
   computeSaleLineVatSnapshots,
@@ -127,6 +128,29 @@ describe('journal-builders', () => {
       .reduce((s, l) => s + l.creditVnd, 0);
     expect(dr156).toBe(666);
     expect(cr156).toBe(666);
+  });
+
+  it('buildStockTransferStoreJournals uses 151 clearing by store', () => {
+    const journals = buildStockTransferStoreJournals({
+      lines: [
+        { qty: 2, unitCostVnd: 8000 },
+        { qty: 1.5, unitCostVnd: 10000 },
+      ],
+    });
+    expect(() => assertBalanced(journals.sourceLines)).not.toThrow();
+    expect(() => assertBalanced(journals.destinationLines)).not.toThrow();
+    expect(
+      journals.sourceLines.find((l) => l.accountCode === '151')?.debitVnd,
+    ).toBe(31000);
+    expect(
+      journals.sourceLines.find((l) => l.accountCode === '156')?.creditVnd,
+    ).toBe(31000);
+    expect(
+      journals.destinationLines.find((l) => l.accountCode === '156')?.debitVnd,
+    ).toBe(31000);
+    expect(
+      journals.destinationLines.find((l) => l.accountCode === '151')?.creditVnd,
+    ).toBe(31000);
   });
 
   it('buildWastageJournal posts wastage at WAC', () => {

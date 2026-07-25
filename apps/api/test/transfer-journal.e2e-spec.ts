@@ -39,10 +39,20 @@ describe('Transfer journals', () => {
   beforeEach(async () => {
     await prisma.periodLock.deleteMany();
     await prisma.journalLine.deleteMany({
-      where: { entry: { sourceType: 'stock_transfer' } },
+      where: {
+        entry: {
+          sourceType: {
+            in: ['stock_transfer', 'stock_transfer_out', 'stock_transfer_in'],
+          },
+        },
+      },
     });
     await prisma.journalEntry.deleteMany({
-      where: { sourceType: 'stock_transfer' },
+      where: {
+        sourceType: {
+          in: ['stock_transfer', 'stock_transfer_out', 'stock_transfer_in'],
+        },
+      },
     });
     await prisma.auditLog.deleteMany({
       where: { action: 'journal_blocked_period_lock' },
@@ -86,6 +96,7 @@ describe('Transfer journals', () => {
     lineId: string;
     qty: string;
     receiveAt?: Date;
+    sourceCostAfterApprove?: number;
   }) {
     await request(app.getHttpServer())
       .post('/sync/push')
@@ -123,6 +134,13 @@ describe('Transfer journals', () => {
         expect(body.acceptedStockTransferApproveIds).toContain(input.transferId);
       });
 
+    if (input.sourceCostAfterApprove != null) {
+      await prisma.productStoreStock.update({
+        where: { productId_storeId: { productId, storeId: storeCh1 } },
+        data: { avgCostVnd: input.sourceCostAfterApprove },
+      });
+    }
+
     return request(app.getHttpServer())
       .post('/sync/push')
       .set('Authorization', `Bearer ${token}`)
@@ -142,31 +160,36 @@ describe('Transfer journals', () => {
       });
   }
 
-  it('posts Dr 156 Cr 156 on receive and remains idempotent', async () => {
+  it('posts store-scoped transfer journals from the approval cost snapshot', async () => {
     const transferId = randomUUID();
     const lineId = randomUUID();
-    await pushTransfer({ transferId, lineId, qty: '2.5' });
+    await pushTransfer({
+      transferId,
+      lineId,
+      qty: '2.5',
+      sourceCostAfterApprove: 11000,
+    });
 
-    const journal = await prisma.journalEntry.findUnique({
+    const journals = await prisma.journalEntry.findMany({
       where: {
-        sourceType_sourceId: {
-          sourceType: 'stock_transfer',
-          sourceId: transferId,
-        },
+        sourceType: { in: ['stock_transfer_out', 'stock_transfer_in'] },
+        sourceId: transferId,
       },
       include: { lines: true },
+      orderBy: { sourceType: 'asc' },
     });
-    expect(journal).toBeTruthy();
-    expect(journal!.storeId).toBe(storeCh2);
-    const dr156 = journal!.lines
-      .filter((l) => l.accountCode === '156')
-      .reduce((sum, line) => sum + line.debitVnd, 0);
-    const cr156 = journal!.lines
-      .filter((l) => l.accountCode === '156')
-      .reduce((sum, line) => sum + line.creditVnd, 0);
-    expect(dr156).toBe(17500);
-    expect(cr156).toBe(17500);
-    expect(journal!.lines.some((l) => l.accountCode === '632')).toBe(false);
+    expect(journals).toHaveLength(2);
+    const source = journals.find((j) => j.sourceType === 'stock_transfer_out')!;
+    const destination = journals.find((j) => j.sourceType === 'stock_transfer_in')!;
+    expect(source.storeId).toBe(storeCh1);
+    expect(destination.storeId).toBe(storeCh2);
+    expect(source.lines.find((l) => l.accountCode === '151')?.debitVnd).toBe(17500);
+    expect(source.lines.find((l) => l.accountCode === '156')?.creditVnd).toBe(17500);
+    expect(destination.lines.find((l) => l.accountCode === '156')?.debitVnd).toBe(17500);
+    expect(destination.lines.find((l) => l.accountCode === '151')?.creditVnd).toBe(17500);
+    expect(
+      journals.flatMap((j) => j.lines).some((l) => l.accountCode === '632'),
+    ).toBe(false);
     await expect(
       prisma.productStoreStock.findUnique({
         where: { productId_storeId: { productId, storeId: storeCh2 } },
@@ -187,9 +210,12 @@ describe('Transfer journals', () => {
       });
     await expect(
       prisma.journalEntry.count({
-        where: { sourceType: 'stock_transfer', sourceId: transferId },
+        where: {
+          sourceType: { in: ['stock_transfer_out', 'stock_transfer_in'] },
+          sourceId: transferId,
+        },
       }),
-    ).resolves.toBe(1);
+    ).resolves.toBe(2);
     await expect(
       prisma.productStoreStock.findUnique({
         where: { productId_storeId: { productId, storeId: storeCh2 } },
@@ -215,15 +241,13 @@ describe('Transfer journals', () => {
     });
 
     await expect(
-      prisma.journalEntry.findUnique({
+      prisma.journalEntry.count({
         where: {
-          sourceType_sourceId: {
-            sourceType: 'stock_transfer',
-            sourceId: transferId,
-          },
+          sourceType: { in: ['stock_transfer_out', 'stock_transfer_in'] },
+          sourceId: transferId,
         },
       }),
-    ).resolves.toBeNull();
+    ).resolves.toBe(0);
     expect(
       await prisma.auditLog.findFirst({
         where: {
@@ -243,18 +267,18 @@ describe('Transfer journals', () => {
         expect(body).toEqual({ unlocked: true, periodYm, replayed: 1 });
       });
 
-    const replayed = await prisma.journalEntry.findUnique({
+    const replayed = await prisma.journalEntry.findMany({
       where: {
-        sourceType_sourceId: {
-          sourceType: 'stock_transfer',
-          sourceId: transferId,
-        },
+        sourceType: { in: ['stock_transfer_out', 'stock_transfer_in'] },
+        sourceId: transferId,
       },
       include: { lines: true },
     });
-    expect(replayed?.periodYm).toBe(periodYm);
+    expect(replayed).toHaveLength(2);
+    expect(replayed.every((entry) => entry.periodYm === periodYm)).toBe(true);
     expect(
-      replayed!.lines
+      replayed
+        .flatMap((entry) => entry.lines)
         .filter((l) => l.accountCode === '156')
         .reduce((sum, line) => sum + line.debitVnd, 0),
     ).toBe(7000);
@@ -274,14 +298,12 @@ describe('Transfer journals', () => {
     });
 
     await expect(
-      prisma.journalEntry.findUnique({
+      prisma.journalEntry.count({
         where: {
-          sourceType_sourceId: {
-            sourceType: 'stock_transfer',
-            sourceId: transferId,
-          },
+          sourceType: { in: ['stock_transfer_out', 'stock_transfer_in'] },
+          sourceId: transferId,
         },
       }),
-    ).resolves.toBeNull();
+    ).resolves.toBe(0);
   });
 });

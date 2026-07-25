@@ -321,6 +321,87 @@ describe('Sync push', () => {
     expect(storedLine?.lineTotal).toBe(18000);
   });
 
+  it('POST /sync/push processes purchase receipts before same-push sales', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+    await prisma.productStoreStock.upsert({
+      where: {
+        productId_storeId: { productId: product.id, storeId },
+      },
+      create: {
+        productId: product.id,
+        storeId,
+        qty: 0,
+        minQty: 0,
+        avgCostVnd: 0,
+      },
+      update: { qty: 0, avgCostVnd: 0 },
+    });
+
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 0, clientId: shiftId })
+      .expect(201);
+
+    const receiptId = randomUUID();
+    const saleId = randomUUID();
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-receive-then-sell',
+        purchaseReceipts: [
+          {
+            id: receiptId,
+            storeId,
+            supplierName: 'NCC Receive Then Sell',
+            clientCreatedAt: new Date().toISOString(),
+            lines: [
+              {
+                id: randomUUID(),
+                productId: product.id,
+                qty: '2',
+                unitCostVnd: 6000,
+              },
+            ],
+          },
+        ],
+        sales: [
+          makeSaleDto(saleId, {
+            storeId,
+            shiftId,
+            soldById: login.user.id,
+            productId: product.id,
+            qty: '1',
+            totalVnd: 10000,
+          }),
+        ],
+      })
+      .expect(201);
+
+    expect(res.body.acceptedPurchaseReceiptIds).toContain(receiptId);
+    expect(res.body.acceptedIds).toContain(saleId);
+    const saleLine = await prisma.saleLine.findFirstOrThrow({
+      where: { saleId },
+    });
+    expect(saleLine.unitCostVnd).toBe(6000);
+    const stock = await prisma.productStoreStock.findUniqueOrThrow({
+      where: { productId_storeId: { productId: product.id, storeId } },
+    });
+    expect(stock.qty.toString()).toBe('1');
+  });
+
   it('POST /sync/push rejects invalid quantities and client money mismatches', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())

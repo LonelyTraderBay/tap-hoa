@@ -65,15 +65,27 @@ describe('Inventory stock ops sync', () => {
       where: {
         productId_storeId: { productId, storeId: storeCh1 },
       },
-      update: { qty: 100 },
-      create: { productId, storeId: storeCh1, qty: 100, minQty: 0 },
+      update: { qty: 100, avgCostVnd: 7000 },
+      create: {
+        productId,
+        storeId: storeCh1,
+        qty: 100,
+        minQty: 0,
+        avgCostVnd: 7000,
+      },
     });
     await prisma.productStoreStock.upsert({
       where: {
         productId_storeId: { productId, storeId: storeCh2 },
       },
-      update: { qty: 10 },
-      create: { productId, storeId: storeCh2, qty: 10, minQty: 0 },
+      update: { qty: 10, avgCostVnd: 3000 },
+      create: {
+        productId,
+        storeId: storeCh2,
+        qty: 10,
+        minQty: 0,
+        avgCostVnd: 3000,
+      },
     });
   });
 
@@ -280,6 +292,15 @@ describe('Inventory stock ops sync', () => {
       .expect(201);
     expect(approve.body.acceptedStockTransferApproveIds).toContain(transferId);
 
+    const lineAfterApprove = await prisma.stockTransferLine.findUniqueOrThrow({
+      where: { id: lineId },
+    });
+    expect(lineAfterApprove.unitCostVnd).toBe(7000);
+    await prisma.productStoreStock.update({
+      where: { productId_storeId: { productId, storeId: storeCh1 } },
+      data: { avgCostVnd: 12000 },
+    });
+
     stock1 = await prisma.productStoreStock.findUniqueOrThrow({
       where: { productId_storeId: { productId, storeId: storeCh1 } },
     });
@@ -300,6 +321,7 @@ describe('Inventory stock ops sync', () => {
       where: { productId_storeId: { productId, storeId: storeCh2 } },
     });
     expect(stock2.qty.toString()).toBe('17');
+    expect(stock2.avgCostVnd).toBe(4647);
 
     const transfer = await prisma.stockTransfer.findUniqueOrThrow({
       where: { id: transferId },

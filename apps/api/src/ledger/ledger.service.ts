@@ -12,7 +12,7 @@ import {
   buildPurchaseReturnJournal,
   buildSaleJournal,
   buildSaleReturnJournal,
-  buildStockTransferJournal,
+  buildStockTransferStoreJournals,
   buildStocktakeJournal,
   buildSupplierPaymentJournal,
   buildWastageJournal,
@@ -68,6 +68,8 @@ export class LedgerService {
     memo?: string;
     lines: JournalLineDraft[];
     actorUserId?: string | null;
+    auditSourceType?: string;
+    auditSourceId?: string;
   }): Promise<'created' | 'exists' | 'skipped_empty' | 'period_locked'> {
     await this.ensureAccounts();
     if (input.lines.length === 0) {
@@ -95,8 +97,8 @@ export class LedgerService {
       await this.writeAudit({
         actorUserId: input.actorUserId,
         action: 'journal_blocked_period_lock',
-        entityType: input.sourceType,
-        entityId: input.sourceId,
+        entityType: input.auditSourceType ?? input.sourceType,
+        entityId: input.auditSourceId ?? input.sourceId,
         detail: { periodYm },
       });
       return 'period_locked';
@@ -455,30 +457,34 @@ export class LedgerService {
       include: { lines: true },
     });
     if (!row || row.status !== TransferStatus.received) return;
-    const costLines: { qty: number; avgCostVnd: number | null }[] = [];
-    for (const line of row.lines) {
-      const stock = await this.prisma.productStoreStock.findUnique({
-        where: {
-          productId_storeId: {
-            productId: line.productId,
-            storeId: row.fromStoreId,
-          },
-        },
-      });
-      costLines.push({
+    const { sourceLines, destinationLines } = buildStockTransferStoreJournals({
+      lines: row.lines.map((line) => ({
         qty: Number(line.qty),
-        avgCostVnd: stock?.avgCostVnd ?? null,
-      });
-    }
-    const lines = buildStockTransferJournal({ lines: costLines });
+        unitCostVnd: line.unitCostVnd,
+      })),
+    });
+    const postedAt = row.receivedAt ?? row.updatedAt;
+    await this.postEntry({
+      storeId: row.fromStoreId,
+      sourceType: 'stock_transfer_out',
+      sourceId: row.id,
+      postedAt,
+      memo: row.note ?? undefined,
+      lines: sourceLines,
+      actorUserId,
+      auditSourceType: 'stock_transfer',
+      auditSourceId: row.id,
+    });
     await this.postEntry({
       storeId: row.toStoreId,
-      sourceType: 'stock_transfer',
+      sourceType: 'stock_transfer_in',
       sourceId: row.id,
-      postedAt: row.receivedAt ?? row.updatedAt,
+      postedAt,
       memo: row.note ?? undefined,
-      lines,
+      lines: destinationLines,
       actorUserId,
+      auditSourceType: 'stock_transfer',
+      auditSourceId: row.id,
     });
   }
 

@@ -252,4 +252,49 @@ describe('Phase 2 e-invoice e2e', () => {
       .expect(200);
     expect(latestBySale.body.id).toBe(adjusted.body.id);
   });
+
+  it('prevents concurrent issue and batch from claiming the same sale twice', async () => {
+    await prisma.eInvoice.deleteMany();
+    const customer = await prisma.customer.create({
+      data: {
+        id: randomUUID(),
+        storeId,
+        name: 'Khach race HD',
+      },
+    });
+    const saleId = await createSyncedSale('e2e-einvoice-race', {
+      customerId: customer.id,
+      totalVnd: 14000,
+    });
+
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .post('/einvoices/issue')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ saleId }),
+      request(app.getHttpServer())
+        .post('/einvoices/issue-batch')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ customerId: customer.id, saleIds: [saleId] }),
+    ]);
+
+    expect(responses.some((response) => response.status === 201)).toBe(true);
+    expect(responses.every((response) => [201, 400].includes(response.status))).toBe(
+      true,
+    );
+    await expect(
+      prisma.eInvoiceSale.count({
+        where: { saleId, isAdjustment: false, claimActive: true },
+      }),
+    ).resolves.toBe(1);
+    const invoices = await prisma.eInvoice.findMany({
+      where: {
+        adjustmentForId: null,
+        saleLinks: {
+          some: { saleId, isAdjustment: false, claimActive: true },
+        },
+      },
+    });
+    expect(invoices).toHaveLength(1);
+  });
 });
