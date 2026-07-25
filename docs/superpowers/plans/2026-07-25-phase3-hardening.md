@@ -15,8 +15,8 @@
 | migrate deploy | PASS | `20260725160000_phase3_hardening` + tax snapshot follow-ups |
 | nest build | PASS | |
 | test:e2e | PASS | **26 suites / 77 tests** |
-| jest unit (journal-builders) | PASS | **4 suites / 22 tests** (incl. mixed VAT) |
-| flutter analyze (Phase 3 UI) | PASS | no errors (info-only async context hints) |
+| jest unit (journal-builders) | PASS | **4 suites / 24 tests** (incl. mixed VAT + discount allocation) |
+| flutter analyze (Phase 3 UI) | PASS | no issues on Phase 3 feature paths |
 | flutter test | PASS | **95** tests |
 
 ## Known issues → fixed
@@ -51,7 +51,7 @@
 
 - Ran `npm audit --omit=dev` in `apps/api` (2026-07-25): **27** findings (14 moderate / 12 high / 1 critical), predominantly **transitive** via `exceljs`→`uuid` and `firebase-admin`→`google-gax`/`uuid`.
 - **Acceptance:** no `audit fix --force` (would downgrade exceljs to breaking 3.x). Track upstream upgrades for exceljs/firebase-admin; `uuid` buffer issue is not on our direct call path for v4 random IDs.
-- Flutter analyze: no errors on Phase 3 UI (info-only `use_build_context_synchronously`).
+- Flutter analyze: clean on Phase 3 UI feature paths.
 
 ## Known limitations
 

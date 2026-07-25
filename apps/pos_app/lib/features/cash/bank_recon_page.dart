@@ -291,6 +291,8 @@ class _BankReconPageState extends State<BankReconPage> {
                                 ? IconButton(
                                     icon: const Icon(Icons.check),
                                     onPressed: () async {
+                                      final messenger =
+                                          ScaffoldMessenger.of(context);
                                       try {
                                         await widget.repository.match(
                                           storeId: widget.storeId,
@@ -302,8 +304,7 @@ class _BankReconPageState extends State<BankReconPage> {
                                         await _reload();
                                       } catch (e) {
                                         if (!mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                        messenger.showSnackBar(
                                           SnackBar(content: Text('$e')),
                                         );
                                       }
@@ -312,6 +313,8 @@ class _BankReconPageState extends State<BankReconPage> {
                                 : IconButton(
                                     icon: const Icon(Icons.link_off),
                                     onPressed: () async {
+                                      final messenger =
+                                          ScaffoldMessenger.of(context);
                                       try {
                                         await widget.repository.unmatch(
                                           storeId: widget.storeId,
@@ -322,8 +325,7 @@ class _BankReconPageState extends State<BankReconPage> {
                                         await _reload();
                                       } catch (e) {
                                         if (!mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                        messenger.showSnackBar(
                                           SnackBar(content: Text('$e')),
                                         );
                                       }
