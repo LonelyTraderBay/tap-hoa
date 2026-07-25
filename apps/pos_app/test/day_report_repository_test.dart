@@ -27,21 +27,24 @@ void main() {
     required String id,
     required DateTime clientCreatedAt,
     int totalVnd = 10000,
+    String shiftId = 'shift-1',
   }) async {
     await db.setMetaValue('currentStoreId', 'store-1');
-    await db.into(db.salesLocal).insert(
-      SalesLocalCompanion.insert(
-        id: id,
-        storeId: 'store-1',
-        shiftId: 'shift-1',
-        paymentMethod: 'cash',
-        totalVnd: totalVnd,
-        cashAmount: totalVnd,
-        transferAmount: 0,
-        debtAmount: 0,
-        clientCreatedAt: clientCreatedAt,
-      ),
-    );
+    await db
+        .into(db.salesLocal)
+        .insert(
+          SalesLocalCompanion.insert(
+            id: id,
+            storeId: 'store-1',
+            shiftId: shiftId,
+            paymentMethod: 'cash',
+            totalVnd: totalVnd,
+            cashAmount: totalVnd,
+            transferAmount: 0,
+            debtAmount: 0,
+            clientCreatedAt: clientCreatedAt,
+          ),
+        );
   }
 
   test('falls back to local sales on connection timeout', () async {
@@ -70,6 +73,61 @@ void main() {
     expect(report.isOffline, isTrue);
     expect(report.totalRevenueVnd, 15000);
     expect(report.byStore, hasLength(1));
+  });
+
+  test('parses shift breakdown from API day report', () async {
+    when(
+      () => dio.get<Map<String, dynamic>>(
+        '/reports/day',
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenAnswer(
+      (_) async => Response(
+        requestOptions: RequestOptions(path: '/reports/day'),
+        data: {
+          'byStore': [
+            {
+              'storeId': 'store-1',
+              'revenueVnd': 30000,
+              'orderCount': 2,
+              'cashVnd': 20000,
+              'transferVnd': 10000,
+              'debtVnd': 0,
+            },
+          ],
+          'byShift': [
+            {
+              'storeId': 'store-1',
+              'shiftId': 'shift-1',
+              'revenueVnd': 10000,
+              'orderCount': 1,
+              'cashVnd': 10000,
+              'transferVnd': 0,
+              'debtVnd': 0,
+            },
+            {
+              'storeId': 'store-1',
+              'shiftId': 'shift-2',
+              'revenueVnd': 20000,
+              'orderCount': 1,
+              'cashVnd': 10000,
+              'transferVnd': 10000,
+              'debtVnd': 0,
+            },
+          ],
+          'totalRevenueVnd': 30000,
+        },
+      ),
+    );
+
+    final report = await repository.fetchDayReport(
+      date: DateTime(2026, 7, 23),
+      storeId: 'store-1',
+    );
+
+    expect(report.byShift, hasLength(2));
+    expect(report.byShift[0].shiftId, 'shift-1');
+    expect(report.byShift[1].revenueVnd, 20000);
   });
 
   test('rethrows unauthorized API errors', () async {
@@ -104,51 +162,59 @@ void main() {
     required String name,
     int costVnd = 0,
   }) async {
-    await db.into(db.products).insert(
-      ProductsCompanion.insert(
-        id: id,
-        sku: sku,
-        name: name,
-        unit: 'chai',
-        basePriceVnd: 10000,
-        costVnd: Value(costVnd),
-        updatedAt: DateTime.now(),
-      ),
-    );
+    await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: id,
+            sku: sku,
+            name: name,
+            unit: 'chai',
+            basePriceVnd: 10000,
+            costVnd: Value(costVnd),
+            updatedAt: DateTime.now(),
+          ),
+        );
   }
 
   Future<void> seedSaleWithLines({
     required String saleId,
     required DateTime clientCreatedAt,
-    required List<({String lineId, String productId, String qty, int lineTotal})>
+    required List<
+      ({String lineId, String productId, String qty, int lineTotal})
+    >
     lines,
   }) async {
     await db.setMetaValue('currentStoreId', 'store-1');
     final totalVnd = lines.fold<int>(0, (sum, line) => sum + line.lineTotal);
-    await db.into(db.salesLocal).insert(
-      SalesLocalCompanion.insert(
-        id: saleId,
-        storeId: 'store-1',
-        shiftId: 'shift-1',
-        paymentMethod: 'cash',
-        totalVnd: totalVnd,
-        cashAmount: totalVnd,
-        transferAmount: 0,
-        debtAmount: 0,
-        clientCreatedAt: clientCreatedAt,
-      ),
-    );
+    await db
+        .into(db.salesLocal)
+        .insert(
+          SalesLocalCompanion.insert(
+            id: saleId,
+            storeId: 'store-1',
+            shiftId: 'shift-1',
+            paymentMethod: 'cash',
+            totalVnd: totalVnd,
+            cashAmount: totalVnd,
+            transferAmount: 0,
+            debtAmount: 0,
+            clientCreatedAt: clientCreatedAt,
+          ),
+        );
     for (final line in lines) {
-      await db.into(db.saleLinesLocal).insert(
-        SaleLinesLocalCompanion.insert(
-          id: line.lineId,
-          saleId: saleId,
-          productId: line.productId,
-          qty: line.qty,
-          unitPrice: line.lineTotal,
-          lineTotal: line.lineTotal,
-        ),
-      );
+      await db
+          .into(db.saleLinesLocal)
+          .insert(
+            SaleLinesLocalCompanion.insert(
+              id: line.lineId,
+              saleId: saleId,
+              productId: line.productId,
+              qty: line.qty,
+              unitPrice: line.lineTotal,
+              lineTotal: line.lineTotal,
+            ),
+          );
     }
   }
 
@@ -171,24 +237,9 @@ void main() {
       saleId: 'sale-1',
       clientCreatedAt: DateTime.utc(2026, 7, 23, 10),
       lines: [
-        (
-          lineId: 'line-a1',
-          productId: productA,
-          qty: '3',
-          lineTotal: 30000,
-        ),
-        (
-          lineId: 'line-a2',
-          productId: productA,
-          qty: '2',
-          lineTotal: 20000,
-        ),
-        (
-          lineId: 'line-b1',
-          productId: productB,
-          qty: '3',
-          lineTotal: 24000,
-        ),
+        (lineId: 'line-a1', productId: productA, qty: '3', lineTotal: 30000),
+        (lineId: 'line-a2', productId: productA, qty: '2', lineTotal: 20000),
+        (lineId: 'line-b1', productId: productB, qty: '3', lineTotal: 24000),
       ],
     );
     when(
@@ -249,5 +300,49 @@ void main() {
 
     expect(report.totalRevenueVnd, 20000);
     expect(report.byStore.single.orderCount, 1);
+  });
+
+  test('offline aggregation includes shift breakdown', () async {
+    await seedSale(
+      id: 'sale-1',
+      clientCreatedAt: DateTime.utc(2026, 7, 23, 2),
+      totalVnd: 12000,
+      shiftId: 'shift-1',
+    );
+    await seedSale(
+      id: 'sale-2',
+      clientCreatedAt: DateTime.utc(2026, 7, 23, 3),
+      totalVnd: 18000,
+      shiftId: 'shift-2',
+    );
+    await seedSale(
+      id: 'sale-3',
+      clientCreatedAt: DateTime.utc(2026, 7, 23, 4),
+      totalVnd: 7000,
+      shiftId: 'shift-2',
+    );
+    when(
+      () => dio.get<Map<String, dynamic>>(
+        '/reports/day',
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenThrow(
+      DioException(
+        requestOptions: RequestOptions(path: '/reports/day'),
+        type: DioExceptionType.connectionTimeout,
+      ),
+    );
+
+    final report = await repository.fetchDayReport(
+      date: DateTime(2026, 7, 23),
+      storeId: 'store-1',
+    );
+
+    expect(report.byShift, hasLength(2));
+    expect(report.byShift[0].shiftId, 'shift-1');
+    expect(report.byShift[0].revenueVnd, 12000);
+    expect(report.byShift[1].shiftId, 'shift-2');
+    expect(report.byShift[1].revenueVnd, 25000);
+    expect(report.byShift[1].orderCount, 2);
   });
 }

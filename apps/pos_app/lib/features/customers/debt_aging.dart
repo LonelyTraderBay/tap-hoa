@@ -24,6 +24,82 @@ class DebtAgingResult {
   final bool overdue;
 }
 
+class RemoteDebtAgingCustomer {
+  const RemoteDebtAgingCustomer({
+    required this.customerId,
+    required this.storeId,
+    required this.name,
+    this.phone,
+    required this.balanceVnd,
+    required this.debtOverdueDays,
+    this.oldestUnpaidAt,
+    required this.daysOutstanding,
+    required this.overdue,
+  });
+
+  factory RemoteDebtAgingCustomer.fromJson(Map<String, dynamic> json) {
+    final oldest = json['oldestUnpaidAt'] as String?;
+    return RemoteDebtAgingCustomer(
+      customerId: json['customerId'] as String,
+      storeId: json['storeId'] as String,
+      name: json['name'] as String,
+      phone: json['phone'] as String?,
+      balanceVnd: json['balanceVnd'] as int,
+      debtOverdueDays: json['debtOverdueDays'] as int,
+      oldestUnpaidAt: oldest == null ? null : DateTime.parse(oldest),
+      daysOutstanding: json['daysOutstanding'] as int,
+      overdue: json['overdue'] as bool,
+    );
+  }
+
+  final String customerId;
+  final String storeId;
+  final String name;
+  final String? phone;
+  final int balanceVnd;
+  final int debtOverdueDays;
+  final DateTime? oldestUnpaidAt;
+  final int daysOutstanding;
+  final bool overdue;
+}
+
+class DebtAgingReport {
+  const DebtAgingReport({
+    required this.scope,
+    this.storeId,
+    required this.storeIds,
+    this.debtOverdueDays,
+    required this.customers,
+  });
+
+  factory DebtAgingReport.fromJson(Map<String, dynamic> json) {
+    return DebtAgingReport(
+      scope: json['scope'] as String,
+      storeId: json['storeId'] as String?,
+      storeIds: (json['storeIds'] as List<dynamic>).cast<String>(),
+      debtOverdueDays: json['debtOverdueDays'] as int?,
+      customers: (json['customers'] as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .map(RemoteDebtAgingCustomer.fromJson)
+          .toList(),
+    );
+  }
+
+  final String scope;
+  final String? storeId;
+  final List<String> storeIds;
+  final int? debtOverdueDays;
+  final List<RemoteDebtAgingCustomer> customers;
+
+  int get totalBalanceVnd {
+    return customers.fold(0, (sum, customer) => sum + customer.balanceVnd);
+  }
+
+  int get overdueCount {
+    return customers.where((customer) => customer.overdue).length;
+  }
+}
+
 const ictOffset = Duration(hours: 7);
 
 int ictDayDiff(DateTime from, DateTime to) {
