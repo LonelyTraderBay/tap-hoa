@@ -61,3 +61,18 @@ to the counter. Use the **real owner account** from `docs/ops/production-secrets
 Optional follow-up (not required for Wave 1 Windows pointer): multi-device smoke,
 đóng ca, HĐĐT — see [smoke-multi-device.md](smoke-multi-device.md),
 [einvoice-http.md](einvoice-http.md), and [go-live-checklist.md](go-live-checklist.md) Wave B.
+
+## 5. Local SQLite backup
+
+The POS app writes a local backup of `tap_hoa_pos.sqlite` into dated folders
+under the app documents directory, keeping the newest 7 copies. The scheduler
+checks hourly and backs up when `MetaLocal.lastBackupAt` is missing or older
+than 24 hours.
+
+Operators can also open **Diagnostics sync** and press **Sao lưu ngay**. The
+same screen shows the backup folder and warns when the last local backup is
+stale.
+
+There is no automatic restore. To restore manually, close the POS app, pick a
+dated backup folder, and copy its `tap_hoa_pos.sqlite` over the current app data
+file before reopening the app.

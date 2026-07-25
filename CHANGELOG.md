@@ -6,6 +6,7 @@
 
 - Added per-cart-line VND discounts, synced as `SaleLine.discountVnd`; line discounts apply before invoice-level discounts.
 - Added post-checkout receipt sharing with a saved PDF fallback on Windows.
+- Added periodic local SQLite backups for the POS app with 7-copy retention, stale reminders, and a manual backup action in sync diagnostics.
 
 ### Phase 2 — Closeout follow-up
 

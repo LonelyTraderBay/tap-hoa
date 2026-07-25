@@ -2,16 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:pos_app/data/local/local_backup_service.dart';
 import 'package:pos_app/data/sync/outbox_worker.dart';
 
 class SyncScheduler extends StatefulWidget {
   const SyncScheduler({
     super.key,
     required this.outboxWorker,
+    required this.backupService,
     required this.child,
   });
 
   final OutboxWorker outboxWorker;
+  final LocalBackupService backupService;
   final Widget child;
 
   @override
@@ -21,18 +24,26 @@ class SyncScheduler extends StatefulWidget {
 class SyncSchedulerState extends State<SyncScheduler>
     with WidgetsBindingObserver {
   Timer? _timer;
+  Timer? _backupTimer;
+  bool _backupRunning = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _tick());
+    _backupTimer = Timer.periodic(
+      localBackupCheckInterval,
+      (_) => _backupTick(),
+    );
     unawaited(_tick());
+    unawaited(_backupTick());
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _backupTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -41,12 +52,27 @@ class SyncSchedulerState extends State<SyncScheduler>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_tick());
+      unawaited(_backupTick());
     }
   }
 
   Future<void> syncNow() => _tick();
 
   Future<void> _tick() => widget.outboxWorker.tick();
+
+  Future<void> _backupTick() async {
+    if (_backupRunning) {
+      return;
+    }
+    _backupRunning = true;
+    try {
+      await widget.backupService.backupIfDue();
+    } catch (_) {
+      // Backup must never block or roll back POS operations.
+    } finally {
+      _backupRunning = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) => widget.child;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'data/local/database.dart';
+import 'data/local/local_backup_service.dart';
 import 'data/remote/api_client.dart';
 import 'data/sync/outbox_worker.dart';
 import 'data/sync/pull_catalog.dart';
@@ -17,6 +18,7 @@ import 'features/push/push_service.dart';
 import 'features/reports/day_report_repository.dart';
 import 'features/reports/stock_on_hand_repository.dart';
 import 'features/shifts/shift_repository.dart';
+import 'features/sync_status/backup_reminder_banner.dart';
 import 'features/sync_status/sync_status_banner.dart';
 
 Future<void> main() async {
@@ -56,6 +58,7 @@ Future<void> main() async {
   );
   final pullCatalog = PullCatalog(db: database, dio: apiClient.dio);
   final outboxWorker = OutboxWorker(db: database, dio: apiClient.dio);
+  final backupService = LocalBackupService(db: database);
   final checkoutService = CheckoutService(
     db: database,
     shiftRepository: shiftRepository,
@@ -63,8 +66,10 @@ Future<void> main() async {
   runApp(
     SyncScheduler(
       outboxWorker: outboxWorker,
+      backupService: backupService,
       child: PosApp(
         database: database,
+        backupService: backupService,
         authRepository: repository,
         shiftRepository: shiftRepository,
         dayReportRepository: dayReportRepository,
@@ -86,6 +91,7 @@ class PosApp extends StatelessWidget {
   const PosApp({
     super.key,
     required this.database,
+    required this.backupService,
     required this.authRepository,
     required this.shiftRepository,
     required this.dayReportRepository,
@@ -101,6 +107,7 @@ class PosApp extends StatelessWidget {
   });
 
   final AppDatabase database;
+  final LocalBackupService backupService;
   final AuthRepository authRepository;
   final ShiftRepository shiftRepository;
   final DayReportRepository dayReportRepository;
@@ -122,7 +129,13 @@ class PosApp extends StatelessWidget {
         children: [
           SafeArea(
             bottom: false,
-            child: SyncStatusBanner(db: database),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SyncStatusBanner(db: database),
+                BackupReminderBanner(backupService: backupService),
+              ],
+            ),
           ),
           Expanded(child: child ?? const SizedBox.shrink()),
         ],

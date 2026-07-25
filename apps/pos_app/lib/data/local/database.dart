@@ -10,6 +10,8 @@ import 'tables.dart';
 
 part 'database.g.dart';
 
+const lastBackupAtMetaKey = 'lastBackupAt';
+
 @DriftDatabase(
   tables: [
     Products,
@@ -126,6 +128,18 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> setLastPullAt(String storeId, DateTime at) {
     return setMetaValue(_lastPullAtKey(storeId), at.toUtc().toIso8601String());
+  }
+
+  Future<DateTime?> lastBackupAt() async {
+    final value = await metaValue(lastBackupAtMetaKey);
+    if (value == null) {
+      return null;
+    }
+    return DateTime.tryParse(value);
+  }
+
+  Future<void> setLastBackupAt(DateTime at) {
+    return setMetaValue(lastBackupAtMetaKey, at.toUtc().toIso8601String());
   }
 
   Future<void> upsertCashCategory(Map<String, dynamic> category) {
