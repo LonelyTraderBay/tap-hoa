@@ -37,6 +37,42 @@ import 'receipt_print_settings_page.dart';
 import 'sale_return_service.dart';
 import 'sale_return_sheet.dart';
 
+String _normalizeBarcodeQuery(String value) => value.trim().toLowerCase();
+
+bool posProductMatchesQuery(ProductWithStock product, String rawQuery) {
+  final q = rawQuery.trim().toLowerCase();
+  if (q.isEmpty) {
+    return true;
+  }
+  final barcode = product.barcode;
+  return product.name.toLowerCase().contains(q) ||
+      product.sku.toLowerCase().contains(q) ||
+      (barcode != null && _normalizeBarcodeQuery(barcode).contains(q));
+}
+
+ProductWithStock? posExactBarcodeMatch(
+  Iterable<ProductWithStock> products,
+  String rawQuery,
+) {
+  final q = _normalizeBarcodeQuery(rawQuery);
+  if (q.isEmpty) {
+    return null;
+  }
+
+  ProductWithStock? match;
+  for (final product in products) {
+    final barcode = product.barcode;
+    if (barcode == null || _normalizeBarcodeQuery(barcode) != q) {
+      continue;
+    }
+    if (match != null) {
+      return null;
+    }
+    match = product;
+  }
+  return match;
+}
+
 class PosPage extends StatefulWidget {
   const PosPage({
     super.key,
@@ -88,6 +124,7 @@ class _PosPageState extends State<PosPage> {
   String? _message;
   bool _isSyncing = false;
   String? _groupFilterId;
+  String? _pendingAutoAddBarcodeQuery;
 
   @override
   void dispose() {
@@ -95,26 +132,61 @@ class _PosPageState extends State<PosPage> {
     super.dispose();
   }
 
+  void _addProductToCart(ProductWithStock product) {
+    final existing = _cart.lines.indexWhere(
+      (line) => line.productId == product.id,
+    );
+    if (existing >= 0) {
+      final line = _cart.lines[existing];
+      _cart.update(product.id, line.qty + Decimal.one);
+    } else {
+      _cart.add(
+        CartLine(
+          productId: product.id,
+          name: product.name,
+          unitPrice: product.basePriceVnd,
+          qty: Decimal.one,
+          isWeighted: product.isWeighted,
+        ),
+      );
+    }
+  }
+
   void _addProduct(ProductWithStock product) {
     setState(() {
-      final existing = _cart.lines.indexWhere(
-        (line) => line.productId == product.id,
-      );
-      if (existing >= 0) {
-        final line = _cart.lines[existing];
-        _cart.update(product.id, line.qty + Decimal.one);
-      } else {
-        _cart.add(
-          CartLine(
-            productId: product.id,
-            name: product.name,
-            unitPrice: product.basePriceVnd,
-            qty: Decimal.one,
-            isWeighted: product.isWeighted,
-          ),
-        );
-      }
+      _addProductToCart(product);
       _message = null;
+    });
+  }
+
+  void _scheduleExactBarcodeAdd(List<ProductWithStock> products) {
+    final normalizedQuery = _normalizeBarcodeQuery(_query);
+    if (normalizedQuery.isEmpty ||
+        _pendingAutoAddBarcodeQuery == normalizedQuery) {
+      return;
+    }
+
+    final product = posExactBarcodeMatch(products, normalizedQuery);
+    if (product == null) {
+      return;
+    }
+
+    _pendingAutoAddBarcodeQuery = normalizedQuery;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (_normalizeBarcodeQuery(_query) != normalizedQuery) {
+        _pendingAutoAddBarcodeQuery = null;
+        return;
+      }
+      setState(() {
+        _addProductToCart(product);
+        _searchController.clear();
+        _query = '';
+        _message = null;
+        _pendingAutoAddBarcodeQuery = null;
+      });
     });
   }
 
@@ -399,12 +471,7 @@ class _PosPageState extends State<PosPage> {
   }
 
   bool _matches(ProductWithStock product) {
-    if (_query.isEmpty) {
-      return true;
-    }
-    final q = _query.toLowerCase();
-    return product.name.toLowerCase().contains(q) ||
-        product.sku.toLowerCase().contains(q);
+    return posProductMatchesQuery(product, _query);
   }
 
   @override
@@ -684,7 +751,7 @@ class _PosPageState extends State<PosPage> {
             child: TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                labelText: 'Tìm tên hoặc mã SKU',
+                labelText: 'Tìm tên, mã SKU hoặc barcode',
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: (value) => setState(() => _query = value.trim()),
@@ -738,7 +805,9 @@ class _PosPageState extends State<PosPage> {
                 groupId: _groupFilterId,
               ),
               builder: (context, snapshot) {
-                final products = (snapshot.data ?? []).where(_matches).toList();
+                final allProducts = snapshot.data ?? [];
+                _scheduleExactBarcodeAdd(allProducts);
+                final products = allProducts.where(_matches).toList();
                 if (products.isEmpty) {
                   return const Center(child: Text('Không có hàng phù hợp'));
                 }
