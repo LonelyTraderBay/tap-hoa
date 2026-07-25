@@ -16,8 +16,8 @@
 | nest build | PASS | |
 | test:e2e | PASS | **26 suites / 77 tests** |
 | jest unit (journal-builders) | PASS | **4 suites / 22 tests** (incl. mixed VAT) |
-| flutter analyze (Phase 3 UI) | PASS | ledger / suppliers / bank recon / einvoice |
-| flutter test | PASS | (repo suite) |
+| flutter analyze (Phase 3 UI) | PASS | no errors (info-only async context hints) |
+| flutter test | PASS | **95** tests |
 
 ## Known issues → fixed
 
