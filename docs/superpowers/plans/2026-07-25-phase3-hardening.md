@@ -4,7 +4,7 @@
 > Scope: accounting/tenant correctness, supplier return/AP, bank recon, HĐĐT HTTP, UX/exports.  
 > **Ngoài scope:** nộp CQT tự động; SDK Viettel/MISA riêng; Phase 4 features.
 
-**Gate P3 Hardening:** **PASS** (2026-07-25)
+**Gate P3 Hardening:** **PASS** (2026-07-25) — merged to `main` via PR #17.
 
 ---
 
@@ -43,7 +43,7 @@
 
 | Wave | Branch intent | Status |
 |------|---------------|--------|
-| A1 | accounting integrity | Done (on `hardening/phase3-closeout`) |
+| A1 | accounting integrity | Done (merged to `main`) |
 | A2–A3 | transaction + einvoice | Done |
 | A4–A5 | UX + release gate | Done |
 

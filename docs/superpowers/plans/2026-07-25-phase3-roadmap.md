@@ -10,4 +10,4 @@
 
 Tracks Done: VAT journals/report/Excel; HĐĐT HTTP gateway; supplier return; bank recon; period PDF + VAT declaration assist (no CQT submit).
 
-**Production closeout:** **PASS (hardening)** — see `2026-07-25-phase3-hardening.md` (26 e2e suites / 77 tests; store-scoped period reports; net VAT; supplier return AP integrity; bank recon idempotency; HĐĐT HTTP timeout/retry/idempotency).
+**Production closeout:** **PASS (hardening, merged to `main`)** — see `2026-07-25-phase3-hardening.md` (26 e2e suites / 77 tests; store-scoped period reports; net VAT; supplier return AP integrity; bank recon idempotency; HĐĐT HTTP timeout/retry/idempotency).
