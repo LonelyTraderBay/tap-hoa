@@ -6,6 +6,7 @@ import {
 import { Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
 import { AuthUser } from '../auth/jwt.strategy';
 import { periodYmFromDate } from '../ledger/journal-builders';
 import { PrismaService } from '../prisma/prisma.service';
@@ -519,6 +520,61 @@ export class ReportsService {
     vatSheet.addRow(['revenueBaseVnd', vat.revenueBaseVnd]);
     const buf = await wb.xlsx.writeBuffer();
     return Buffer.from(buf);
+  }
+
+  async periodExportPdf(user: AuthUser, periodYm: string): Promise<Buffer> {
+    const tb = await this.periodTrialBalance(user, periodYm);
+    const pnl = await this.periodPnl(user, periodYm);
+    const vat = await this.vatSummary(user, periodYm);
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 48, size: 'A4' });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c) => chunks.push(Buffer.from(c)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      doc.fontSize(16).text(`Bao cao ky ${periodYm}`, { underline: true });
+      doc.moveDown();
+      doc.fontSize(12).text('KQKD');
+      doc.text(`Doanh thu: ${pnl.revenueVnd}`);
+      doc.text(`Gia von: ${pnl.cogsVnd}`);
+      doc.text(`Lai gop: ${pnl.grossProfitVnd}`);
+      doc.text(`Chi phi: ${pnl.operatingExpenseVnd}`);
+      doc.text(`Lai rong: ${pnl.netIncomeVnd}`);
+      doc.moveDown();
+      doc.text('VAT / GTGT');
+      doc.text(`Dau ra (3331): ${vat.outputVatVnd}`);
+      doc.text(`Dau vao (1331): ${vat.inputVatVnd}`);
+      doc.text(`Phai nop: ${vat.netVatVnd}`);
+      doc.text(`Doanh thu chiu thue: ${vat.revenueBaseVnd}`);
+      doc.moveDown();
+      doc.text('CDPS (tom tat)');
+      for (const r of tb.rows) {
+        if (r.debitVnd === 0 && r.creditVnd === 0) continue;
+        doc
+          .fontSize(10)
+          .text(
+            `${r.accountCode} ${r.name}: Dr ${r.debitVnd} / Cr ${r.creditVnd}`,
+          );
+      }
+      doc.end();
+    });
+  }
+
+  /** Helper CSV for accountant GTGT worksheet — not CQT submission. */
+  async vatDeclarationAssist(
+    user: AuthUser,
+    periodYm: string,
+  ): Promise<string> {
+    const vat = await this.vatSummary(user, periodYm);
+    const lines = [
+      'field,valueVnd,note',
+      `periodYm,${periodYm},ky ke toan ICT`,
+      `revenueBaseVnd,${vat.revenueBaseVnd},Co 511 (net khi VAT on)`,
+      `outputVatVnd,${vat.outputVatVnd},Co 3331 — GTGT dau ra`,
+      `inputVatVnd,${vat.inputVatVnd},No 1331 — GTGT dau vao`,
+      `netVatVnd,${vat.netVatVnd},output - input (ho tro ke khai; khong nop CQT)`,
+    ];
+    return lines.join('\n');
   }
 
   async cashFundSummary(
