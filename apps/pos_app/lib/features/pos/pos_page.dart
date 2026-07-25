@@ -373,6 +373,7 @@ class _PosPageState extends State<PosPage> {
                         dio: widget.dayReportRepository.dio,
                       ),
                       isOwner: true,
+                      storeId: widget.storeId,
                     ),
                   ),
                 );

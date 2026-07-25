@@ -6,31 +6,24 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { CashChannel, Prisma, Role, StockDocType } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
-import { LedgerService } from '../ledger/ledger.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { SuppliersService } from './suppliers.service';
 
 @Controller('suppliers')
 @UseGuards(JwtAuthGuard)
 export class SuppliersController {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly ledger: LedgerService,
-  ) {}
+  constructor(private readonly suppliers: SuppliersService) {}
 
   @Get()
   list(@Req() req: { user: AuthUser }) {
-    this.assertOwnerOrManager(req.user);
-    return this.prisma.supplier.findMany({
-      where: { active: true },
-      orderBy: { name: 'asc' },
-    });
+    this.suppliers.assertOwnerOrManager(req.user);
+    return this.suppliers.list();
   }
 
   @Post()
@@ -38,27 +31,21 @@ export class SuppliersController {
     @Req() req: { user: AuthUser },
     @Body() body: { name?: string; phone?: string; note?: string },
   ) {
-    this.assertOwnerOrManager(req.user);
+    this.suppliers.assertOwnerOrManager(req.user);
     if (!body?.name?.trim()) {
       throw new BadRequestException('name required');
     }
-    return this.prisma.supplier.create({
-      data: {
-        id: randomUUID(),
-        name: body.name.trim(),
-        phone: body.phone ?? null,
-        note: body.note ?? null,
-      },
+    return this.suppliers.create({
+      name: body.name,
+      phone: body.phone,
+      note: body.note,
     });
   }
 
   @Get('bank-accounts')
   banks(@Req() req: { user: AuthUser }) {
-    this.assertOwnerOrManager(req.user);
-    return this.prisma.bankAccount.findMany({
-      where: { active: true },
-      orderBy: { name: 'asc' },
-    });
+    this.suppliers.assertOwnerOrManager(req.user);
+    return this.suppliers.bankAccounts();
   }
 
   @Post('bank-accounts')
@@ -72,27 +59,37 @@ export class SuppliersController {
     if (!body?.name?.trim()) {
       throw new BadRequestException('name required');
     }
-    return this.prisma.bankAccount.create({
-      data: {
-        id: randomUUID(),
-        name: body.name.trim(),
-        bankName: body.bankName ?? null,
-        accountNo: body.accountNo ?? null,
-      },
+    return this.suppliers.createBank({
+      name: body.name,
+      bankName: body.bankName,
+      accountNo: body.accountNo,
     });
   }
 
   @Get(':id/payables')
-  payables(@Req() req: { user: AuthUser }, @Param('id') id: string) {
-    this.assertOwnerOrManager(req.user);
-    return this.prisma.supplierPayable.findMany({
-      where: { supplierId: id, balanceVnd: { gt: 0 } },
-      orderBy: { clientCreatedAt: 'asc' },
-    });
+  payables(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Query('storeId') storeId?: string,
+  ) {
+    this.suppliers.assertOwnerOrManager(req.user);
+    return this.suppliers.payables(id, storeId);
+  }
+
+  @Get(':id/returnable-receipts')
+  returnable(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Query('storeId') storeId?: string,
+  ) {
+    this.suppliers.assertOwnerOrManager(req.user);
+    if (!storeId) throw new BadRequestException('storeId required');
+    this.suppliers.assertStoreAccess(req.user, storeId);
+    return this.suppliers.returnableReceipts(id, storeId);
   }
 
   @Post(':id/payments')
-  async pay(
+  pay(
     @Req() req: { user: AuthUser },
     @Param('id') supplierId: string,
     @Body()
@@ -105,253 +102,60 @@ export class SuppliersController {
       clientCreatedAt?: string;
     },
   ) {
-    this.assertOwnerOrManager(req.user);
-    if (!body.storeId || !body.amountVnd || body.amountVnd <= 0) {
+    if (!body.storeId || !body.amountVnd) {
       throw new BadRequestException('storeId and amountVnd required');
     }
-    if (
-      req.user.role !== Role.owner &&
-      !req.user.storeIds.includes(body.storeId)
-    ) {
-      throw new ForbiddenException('store_forbidden');
-    }
-    const supplier = await this.prisma.supplier.findUnique({
-      where: { id: supplierId },
+    return this.suppliers.pay(req.user, supplierId, {
+      storeId: body.storeId,
+      amountVnd: body.amountVnd,
+      channel: body.channel,
+      bankAccountId: body.bankAccountId,
+      note: body.note,
+      clientCreatedAt: body.clientCreatedAt,
     });
-    if (!supplier) {
-      throw new BadRequestException('supplier_not_found');
-    }
-    const channel =
-      body.channel === 'transfer' ? CashChannel.transfer : CashChannel.cash;
-    const id = randomUUID();
-    const at = body.clientCreatedAt
-      ? new Date(body.clientCreatedAt)
-      : new Date();
-
-    await this.prisma.$transaction(async (tx) => {
-      let remaining = body.amountVnd!;
-      const payables = await tx.supplierPayable.findMany({
-        where: {
-          supplierId,
-          storeId: body.storeId,
-          balanceVnd: { gt: 0 },
-        },
-        orderBy: { clientCreatedAt: 'asc' },
-      });
-      for (const p of payables) {
-        if (remaining <= 0) break;
-        const take = Math.min(remaining, p.balanceVnd);
-        await tx.supplierPayable.update({
-          where: { id: p.id },
-          data: { balanceVnd: p.balanceVnd - take },
-        });
-        remaining -= take;
-      }
-      await tx.supplierPayment.create({
-        data: {
-          id,
-          supplierId,
-          storeId: body.storeId!,
-          amountVnd: body.amountVnd!,
-          channel,
-          bankAccountId: body.bankAccountId ?? null,
-          note: body.note ?? null,
-          recordedById: req.user.userId,
-          clientCreatedAt: at,
-        },
-      });
-    });
-
-    await this.ledger.safePost(
-      () => this.ledger.postFromSupplierPayment(id, req.user.userId),
-      {
-        sourceType: 'supplier_payment',
-        sourceId: id,
-        actorUserId: req.user.userId,
-      },
-    );
-
-    return { id };
   }
 
-  /**
-   * Return goods to supplier: decrease stock, reduce AP FIFO, reverse purchase journal.
-   * unitCostVnd is VAT-inclusive gross (same as purchase).
-   */
   @Post(':id/returns')
-  async createReturn(
+  createReturn(
     @Req() req: { user: AuthUser },
     @Param('id') supplierId: string,
     @Body()
     body: {
       storeId?: string;
+      purchaseReceiptId?: string;
+      clientId?: string;
       note?: string;
       clientCreatedAt?: string;
       lines?: {
         productId?: string;
         qty?: string | number;
         unitCostVnd?: number;
+        purchaseReceiptLineId?: string;
       }[];
     },
   ) {
-    this.assertOwnerOrManager(req.user);
-    if (!body.storeId || !Array.isArray(body.lines) || body.lines.length === 0) {
-      throw new BadRequestException('storeId and lines required');
+    if (!body.storeId || !body.purchaseReceiptId || !body.lines?.length) {
+      throw new BadRequestException(
+        'storeId, purchaseReceiptId and lines required',
+      );
     }
-    if (
-      req.user.role !== Role.owner &&
-      !req.user.storeIds.includes(body.storeId)
-    ) {
-      throw new ForbiddenException('store_forbidden');
-    }
-    const supplier = await this.prisma.supplier.findUnique({
-      where: { id: supplierId },
-    });
-    if (!supplier) {
-      throw new BadRequestException('supplier_not_found');
-    }
-
-    const lines: {
-      id: string;
-      productId: string;
-      qty: Prisma.Decimal;
-      unitCostVnd: number;
-    }[] = [];
-    let amountVnd = 0;
-    for (const line of body.lines) {
-      if (!line.productId || line.unitCostVnd == null || line.unitCostVnd < 0) {
+    for (const l of body.lines) {
+      if (!l.productId || l.unitCostVnd == null) {
         throw new BadRequestException('invalid_line');
       }
-      const qty = new Prisma.Decimal(String(line.qty ?? ''));
-      if (qty.lte(0)) {
-        throw new BadRequestException('invalid_qty');
-      }
-      amountVnd += Math.round(Number(qty) * line.unitCostVnd);
-      lines.push({
-        id: randomUUID(),
-        productId: line.productId,
-        qty,
-        unitCostVnd: line.unitCostVnd,
-      });
     }
-    if (amountVnd <= 0) {
-      throw new BadRequestException('invalid_amount');
-    }
-
-    const id = randomUUID();
-    const at = body.clientCreatedAt
-      ? new Date(body.clientCreatedAt)
-      : new Date();
-
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.supplierReturn.create({
-          data: {
-            id,
-            storeId: body.storeId!,
-            supplierId,
-            note: body.note ?? null,
-            amountVnd,
-            recordedById: req.user.userId,
-            clientCreatedAt: at,
-            lines: {
-              create: lines.map((l) => ({
-                id: l.id,
-                productId: l.productId,
-                qty: l.qty,
-                unitCostVnd: l.unitCostVnd,
-              })),
-            },
-          },
-        });
-
-        for (const line of lines) {
-          const stock = await tx.productStoreStock.findUnique({
-            where: {
-              productId_storeId: {
-                productId: line.productId,
-                storeId: body.storeId!,
-              },
-            },
-          });
-          if (!stock) {
-            throw new Error('stock_not_found');
-          }
-          const nextQty = stock.qty.minus(line.qty);
-          if (nextQty.lessThan(0)) {
-            throw new Error('insufficient_stock');
-          }
-          await tx.productStoreStock.update({
-            where: {
-              productId_storeId: {
-                productId: line.productId,
-                storeId: body.storeId!,
-              },
-            },
-            data: { qty: nextQty },
-          });
-          await tx.stockMovement.create({
-            data: {
-              id: randomUUID(),
-              storeId: body.storeId!,
-              productId: line.productId,
-              qtyDelta: line.qty.negated(),
-              balanceAfter: nextQty,
-              docType: StockDocType.supplier_return,
-              docId: id,
-              docLineId: line.id,
-              recordedById: req.user.userId,
-              clientCreatedAt: at,
-            },
-          });
-        }
-
-        let remaining = amountVnd;
-        const payables = await tx.supplierPayable.findMany({
-          where: {
-            supplierId,
-            storeId: body.storeId,
-            balanceVnd: { gt: 0 },
-          },
-          orderBy: { clientCreatedAt: 'asc' },
-        });
-        for (const p of payables) {
-          if (remaining <= 0) break;
-          const take = Math.min(remaining, p.balanceVnd);
-          await tx.supplierPayable.update({
-            where: { id: p.id },
-            data: { balanceVnd: p.balanceVnd - take },
-          });
-          remaining -= take;
-        }
-      });
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === 'stock_not_found') {
-          throw new BadRequestException('stock_not_found');
-        }
-        if (error.message === 'insufficient_stock') {
-          throw new BadRequestException('insufficient_stock');
-        }
-      }
-      throw error;
-    }
-
-    await this.ledger.safePost(
-      () => this.ledger.postFromSupplierReturn(id, req.user.userId),
-      {
-        sourceType: 'supplier_return',
-        sourceId: id,
-        actorUserId: req.user.userId,
-      },
-    );
-
-    return { id, amountVnd };
-  }
-
-  private assertOwnerOrManager(user: AuthUser) {
-    if (user.role !== Role.owner && user.role !== Role.store_manager) {
-      throw new ForbiddenException('forbidden');
-    }
+    return this.suppliers.createReturn(req.user, supplierId, {
+      storeId: body.storeId,
+      purchaseReceiptId: body.purchaseReceiptId,
+      clientId: body.clientId,
+      note: body.note,
+      clientCreatedAt: body.clientCreatedAt,
+      lines: body.lines.map((l) => ({
+        productId: l.productId!,
+        qty: l.qty ?? 0,
+        unitCostVnd: l.unitCostVnd!,
+        purchaseReceiptLineId: l.purchaseReceiptLineId,
+      })),
+    });
   }
 }

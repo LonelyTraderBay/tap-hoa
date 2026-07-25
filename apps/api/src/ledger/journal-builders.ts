@@ -64,28 +64,139 @@ function cogsFromLines(
   return cogs;
 }
 
+export type SaleVatLineInput = {
+  qty: number;
+  unitCostVnd: number | null;
+  /** Gross line before sale-level discount allocation. */
+  lineTotal?: number;
+  /** Snapshot or product override; falls back to input.vatRateBps. */
+  vatRateBps?: number | null;
+  /** Prefer snapshot when present (post-sale / re-post). */
+  netVnd?: number | null;
+  vatVnd?: number | null;
+};
+
 /**
- * @param vatRateBps null/undefined = no VAT split (legacy Epic 2 mapping)
+ * Allocate sale discount across gross lines by proportion; remainder to last line.
+ */
+export function allocateSaleDiscount(
+  lineTotals: number[],
+  discountVnd: number,
+): number[] {
+  if (lineTotals.length === 0) return [];
+  const gross = lineTotals.reduce((s, n) => s + n, 0);
+  if (discountVnd <= 0 || gross <= 0) {
+    return [...lineTotals];
+  }
+  const disc = Math.min(discountVnd, gross);
+  const out = new Array<number>(lineTotals.length);
+  let allocatedDisc = 0;
+  for (let i = 0; i < lineTotals.length - 1; i++) {
+    const share = Math.round((lineTotals[i] * disc) / gross);
+    out[i] = Math.max(0, lineTotals[i] - share);
+    allocatedDisc += lineTotals[i] - out[i];
+  }
+  const last = lineTotals.length - 1;
+  out[last] = Math.max(0, lineTotals[last] - (disc - allocatedDisc));
+  return out;
+}
+
+/**
+ * @param vatRateBps store default when VAT on; null = no VAT split (legacy)
+ * Per-line rates via lines[].vatRateBps; discount allocated by gross lineTotal.
  */
 export function buildSaleJournal(input: {
   cashAmount: number;
   transferAmount: number;
   debtAmount: number;
   totalVnd: number;
-  lines: { qty: number; unitCostVnd: number | null }[];
+  discountVnd?: number;
+  lines: SaleVatLineInput[];
   vatRateBps?: number | null;
 }): JournalLineDraft[] {
   const out: JournalLineDraft[] = [];
   pushDr(out, '111', input.cashAmount);
   pushDr(out, '112', input.transferAmount);
   pushDr(out, '131', input.debtAmount);
-  if (input.vatRateBps != null && input.vatRateBps > 0) {
-    const { netVnd, vatVnd } = splitInclusiveVat(
-      input.totalVnd,
-      input.vatRateBps,
+
+  const hasAnyVat =
+    input.lines.some(
+      (l) =>
+        (l.vatRateBps != null && l.vatRateBps > 0) ||
+        (l.netVnd != null && l.vatVnd != null),
+    ) ||
+    (input.vatRateBps != null && input.vatRateBps > 0);
+
+  if (hasAnyVat) {
+    const snapshotsReady = input.lines.every(
+      (l) => l.netVnd != null && l.vatVnd != null,
     );
-    pushCr(out, '511', netVnd);
-    pushCr(out, '3331', vatVnd);
+    let netTotal = 0;
+    let vatTotal = 0;
+    if (snapshotsReady) {
+      for (const l of input.lines) {
+        netTotal += l.netVnd ?? 0;
+        vatTotal += l.vatVnd ?? 0;
+      }
+    } else {
+      const lineTotals = input.lines.map((l) =>
+        l.lineTotal != null && l.lineTotal > 0
+          ? l.lineTotal
+          : 0,
+      );
+      const sumLines = lineTotals.reduce((s, n) => s + n, 0);
+      const discount =
+        input.discountVnd != null && input.discountVnd > 0
+          ? input.discountVnd
+          : sumLines > input.totalVnd
+            ? sumLines - input.totalVnd
+            : 0;
+      const afterDisc =
+        sumLines > 0
+          ? allocateSaleDiscount(lineTotals, discount)
+          : [input.totalVnd];
+      const rates = input.lines.map((l) =>
+        l.vatRateBps != null && l.vatRateBps > 0
+          ? l.vatRateBps
+          : input.vatRateBps != null && input.vatRateBps > 0
+            ? input.vatRateBps
+            : 0,
+      );
+      if (sumLines <= 0) {
+        const rate = input.vatRateBps != null && input.vatRateBps > 0
+          ? input.vatRateBps
+          : 0;
+        if (rate > 0) {
+          const split = splitInclusiveVat(input.totalVnd, rate);
+          netTotal = split.netVnd;
+          vatTotal = split.vatVnd;
+        } else {
+          netTotal = input.totalVnd;
+        }
+      } else {
+        for (let i = 0; i < afterDisc.length; i++) {
+          const gross = afterDisc[i];
+          const rate = rates[i] ?? 0;
+          if (rate > 0) {
+            const split = splitInclusiveVat(gross, rate);
+            netTotal += split.netVnd;
+            vatTotal += split.vatVnd;
+          } else {
+            netTotal += gross;
+          }
+        }
+      }
+    }
+    // Align to payment total (cash+transfer+debt) for VND remainder
+    const paid =
+      input.cashAmount + input.transferAmount + input.debtAmount;
+    const splitSum = netTotal + vatTotal;
+    if (paid > 0 && splitSum !== paid) {
+      const delta = paid - splitSum;
+      netTotal += delta;
+    }
+    pushCr(out, '511', netTotal);
+    pushCr(out, '3331', vatTotal);
   } else {
     pushCr(out, '511', input.totalVnd);
   }
@@ -250,17 +361,70 @@ export function buildSaleReturnJournal(input: {
   transferRefundVnd: number;
   debtCreditVnd: number;
   totalRefundVnd: number;
-  lines: { qty: number; unitCostVnd: number | null }[];
+  lines: SaleVatLineInput[];
   vatRateBps?: number | null;
 }): JournalLineDraft[] {
   const out: JournalLineDraft[] = [];
-  if (input.vatRateBps != null && input.vatRateBps > 0) {
-    const { netVnd, vatVnd } = splitInclusiveVat(
-      input.totalRefundVnd,
-      input.vatRateBps,
+  const hasAnyVat =
+    input.lines.some(
+      (l) =>
+        (l.vatRateBps != null && l.vatRateBps > 0) ||
+        (l.netVnd != null && l.vatVnd != null),
+    ) ||
+    (input.vatRateBps != null && input.vatRateBps > 0);
+
+  if (hasAnyVat) {
+    const snapshotsReady = input.lines.every(
+      (l) => l.netVnd != null && l.vatVnd != null,
     );
-    pushDr(out, '511', netVnd);
-    pushDr(out, '3331', vatVnd);
+    let netTotal = 0;
+    let vatTotal = 0;
+    if (snapshotsReady) {
+      for (const l of input.lines) {
+        netTotal += l.netVnd ?? 0;
+        vatTotal += l.vatVnd ?? 0;
+      }
+    } else {
+      const lineTotals = input.lines.map((l) => l.lineTotal ?? 0);
+      const sumLines = lineTotals.reduce((s, n) => s + n, 0);
+      const afterDisc =
+        sumLines > 0 ? lineTotals : [input.totalRefundVnd];
+      for (let i = 0; i < afterDisc.length; i++) {
+        const gross = afterDisc[i];
+        const rate =
+          input.lines[i]?.vatRateBps != null &&
+          (input.lines[i].vatRateBps as number) > 0
+            ? (input.lines[i].vatRateBps as number)
+            : input.vatRateBps != null && input.vatRateBps > 0
+              ? input.vatRateBps
+              : 0;
+        if (rate > 0) {
+          const split = splitInclusiveVat(gross, rate);
+          netTotal += split.netVnd;
+          vatTotal += split.vatVnd;
+        } else {
+          netTotal += gross;
+        }
+      }
+      if (sumLines <= 0 && input.vatRateBps != null && input.vatRateBps > 0) {
+        const split = splitInclusiveVat(
+          input.totalRefundVnd,
+          input.vatRateBps,
+        );
+        netTotal = split.netVnd;
+        vatTotal = split.vatVnd;
+      }
+    }
+    const refunded =
+      input.cashRefundVnd +
+      input.transferRefundVnd +
+      input.debtCreditVnd;
+    const splitSum = netTotal + vatTotal;
+    if (refunded > 0 && splitSum !== refunded) {
+      netTotal += refunded - splitSum;
+    }
+    pushDr(out, '511', netTotal);
+    pushDr(out, '3331', vatTotal);
   } else {
     pushDr(out, '511', input.totalRefundVnd);
   }
@@ -272,6 +436,37 @@ export function buildSaleReturnJournal(input: {
   pushCr(out, '632', cogs);
   assertBalanced(out);
   return out;
+}
+
+/** Compute per-line VAT snapshots for a sale (after discount allocation). */
+export function computeSaleLineVatSnapshots(input: {
+  lines: { lineTotal: number; vatRateBps?: number | null }[];
+  discountVnd: number;
+  storeVatRateBps: number | null;
+}): { vatRateBps: number | null; netVnd: number; vatVnd: number }[] {
+  const rates = input.lines.map((l) =>
+    l.vatRateBps != null && l.vatRateBps > 0
+      ? l.vatRateBps
+      : input.storeVatRateBps != null && input.storeVatRateBps > 0
+        ? input.storeVatRateBps
+        : null,
+  );
+  const after = allocateSaleDiscount(
+    input.lines.map((l) => l.lineTotal),
+    input.discountVnd,
+  );
+  return after.map((gross, i) => {
+    const rate = rates[i];
+    if (rate == null) {
+      return { vatRateBps: null, netVnd: gross, vatVnd: 0 };
+    }
+    const split = splitInclusiveVat(gross, rate);
+    return {
+      vatRateBps: rate,
+      netVnd: split.netVnd,
+      vatVnd: split.vatVnd,
+    };
+  });
 }
 
 /**

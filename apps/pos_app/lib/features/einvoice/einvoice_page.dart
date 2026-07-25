@@ -137,9 +137,27 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
         serial: _serialCtrl.text.trim().isEmpty ? null : _serialCtrl.text.trim(),
       );
       if (!mounted) return;
+      final status = issued['status']?.toString() ?? '';
+      final pdf = issued['pdfPath']?.toString();
+      final xml = issued['xmlPath']?.toString();
+      final links = [
+        if (pdf != null && pdf.isNotEmpty) 'PDF: $pdf',
+        if (xml != null && xml.isNotEmpty) 'XML: $xml',
+      ].join(' · ');
       setState(() {
-        _result =
-            'HĐ ${issued['invoiceNumber']} · ${issued['status']} · ${issued['provider']}';
+        if (status == 'pending_sign') {
+          _result =
+              'Đang chờ ký · ${issued['invoiceNumber']} · ${issued['provider']}'
+              '${links.isEmpty ? '' : ' · $links'}';
+        } else if (status == 'failed') {
+          _error =
+              'HĐĐT thất bại · ${issued['errorMessage'] ?? 'thử lại'}';
+          _result = null;
+        } else {
+          _result =
+              'HĐ ${issued['invoiceNumber']} · $status · ${issued['provider']}'
+              '${links.isEmpty ? '' : ' · $links'}';
+        }
         _busy = false;
       });
     } on DioException catch (e) {
@@ -148,13 +166,13 @@ class _EInvoiceIssuePageState extends State<EInvoiceIssuePage> {
       setState(() {
         _error = code == 404
             ? 'Đơn chưa có trên server (chưa sync)'
-            : 'Xuất HĐ thất bại: ${e.message}';
+            : 'Xuất HĐ thất bại — có thể thử lại: ${e.message}';
         _busy = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Xuất HĐ thất bại — có thể thử lại: $e';
         _busy = false;
       });
     }

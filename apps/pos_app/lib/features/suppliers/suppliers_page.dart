@@ -67,22 +67,38 @@ class SuppliersRepository {
     );
   }
 
+  Future<List<Map<String, dynamic>>> returnableReceipts({
+    required String supplierId,
+    required String storeId,
+  }) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/suppliers/$supplierId/returnable-receipts',
+      queryParameters: {'storeId': storeId},
+    );
+    return (res.data ?? []).cast<Map<String, dynamic>>();
+  }
+
   Future<Map<String, dynamic>> createReturn({
     required String supplierId,
     required String storeId,
+    required String purchaseReceiptId,
     required String productId,
     required String qty,
     required int unitCostVnd,
+    String? purchaseReceiptLineId,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/suppliers/$supplierId/returns',
       data: {
         'storeId': storeId,
+        'purchaseReceiptId': purchaseReceiptId,
+        'clientId': DateTime.now().toUtc().microsecondsSinceEpoch.toString(),
         'lines': [
           {
             'productId': productId,
             'qty': qty,
             'unitCostVnd': unitCostVnd,
+            'purchaseReceiptLineId': ?purchaseReceiptLineId,
           },
         ],
       },
@@ -308,49 +324,134 @@ class _SuppliersPageState extends State<SuppliersPage> {
   }
 
   Future<void> _returnGoods(Map<String, dynamic> supplier) async {
-    final productCtrl = TextEditingController();
+    List<Map<String, dynamic>> receipts;
+    try {
+      receipts = await widget.repository.returnableReceipts(
+        supplierId: supplier['id'] as String,
+        storeId: widget.storeId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không tải phiếu nhập: $e')),
+      );
+      return;
+    }
+    if (receipts.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không còn hàng có thể trả từ phiếu nhập')),
+      );
+      return;
+    }
+
+    Map<String, dynamic>? selectedReceipt = receipts.first;
+    final firstLines = ((selectedReceipt['lines'] as List?) ?? [])
+        .cast<Map<String, dynamic>>();
+    Map<String, dynamic>? selectedLine =
+        firstLines.isEmpty ? null : firstLines.first;
     final qtyCtrl = TextEditingController(text: '1');
-    final costCtrl = TextEditingController();
+    final costCtrl = TextEditingController(
+      text: '${selectedLine?['unitCostVnd'] ?? ''}',
+    );
+
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Trả hàng ${supplier['name']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: productCtrl,
-              decoration: const InputDecoration(labelText: 'Product ID'),
-            ),
-            TextField(
-              controller: qtyCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Số lượng'),
-            ),
-            TextField(
-              controller: costCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Đơn giá gross (VND, gồm VAT)',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final lines = ((selectedReceipt?['lines'] as List?) ?? [])
+              .cast<Map<String, dynamic>>();
+          return AlertDialog(
+            title: Text('Trả hàng ${supplier['name']}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedReceipt?['id'] as String?,
+                    decoration: const InputDecoration(labelText: 'Phiếu nhập'),
+                    items: receipts
+                        .map(
+                          (r) => DropdownMenuItem(
+                            value: r['id'] as String,
+                            child: Text(
+                              '${(r['clientCreatedAt'] ?? '').toString().substring(0, 10)} · AP ${r['payableBalanceVnd']}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (id) {
+                      setLocal(() {
+                        selectedReceipt =
+                            receipts.firstWhere((r) => r['id'] == id);
+                        final nextLines = ((selectedReceipt?['lines'] as List?) ?? [])
+                            .cast<Map<String, dynamic>>();
+                        selectedLine =
+                            nextLines.isEmpty ? null : nextLines.first;
+                        costCtrl.text = '${selectedLine?['unitCostVnd'] ?? ''}';
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedLine?['id'] as String?,
+                    decoration: const InputDecoration(labelText: 'Sản phẩm'),
+                    items: lines
+                        .map(
+                          (l) => DropdownMenuItem(
+                            value: l['id'] as String,
+                            child: Text(
+                              '${l['sku']} · còn trả ${l['qtyReturnable']} · ${l['unitCostVnd']}đ',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (id) {
+                      setLocal(() {
+                        selectedLine = lines.firstWhere((l) => l['id'] == id);
+                        costCtrl.text = '${selectedLine?['unitCostVnd'] ?? ''}';
+                      });
+                    },
+                  ),
+                  TextField(
+                    controller: qtyCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText:
+                          'Số lượng (≤ ${selectedLine?['qtyReturnable'] ?? 0})',
+                    ),
+                  ),
+                  TextField(
+                    controller: costCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Đơn giá gross snapshot (VND)',
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Trả'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Hủy'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Trả'),
+              ),
+            ],
+          );
+        },
       ),
     );
     final cost = int.tryParse(costCtrl.text.trim());
     if (ok != true ||
-        productCtrl.text.trim().isEmpty ||
+        selectedReceipt == null ||
+        selectedLine == null ||
         qtyCtrl.text.trim().isEmpty ||
         cost == null ||
         cost < 0) {
@@ -360,7 +461,9 @@ class _SuppliersPageState extends State<SuppliersPage> {
       final res = await widget.repository.createReturn(
         supplierId: supplier['id'] as String,
         storeId: widget.storeId,
-        productId: productCtrl.text.trim(),
+        purchaseReceiptId: selectedReceipt!['id'] as String,
+        productId: selectedLine!['productId'] as String,
+        purchaseReceiptLineId: selectedLine!['id'] as String?,
         qty: qtyCtrl.text.trim(),
         unitCostVnd: cost,
       );

@@ -53,58 +53,77 @@ export class EInvoiceService {
       return sale.eInvoice;
     }
 
-    const result = await this.adapter.issue({
-      saleId: sale.id,
-      totalVnd: sale.totalVnd,
-      buyerTaxCode: body.buyerTaxCode,
-      templateCode: body.templateCode,
-      serial: body.serial,
-      lines: sale.lines.map((l) => ({
-        productId: l.productId,
-        qty: Number(l.qty),
-        unitPrice: l.unitPrice,
-        lineTotal: l.lineTotal,
-      })),
-    });
+    // Claim attempt row to reduce concurrent provider calls for same sale
+    let claim = sale.eInvoice;
+    if (!claim) {
+      claim = await this.prisma.eInvoice.create({
+        data: {
+          id: randomUUID(),
+          saleId: sale.id,
+          status: EInvoiceStatus.draft,
+          provider: this.adapter.providerName,
+          buyerTaxCode: body.buyerTaxCode ?? null,
+          templateCode: body.templateCode ?? null,
+          serial: body.serial ?? null,
+          lastAttemptAt: new Date(),
+          retryCount: 0,
+        },
+      });
+    } else {
+      claim = await this.prisma.eInvoice.update({
+        where: { id: claim.id },
+        data: {
+          lastAttemptAt: new Date(),
+          retryCount: { increment: 1 },
+          buyerTaxCode: body.buyerTaxCode ?? claim.buyerTaxCode,
+          templateCode: body.templateCode ?? claim.templateCode,
+          serial: body.serial ?? claim.serial,
+        },
+      });
+    }
+
+    let result;
+    try {
+      result = await this.adapter.issue({
+        saleId: sale.id,
+        totalVnd: sale.totalVnd,
+        buyerTaxCode: body.buyerTaxCode,
+        templateCode: body.templateCode,
+        serial: body.serial,
+        lines: sale.lines.map((l) => ({
+          productId: l.productId,
+          qty: Number(l.qty),
+          unitPrice: l.unitPrice,
+          lineTotal: l.lineTotal,
+        })),
+      });
+    } catch (err) {
+      await this.prisma.eInvoice.update({
+        where: { id: claim.id },
+        data: {
+          status: EInvoiceStatus.failed,
+          errorMessage: String(err).slice(0, 500),
+        },
+      });
+      throw err;
+    }
 
     const status =
       result.status === 'issued'
         ? EInvoiceStatus.issued
         : EInvoiceStatus.pending_sign;
 
-    if (sale.eInvoice) {
-      return this.prisma.eInvoice.update({
-        where: { id: sale.eInvoice.id },
-        data: {
-          status,
-          buyerTaxCode: body.buyerTaxCode ?? sale.eInvoice.buyerTaxCode,
-          templateCode: body.templateCode ?? sale.eInvoice.templateCode,
-          serial: body.serial ?? sale.eInvoice.serial,
-          invoiceNumber: result.invoiceNumber,
-          provider: result.provider,
-          providerRef: result.providerRef,
-          xmlPath: result.xmlPath ?? null,
-          pdfPath: result.pdfPath ?? null,
-          issuedAt: status === EInvoiceStatus.issued ? new Date() : null,
-          errorMessage: null,
-        },
-      });
-    }
-
-    return this.prisma.eInvoice.create({
+    return this.prisma.eInvoice.update({
+      where: { id: claim.id },
       data: {
-        id: randomUUID(),
-        saleId: sale.id,
         status,
-        buyerTaxCode: body.buyerTaxCode ?? null,
-        templateCode: body.templateCode ?? null,
-        serial: body.serial ?? null,
         invoiceNumber: result.invoiceNumber,
         provider: result.provider,
         providerRef: result.providerRef,
         xmlPath: result.xmlPath ?? null,
         pdfPath: result.pdfPath ?? null,
         issuedAt: status === EInvoiceStatus.issued ? new Date() : null,
+        errorMessage: null,
       },
     });
   }

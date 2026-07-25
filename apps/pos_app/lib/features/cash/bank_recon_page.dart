@@ -28,6 +28,52 @@ class BankReconRepository {
     );
   }
 
+  Future<void> autoMatch({
+    required String storeId,
+    required String periodYm,
+  }) async {
+    await _dio.post<void>(
+      '/reports/bank-recon/auto-match',
+      data: {'storeId': storeId, 'periodYm': periodYm},
+    );
+  }
+
+  Future<void> match({
+    required String storeId,
+    required String periodYm,
+    required String statementId,
+    required String bookRef,
+    int? matchVersion,
+  }) async {
+    await _dio.post<void>(
+      '/reports/bank-recon/match',
+      data: {
+        'storeId': storeId,
+        'periodYm': periodYm,
+        'statementId': statementId,
+        'bookRef': bookRef,
+        'matchVersion': ?matchVersion,
+      },
+    );
+  }
+
+  Future<void> unmatch({
+    required String storeId,
+    required String periodYm,
+    required String statementId,
+    int? matchVersion,
+  }) async {
+    await _dio.post<void>(
+      '/reports/bank-recon/unmatch',
+      data: {
+        'storeId': storeId,
+        'periodYm': periodYm,
+        'statementId': statementId,
+        'matchVersion': ?matchVersion,
+      },
+    );
+  }
+
   Future<void> lock({
     required String storeId,
     required String periodYm,
@@ -93,17 +139,17 @@ class _BankReconPageState extends State<BankReconPage> {
 
   Future<void> _import() async {
     final ctrl = TextEditingController(
-      text: 'date,amountVnd,memo\n$_periodYm-01,0,mau',
+      text: 'date,amountVnd,memo\n',
     );
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Import sao kê CSV'),
+        title: const Text('Dán nội dung CSV sao kê'),
         content: TextField(
           controller: ctrl,
-          maxLines: 8,
+          maxLines: 10,
           decoration: const InputDecoration(
-            hintText: 'date,amountVnd,memo',
+            hintText: 'date,amountVnd,memo\n2026-07-15,50000,CK ban',
           ),
         ),
         actions: [
@@ -134,6 +180,21 @@ class _BankReconPageState extends State<BankReconPage> {
     }
   }
 
+  Future<void> _autoMatch() async {
+    try {
+      await widget.repository.autoMatch(
+        storeId: widget.storeId,
+        periodYm: _periodYm,
+      );
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Auto-match thất bại: $e')),
+      );
+    }
+  }
+
   Future<void> _lock() async {
     try {
       await widget.repository.lock(
@@ -155,18 +216,31 @@ class _BankReconPageState extends State<BankReconPage> {
 
   @override
   Widget build(BuildContext context) {
+    final statements =
+        ((_data?['statements'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final unmatchedBook =
+        ((_data?['unmatchedBook'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final matched =
+        ((_data?['matched'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final locked = _data?['locked'] == true;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Đối chiếu CK $_periodYm'),
         actions: [
           IconButton(
             tooltip: 'Import CSV',
-            onPressed: _import,
+            onPressed: locked ? null : _import,
             icon: const Icon(Icons.upload_file_outlined),
           ),
           IconButton(
+            tooltip: 'Auto-match',
+            onPressed: locked ? null : _autoMatch,
+            icon: const Icon(Icons.join_inner),
+          ),
+          IconButton(
             tooltip: 'Khóa kỳ',
-            onPressed: _lock,
+            onPressed: locked ? null : _lock,
             icon: const Icon(Icons.lock_outline),
           ),
           IconButton(onPressed: _reload, icon: const Icon(Icons.refresh)),
@@ -191,14 +265,92 @@ class _BankReconPageState extends State<BankReconPage> {
                       trailing: Text('${_data?['varianceVnd'] ?? 0}'),
                     ),
                     ListTile(
-                      title: const Text('Khớp'),
+                      title: Text(
+                        locked ? 'Đã khóa' : 'Đang mở',
+                      ),
                       subtitle: Text(
                         'matched ${_data?['matchedCount'] ?? 0} · '
+                        'gợi ý ${_data?['suggestedMatchCount'] ?? 0} · '
                         'book lệch ${_data?['unmatchedBookCount'] ?? 0} · '
                         'sao kê lệch ${_data?['unmatchedStatementCount'] ?? 0}',
                       ),
-                      trailing: Text(
-                        (_data?['locked'] == true) ? 'Đã khóa' : 'Mở',
+                    ),
+                    const Divider(),
+                    const ListTile(title: Text('Đã khớp / gợi ý')),
+                    ...matched.map((m) {
+                      final suggested = m['suggested'] == true;
+                      return ListTile(
+                        dense: true,
+                        title: Text('${m['bookRef']} ↔ ${m['amountVnd']}'),
+                        subtitle: Text(
+                          suggested ? 'Gợi ý (chưa lưu)' : 'Đã lưu',
+                        ),
+                        trailing: locked
+                            ? null
+                            : suggested
+                                ? IconButton(
+                                    icon: const Icon(Icons.check),
+                                    onPressed: () async {
+                                      try {
+                                        await widget.repository.match(
+                                          storeId: widget.storeId,
+                                          periodYm: _periodYm,
+                                          statementId:
+                                              m['statementId'] as String,
+                                          bookRef: m['bookRef'] as String,
+                                        );
+                                        await _reload();
+                                      } catch (e) {
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(content: Text('$e')),
+                                        );
+                                      }
+                                    },
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.link_off),
+                                    onPressed: () async {
+                                      try {
+                                        await widget.repository.unmatch(
+                                          storeId: widget.storeId,
+                                          periodYm: _periodYm,
+                                          statementId:
+                                              m['statementId'] as String,
+                                        );
+                                        await _reload();
+                                      } catch (e) {
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(content: Text('$e')),
+                                        );
+                                      }
+                                    },
+                                  ),
+                      );
+                    }),
+                    const Divider(),
+                    const ListTile(title: Text('Sao kê')),
+                    ...statements.map(
+                      (s) => ListTile(
+                        dense: true,
+                        title: Text(
+                          '${s['amountVnd']} · ${s['memo'] ?? ''}',
+                        ),
+                        subtitle: Text(
+                          '${s['bookedAt']} · ${s['matchedRef'] ?? 'chưa khớp'}',
+                        ),
+                      ),
+                    ),
+                    const Divider(),
+                    const ListTile(title: Text('Book chưa khớp')),
+                    ...unmatchedBook.map(
+                      (b) => ListTile(
+                        dense: true,
+                        title: Text('${b['ref']} · ${b['amountVnd']}'),
+                        subtitle: Text('${b['kind']} · ${b['at']}'),
                       ),
                     ),
                   ],

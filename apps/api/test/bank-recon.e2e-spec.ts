@@ -121,7 +121,29 @@ describe('Phase 3 bank recon e2e', () => {
     expect(summary.body.bookTotalVnd).toBe(50_000);
     expect(summary.body.statementTotalVnd).toBe(50_000);
     expect(summary.body.varianceVnd).toBe(0);
-    expect(summary.body.matchedCount).toBe(1);
+    // GET is read-only — suggestions only until auto-match / lock
+    expect(summary.body.suggestedMatchCount).toBe(1);
+    expect(summary.body.statements[0].matchedRef).toBeNull();
+
+    const again = await request(app.getHttpServer())
+      .get('/reports/bank-recon')
+      .query({ storeId, periodYm })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(again.body.statements[0].matchedRef).toBeNull();
+
+    await request(app.getHttpServer())
+      .post('/reports/bank-recon/auto-match')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ storeId, periodYm })
+      .expect(201);
+
+    const matched = await request(app.getHttpServer())
+      .get('/reports/bank-recon')
+      .query({ storeId, periodYm })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(matched.body.matchedCount).toBe(1);
 
     await request(app.getHttpServer())
       .post('/reports/bank-recon/lock')

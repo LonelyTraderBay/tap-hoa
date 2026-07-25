@@ -39,12 +39,13 @@ export class LedgerController {
   async trialBalance(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
     }
     try {
-      return await this.ledger.trialBalance(req.user, periodYm);
+      return await this.ledger.trialBalance(req.user, periodYm, storeId);
     } catch (e) {
       this.mapError(e);
     }

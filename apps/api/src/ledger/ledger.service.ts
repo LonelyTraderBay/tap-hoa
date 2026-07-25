@@ -14,7 +14,9 @@ import {
   buildSaleReturnJournal,
   buildStocktakeJournal,
   buildSupplierPaymentJournal,
+  computeSaleLineVatSnapshots,
   periodYmFromDate,
+  splitInclusiveVat,
 } from './journal-builders';
 import { seedChartOfAccounts } from './seed-accounts';
 
@@ -155,20 +157,53 @@ export class LedgerService {
   async postFromSale(saleId: string, actorUserId?: string) {
     const sale = await this.prisma.sale.findUnique({
       where: { id: saleId },
-      include: { lines: true },
+      include: {
+        lines: { include: { product: { select: { vatRateBps: true } } } },
+      },
     });
     if (!sale) return;
-    const vatRateBps = await this.storeVatRateBps(sale.storeId);
+    const storeVat = await this.storeVatRateBps(sale.storeId);
+    // Backfill snapshots when missing (legacy rows / race before sync wrote them)
+    const needSnap = sale.lines.some((l) => l.netVnd == null || l.vatVnd == null);
+    if (needSnap && storeVat != null) {
+      const snaps = computeSaleLineVatSnapshots({
+        lines: sale.lines.map((l) => ({
+          lineTotal: l.lineTotal,
+          vatRateBps: l.vatRateBps ?? l.product?.vatRateBps ?? storeVat,
+        })),
+        discountVnd: sale.discountVnd,
+        storeVatRateBps: storeVat,
+      });
+      for (let i = 0; i < sale.lines.length; i++) {
+        const snap = snaps[i];
+        await this.prisma.saleLine.update({
+          where: { id: sale.lines[i].id },
+          data: {
+            vatRateBps: snap.vatRateBps,
+            netVnd: snap.netVnd,
+            vatVnd: snap.vatVnd,
+          },
+        });
+        sale.lines[i].vatRateBps = snap.vatRateBps;
+        sale.lines[i].netVnd = snap.netVnd;
+        sale.lines[i].vatVnd = snap.vatVnd;
+      }
+    }
     const lines = buildSaleJournal({
       cashAmount: sale.cashAmount,
       transferAmount: sale.transferAmount,
       debtAmount: sale.debtAmount,
       totalVnd: sale.totalVnd,
+      discountVnd: sale.discountVnd,
       lines: sale.lines.map((l) => ({
         qty: Number(l.qty),
         unitCostVnd: l.unitCostVnd,
+        lineTotal: l.lineTotal,
+        vatRateBps: l.vatRateBps ?? l.product?.vatRateBps ?? storeVat,
+        netVnd: l.netVnd,
+        vatVnd: l.vatVnd,
       })),
-      vatRateBps,
+      vatRateBps: storeVat,
     });
     await this.postEntry({
       storeId: sale.storeId,
@@ -229,12 +264,28 @@ export class LedgerService {
     });
     if (!row) return;
     const storeVat = await this.storeVatRateBps(row.storeId);
+    for (const l of row.lines) {
+      if (l.netVnd != null && l.vatVnd != null) continue;
+      if (l.unitCostVnd == null || l.unitCostVnd <= 0) continue;
+      const rate = l.vatRateBps ?? l.product.vatRateBps ?? storeVat;
+      const gross = Math.round(Number(l.qty) * l.unitCostVnd);
+      if (rate != null && rate > 0) {
+        const { netVnd, vatVnd } = splitInclusiveVat(gross, rate);
+        await this.prisma.purchaseReceiptLine.update({
+          where: { id: l.id },
+          data: { vatRateBps: rate, netVnd, vatVnd },
+        });
+        l.vatRateBps = rate;
+        l.netVnd = netVnd;
+        l.vatVnd = vatVnd;
+      }
+    }
     const lines = buildPurchaseJournal({
       vatRateBps: storeVat,
       lines: row.lines.map((l) => ({
         qty: Number(l.qty),
         unitCostVnd: l.unitCostVnd,
-        vatRateBps: l.product.vatRateBps ?? storeVat,
+        vatRateBps: l.vatRateBps ?? l.product.vatRateBps ?? storeVat,
       })),
     });
     await this.postEntry({
@@ -281,7 +332,7 @@ export class LedgerService {
       lines: row.lines.map((l) => ({
         qty: Number(l.qty),
         unitCostVnd: l.unitCostVnd,
-        vatRateBps: l.product.vatRateBps ?? storeVat,
+        vatRateBps: l.vatRateBps ?? l.product.vatRateBps ?? storeVat,
       })),
     });
     await this.postEntry({
@@ -300,24 +351,51 @@ export class LedgerService {
       where: { id: returnId },
       include: {
         lines: true,
-        originalSale: { include: { lines: true } },
+        originalSale: {
+          include: {
+            lines: { include: { product: { select: { vatRateBps: true } } } },
+          },
+        },
       },
     });
     if (!row) return;
-    const costByProduct = new Map(
-      row.originalSale.lines.map((l) => [l.productId, l.unitCostVnd] as const),
+    const origByProduct = new Map(
+      row.originalSale.lines.map((l) => [l.productId, l] as const),
     );
-    const vatRateBps = await this.storeVatRateBps(row.storeId);
+    const storeVat = await this.storeVatRateBps(row.storeId);
     const lines = buildSaleReturnJournal({
       cashRefundVnd: row.cashRefundVnd,
       transferRefundVnd: row.transferRefundVnd,
       debtCreditVnd: row.debtCreditVnd,
       totalRefundVnd: row.totalRefundVnd,
-      lines: row.lines.map((l) => ({
-        qty: Number(l.qty),
-        unitCostVnd: costByProduct.get(l.productId) ?? null,
-      })),
-      vatRateBps,
+      lines: row.lines.map((l) => {
+        const orig = origByProduct.get(l.productId);
+        const qty = Number(l.qty);
+        const origQty = orig ? Number(orig.qty) : 0;
+        const ratio =
+          origQty > 0 ? Math.min(1, qty / origQty) : 1;
+        return {
+          qty,
+          unitCostVnd: orig?.unitCostVnd ?? null,
+          lineTotal: l.lineRefundVnd,
+          vatRateBps:
+            l.vatRateBps ??
+            orig?.vatRateBps ??
+            orig?.product?.vatRateBps ??
+            storeVat,
+          netVnd:
+            l.netVnd ??
+            (orig?.netVnd != null
+              ? Math.round(orig.netVnd * ratio)
+              : null),
+          vatVnd:
+            l.vatVnd ??
+            (orig?.vatVnd != null
+              ? Math.round(orig.vatVnd * ratio)
+              : null),
+        };
+      }),
+      vatRateBps: storeVat,
     });
     await this.postEntry({
       storeId: row.storeId,
@@ -388,13 +466,19 @@ export class LedgerService {
     });
   }
 
-  async trialBalance(user: AuthUser, periodYm: string) {
+  async trialBalance(user: AuthUser, periodYm: string, storeId?: string) {
     this.assertLedgerAccess(user);
     if (!/^\d{4}-\d{2}$/.test(periodYm)) {
       throw new Error('invalid_period');
     }
+    if (storeId && user.role !== Role.owner && !user.storeIds.includes(storeId)) {
+      throw new Error('store_forbidden');
+    }
     const entries = await this.prisma.journalEntry.findMany({
-      where: { periodYm },
+      where: {
+        periodYm,
+        ...(storeId ? { storeId } : {}),
+      },
       include: { lines: true },
     });
     const byCode = new Map<string, { debitVnd: number; creditVnd: number }>();
@@ -414,6 +498,8 @@ export class LedgerService {
     });
     return {
       periodYm,
+      storeId: storeId ?? null,
+      scope: storeId ? 'store' : 'aggregate',
       rows: accounts.map((a) => {
         const t = byCode.get(a.code) ?? { debitVnd: 0, creditVnd: 0 };
         return {
