@@ -9,6 +9,7 @@ import {
   buildCashVoucherJournal,
   buildDebtPaymentJournal,
   buildPurchaseJournal,
+  buildPurchaseReturnJournal,
   buildSaleJournal,
   buildSaleReturnJournal,
   buildStocktakeJournal,
@@ -261,6 +262,34 @@ export class LedgerService {
       sourceType: 'supplier_payment',
       sourceId: row.id,
       postedAt: row.clientCreatedAt,
+      lines,
+      actorUserId,
+    });
+  }
+
+  async postFromSupplierReturn(returnId: string, actorUserId?: string) {
+    const row = await this.prisma.supplierReturn.findUnique({
+      where: { id: returnId },
+      include: {
+        lines: { include: { product: { select: { vatRateBps: true } } } },
+      },
+    });
+    if (!row) return;
+    const storeVat = await this.storeVatRateBps(row.storeId);
+    const lines = buildPurchaseReturnJournal({
+      vatRateBps: storeVat,
+      lines: row.lines.map((l) => ({
+        qty: Number(l.qty),
+        unitCostVnd: l.unitCostVnd,
+        vatRateBps: l.product.vatRateBps ?? storeVat,
+      })),
+    });
+    await this.postEntry({
+      storeId: row.storeId,
+      sourceType: 'supplier_return',
+      sourceId: row.id,
+      postedAt: row.clientCreatedAt,
+      memo: `Return to supplier ${row.supplierId}`,
       lines,
       actorUserId,
     });

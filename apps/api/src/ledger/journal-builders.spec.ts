@@ -1,6 +1,7 @@
 import {
   assertBalanced,
   buildPurchaseJournal,
+  buildPurchaseReturnJournal,
   buildSaleJournal,
   buildSaleReturnJournal,
   buildStocktakeJournal,
@@ -118,5 +119,16 @@ describe('journal-builders', () => {
     expect(() => assertBalanced(lines)).not.toThrow();
     expect(lines.find((l) => l.accountCode === '511')?.debitVnd).toBe(100_000);
     expect(lines.find((l) => l.accountCode === '3331')?.debitVnd).toBe(10_000);
+  });
+
+  it('buildPurchaseReturnJournal reverses purchase with VAT', () => {
+    const lines = buildPurchaseReturnJournal({
+      vatRateBps: 1000,
+      lines: [{ qty: 1, unitCostVnd: 110_000 }],
+    });
+    expect(() => assertBalanced(lines)).not.toThrow();
+    expect(lines.find((l) => l.accountCode === '331')?.debitVnd).toBe(110_000);
+    expect(lines.find((l) => l.accountCode === '156')?.creditVnd).toBe(100_000);
+    expect(lines.find((l) => l.accountCode === '1331')?.creditVnd).toBe(10_000);
   });
 });

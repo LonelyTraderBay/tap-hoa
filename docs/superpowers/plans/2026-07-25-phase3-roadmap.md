@@ -5,7 +5,7 @@
 | 1 | Kế toán thuế GTGT | `2026-07-25-phase3-vat.md` | **Done** |
 | 2 | Provider HĐĐT HTTP | `2026-07-25-phase3-einvoice-http-design.md` | Done (env `EINVOICE_PROVIDER=http`) |
 | 3 | PDF kỳ / kê khai CQT | — | Deferred |
-| 4 | Trả hàng NCC (giảm AP) | — | Deferred |
+| 4 | Trả hàng NCC (giảm AP) | `POST /suppliers/:id/returns` | Done |
 | 5 | Đối chiếu chuyển khoản đầy đủ | — | Deferred |
 
 VAT track: inclusive prices, `Store.vatEnabled`, CoA 1331/3331, real `/reports/period/vat`, `/reports/period/export.xlsx`.

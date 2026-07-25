@@ -173,6 +173,52 @@ export function buildPurchaseJournal(input: {
   return out;
 }
 
+/**
+ * Reverse purchase: Dr 331 gross; Cr 156 net (+ Cr 1331 vat when rate set).
+ * unitCostVnd on lines is VAT-inclusive gross (same as purchase).
+ */
+export function buildPurchaseReturnJournal(input: {
+  lines: {
+    qty: number;
+    unitCostVnd: number | null;
+    vatRateBps?: number | null;
+  }[];
+  vatRateBps?: number | null;
+}): JournalLineDraft[] {
+  let inventoryNet = 0;
+  let inputVat = 0;
+  let apGross = 0;
+  for (const line of input.lines) {
+    if (line.unitCostVnd == null || line.unitCostVnd <= 0 || line.qty <= 0) {
+      continue;
+    }
+    const gross = Math.round(line.qty * line.unitCostVnd);
+    apGross += gross;
+    const rate =
+      line.vatRateBps != null && line.vatRateBps > 0
+        ? line.vatRateBps
+        : input.vatRateBps != null && input.vatRateBps > 0
+          ? input.vatRateBps
+          : null;
+    if (rate != null) {
+      const { netVnd, vatVnd } = splitInclusiveVat(gross, rate);
+      inventoryNet += netVnd;
+      inputVat += vatVnd;
+    } else {
+      inventoryNet += gross;
+    }
+  }
+  if (apGross <= 0) {
+    return [];
+  }
+  const out: JournalLineDraft[] = [];
+  pushDr(out, '331', apGross);
+  pushCr(out, '156', inventoryNet);
+  pushCr(out, '1331', inputVat);
+  assertBalanced(out);
+  return out;
+}
+
 /** Pay AP: Dr 331 / Cr cash channel. */
 export function buildSupplierPaymentJournal(input: {
   amountVnd: number;

@@ -66,6 +66,29 @@ class SuppliersRepository {
       },
     );
   }
+
+  Future<Map<String, dynamic>> createReturn({
+    required String supplierId,
+    required String storeId,
+    required String productId,
+    required String qty,
+    required int unitCostVnd,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/suppliers/$supplierId/returns',
+      data: {
+        'storeId': storeId,
+        'lines': [
+          {
+            'productId': productId,
+            'qty': qty,
+            'unitCostVnd': unitCostVnd,
+          },
+        ],
+      },
+    );
+    return res.data ?? {};
+  }
 }
 
 class SuppliersPage extends StatefulWidget {
@@ -284,6 +307,75 @@ class _SuppliersPageState extends State<SuppliersPage> {
     );
   }
 
+  Future<void> _returnGoods(Map<String, dynamic> supplier) async {
+    final productCtrl = TextEditingController();
+    final qtyCtrl = TextEditingController(text: '1');
+    final costCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Trả hàng ${supplier['name']}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: productCtrl,
+              decoration: const InputDecoration(labelText: 'Product ID'),
+            ),
+            TextField(
+              controller: qtyCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Số lượng'),
+            ),
+            TextField(
+              controller: costCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Đơn giá gross (VND, gồm VAT)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Trả'),
+          ),
+        ],
+      ),
+    );
+    final cost = int.tryParse(costCtrl.text.trim());
+    if (ok != true ||
+        productCtrl.text.trim().isEmpty ||
+        qtyCtrl.text.trim().isEmpty ||
+        cost == null ||
+        cost < 0) {
+      return;
+    }
+    try {
+      final res = await widget.repository.createReturn(
+        supplierId: supplier['id'] as String,
+        storeId: widget.storeId,
+        productId: productCtrl.text.trim(),
+        qty: qtyCtrl.text.trim(),
+        unitCostVnd: cost,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã trả hàng · ${res['amountVnd']} VND')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Trả hàng thất bại: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -312,9 +404,18 @@ class _SuppliersPageState extends State<SuppliersPage> {
                       return ListTile(
                         title: Text('${s['name']}'),
                         subtitle: Text(s['phone']?.toString() ?? ''),
-                        trailing: TextButton(
-                          onPressed: () => _pay(s),
-                          child: const Text('Thanh toán'),
+                        trailing: Wrap(
+                          spacing: 4,
+                          children: [
+                            TextButton(
+                              onPressed: () => _returnGoods(s),
+                              child: const Text('Trả hàng'),
+                            ),
+                            TextButton(
+                              onPressed: () => _pay(s),
+                              child: const Text('Thanh toán'),
+                            ),
+                          ],
                         ),
                       );
                     },
