@@ -78,13 +78,15 @@ enum EInvoiceStatus {
 }
 
 model Store {
-  id               String   @id @default(uuid())
-  code             String   @unique
-  name             String
-  active           Boolean  @default(true)
-  debtOverdueDays  Int      @default(30)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(uuid())
+  code              String   @unique
+  name              String
+  active            Boolean  @default(true)
+  debtOverdueDays   Int      @default(30)
+  vatEnabled        Boolean  @default(false)
+  defaultVatRateBps Int      @default(1000)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
   users            UserStore[]
   products         ProductStoreStock[]
   sales            Sale[]
@@ -161,6 +163,7 @@ model Product {
   isWeighted   Boolean  @default(false)
   basePriceVnd Int
   costVnd      Int      @default(0)
+  vatRateBps   Int?
   active       Boolean  @default(true)
   updatedAt    DateTime @updatedAt
   createdAt    DateTime @default(now())

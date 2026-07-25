@@ -1,16 +1,16 @@
 # tap-hoa
 
-Offline-first grocery POS monorepo (Phase 1 MVP + Phase 2 accounting closeout).
+Offline-first grocery POS monorepo (Phase 1–2 + Phase 3 VAT track).
 
 | Path | Stack | Purpose |
 |------|-------|---------|
-| `apps/api` | NestJS 10, Prisma, PostgreSQL | Central API — auth, catalog sync, sales push, reports, ledger, AP, e-invoice stub |
+| `apps/api` | NestJS 10, Prisma, PostgreSQL | Central API — auth, sync, ledger, AP, VAT journals, period Excel, e-invoice |
 | `apps/pos_app` | Flutter 3, Drift/SQLite | POS client (Windows, Android, iOS) |
 
 **Spec:** `docs/superpowers/specs/2026-07-23-tap-hoa-pos-ke-toan-design.md`  
-**Implementation plan:** `docs/superpowers/plans/2026-07-23-phase1-foundation-pos.md`  
-**Phase 2 roadmap / closeout:** `docs/superpowers/plans/2026-07-24-phase2-roadmap.md`, `docs/superpowers/plans/2026-07-25-phase2-hardening.md`  
-**Deferred Phase 1 items:** `docs/superpowers/plans/2026-07-23-phase1-remaining.md`
+**Phase 2 closeout:** `docs/superpowers/plans/2026-07-25-phase2-hardening.md`  
+**Phase 3 VAT gate:** `docs/superpowers/plans/2026-07-25-phase3-vat.md`  
+**Phase 3 roadmap:** `docs/superpowers/plans/2026-07-25-phase3-roadmap.md`
 
 ## Prerequisites
 
@@ -126,16 +126,16 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 | Customers | `POST /customers`, `GET /customers?withDebt=true` |
 | Reports | `GET /reports/day?date=YYYY-MM-DD&storeId=` |
 | Devices | `POST /devices/push-token`, `POST /devices/low-stock-alert` |
-| Stores | `PATCH /stores/:id/debt-overdue-days` |
+| Stores | `PATCH /stores/:id/debt-overdue-days`, `PATCH /stores/:id/vat` |
 
-## API surface (Phase 2)
+## API surface (Phase 2–3)
 
 | Area | Endpoints |
 |------|-----------|
 | Ledger | `GET /ledger/journal`, `GET /ledger/trial-balance`, `GET|POST /ledger/period-locks` |
 | Suppliers / AP | `GET|POST /suppliers`, `GET /suppliers/:id/payables`, `POST /suppliers/:id/payments`, `GET|POST /suppliers/bank-accounts` |
 | E-invoice | `POST /einvoices/issue`, `GET /einvoices/by-sale/:saleId` |
-| Period reports | `GET /reports/period/trial-balance`, `/pnl`, `/vat`, `/export.csv`, `GET /reports/cash-fund` |
+| Period reports | `GET /reports/period/trial-balance`, `/pnl`, `/vat`, `/export.csv`, `/export.xlsx`, `GET /reports/cash-fund` |
 
 ### Optional FCM
 
@@ -144,5 +144,5 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 
 ## Out of scope (this MVP)
 
-See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist (polish complete as of 2026-07-24).  
-Phase 2 deferred (Phase 3): real VAT CoA, real e-invoice provider, Excel/PDF, full bank recon — see `2026-07-25-phase2-hardening.md`.
+See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist.  
+**Phase 3 VAT:** Done (inclusive journals, `/reports/period/vat`, Excel). Remaining: real e-invoice provider, supplier return, bank recon, PDF/CQT — see `2026-07-25-phase3-roadmap.md`.

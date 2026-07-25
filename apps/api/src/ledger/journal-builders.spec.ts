@@ -1,9 +1,11 @@
 import {
   assertBalanced,
+  buildPurchaseJournal,
   buildSaleJournal,
   buildSaleReturnJournal,
   buildStocktakeJournal,
   periodYmFromDate,
+  splitInclusiveVat,
 } from './journal-builders';
 
 describe('journal-builders', () => {
@@ -70,5 +72,51 @@ describe('journal-builders', () => {
         lines: [{ varianceQty: 5, avgCostVnd: null }],
       }),
     ).toEqual([]);
+  });
+
+  it('splitInclusiveVat 110k @ 10%', () => {
+    expect(splitInclusiveVat(110_000, 1000)).toEqual({
+      netVnd: 100_000,
+      vatVnd: 10_000,
+    });
+  });
+
+  it('buildSaleJournal with VAT splits 511 and 3331', () => {
+    const lines = buildSaleJournal({
+      cashAmount: 110_000,
+      transferAmount: 0,
+      debtAmount: 0,
+      totalVnd: 110_000,
+      lines: [{ qty: 1, unitCostVnd: 80_000 }],
+      vatRateBps: 1000,
+    });
+    expect(() => assertBalanced(lines)).not.toThrow();
+    expect(lines.find((l) => l.accountCode === '511')?.creditVnd).toBe(100_000);
+    expect(lines.find((l) => l.accountCode === '3331')?.creditVnd).toBe(10_000);
+  });
+
+  it('buildPurchaseJournal with VAT splits 156 / 1331 / 331', () => {
+    const lines = buildPurchaseJournal({
+      vatRateBps: 1000,
+      lines: [{ qty: 1, unitCostVnd: 110_000 }],
+    });
+    expect(() => assertBalanced(lines)).not.toThrow();
+    expect(lines.find((l) => l.accountCode === '156')?.debitVnd).toBe(100_000);
+    expect(lines.find((l) => l.accountCode === '1331')?.debitVnd).toBe(10_000);
+    expect(lines.find((l) => l.accountCode === '331')?.creditVnd).toBe(110_000);
+  });
+
+  it('buildSaleReturnJournal with VAT reverses 511 and 3331', () => {
+    const lines = buildSaleReturnJournal({
+      cashRefundVnd: 110_000,
+      transferRefundVnd: 0,
+      debtCreditVnd: 0,
+      totalRefundVnd: 110_000,
+      lines: [{ qty: 1, unitCostVnd: 80_000 }],
+      vatRateBps: 1000,
+    });
+    expect(() => assertBalanced(lines)).not.toThrow();
+    expect(lines.find((l) => l.accountCode === '511')?.debitVnd).toBe(100_000);
+    expect(lines.find((l) => l.accountCode === '3331')?.debitVnd).toBe(10_000);
   });
 });

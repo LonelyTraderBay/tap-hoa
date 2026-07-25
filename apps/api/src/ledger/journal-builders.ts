@@ -20,6 +20,18 @@ export function assertBalanced(lines: JournalLineDraft[]): void {
   }
 }
 
+/** Split VAT-inclusive gross into net + VAT (VND integers). */
+export function splitInclusiveVat(
+  grossVnd: number,
+  rateBps: number,
+): { netVnd: number; vatVnd: number } {
+  if (grossVnd <= 0 || rateBps <= 0) {
+    return { netVnd: Math.max(0, grossVnd), vatVnd: 0 };
+  }
+  const netVnd = Math.round((grossVnd * 10000) / (10000 + rateBps));
+  return { netVnd, vatVnd: grossVnd - netVnd };
+}
+
 function pushDr(
   lines: JournalLineDraft[],
   accountCode: string,
@@ -40,24 +52,44 @@ function pushCr(
   }
 }
 
+function cogsFromLines(
+  lines: { qty: number; unitCostVnd: number | null }[],
+): number {
+  let cogs = 0;
+  for (const line of lines) {
+    if (line.unitCostVnd != null && line.unitCostVnd > 0 && line.qty > 0) {
+      cogs += Math.round(line.qty * line.unitCostVnd);
+    }
+  }
+  return cogs;
+}
+
+/**
+ * @param vatRateBps null/undefined = no VAT split (legacy Epic 2 mapping)
+ */
 export function buildSaleJournal(input: {
   cashAmount: number;
   transferAmount: number;
   debtAmount: number;
   totalVnd: number;
   lines: { qty: number; unitCostVnd: number | null }[];
+  vatRateBps?: number | null;
 }): JournalLineDraft[] {
   const out: JournalLineDraft[] = [];
   pushDr(out, '111', input.cashAmount);
   pushDr(out, '112', input.transferAmount);
   pushDr(out, '131', input.debtAmount);
-  pushCr(out, '511', input.totalVnd);
-  let cogs = 0;
-  for (const line of input.lines) {
-    if (line.unitCostVnd != null && line.unitCostVnd > 0 && line.qty > 0) {
-      cogs += Math.round(line.qty * line.unitCostVnd);
-    }
+  if (input.vatRateBps != null && input.vatRateBps > 0) {
+    const { netVnd, vatVnd } = splitInclusiveVat(
+      input.totalVnd,
+      input.vatRateBps,
+    );
+    pushCr(out, '511', netVnd);
+    pushCr(out, '3331', vatVnd);
+  } else {
+    pushCr(out, '511', input.totalVnd);
   }
+  const cogs = cogsFromLines(input.lines);
   pushDr(out, '632', cogs);
   pushCr(out, '156', cogs);
   assertBalanced(out);
@@ -94,21 +126,49 @@ export function buildCashVoucherJournal(input: {
   return out;
 }
 
+/**
+ * Purchase lines use VAT-inclusive unitCostVnd.
+ * When vatRateBps > 0, inventory (156) is net; input VAT to 1331; AP (331) is gross.
+ * Per-line rate via line.vatRateBps, else input.vatRateBps.
+ */
 export function buildPurchaseJournal(input: {
-  lines: { qty: number; unitCostVnd: number | null }[];
+  lines: {
+    qty: number;
+    unitCostVnd: number | null;
+    vatRateBps?: number | null;
+  }[];
+  vatRateBps?: number | null;
 }): JournalLineDraft[] {
-  let amount = 0;
+  let inventoryNet = 0;
+  let inputVat = 0;
+  let apGross = 0;
   for (const line of input.lines) {
-    if (line.unitCostVnd != null && line.unitCostVnd > 0 && line.qty > 0) {
-      amount += Math.round(line.qty * line.unitCostVnd);
+    if (line.unitCostVnd == null || line.unitCostVnd <= 0 || line.qty <= 0) {
+      continue;
+    }
+    const gross = Math.round(line.qty * line.unitCostVnd);
+    apGross += gross;
+    const rate =
+      line.vatRateBps != null && line.vatRateBps > 0
+        ? line.vatRateBps
+        : input.vatRateBps != null && input.vatRateBps > 0
+          ? input.vatRateBps
+          : null;
+    if (rate != null) {
+      const { netVnd, vatVnd } = splitInclusiveVat(gross, rate);
+      inventoryNet += netVnd;
+      inputVat += vatVnd;
+    } else {
+      inventoryNet += gross;
     }
   }
-  if (amount <= 0) {
+  if (apGross <= 0) {
     return [];
   }
   const out: JournalLineDraft[] = [];
-  pushDr(out, '156', amount);
-  pushCr(out, '331', amount);
+  pushDr(out, '156', inventoryNet);
+  pushDr(out, '1331', inputVat);
+  pushCr(out, '331', apGross);
   assertBalanced(out);
   return out;
 }
@@ -138,25 +198,30 @@ export function purchaseAmountFromLines(
   return amount;
 }
 
-/** Reverse sale: Dr 511 / Cr cash channels; reverse COGS Dr 156 / Cr 632. */
+/** Reverse sale: Dr 511 (+3331 if VAT) / Cr cash channels; reverse COGS. */
 export function buildSaleReturnJournal(input: {
   cashRefundVnd: number;
   transferRefundVnd: number;
   debtCreditVnd: number;
   totalRefundVnd: number;
   lines: { qty: number; unitCostVnd: number | null }[];
+  vatRateBps?: number | null;
 }): JournalLineDraft[] {
   const out: JournalLineDraft[] = [];
-  pushDr(out, '511', input.totalRefundVnd);
+  if (input.vatRateBps != null && input.vatRateBps > 0) {
+    const { netVnd, vatVnd } = splitInclusiveVat(
+      input.totalRefundVnd,
+      input.vatRateBps,
+    );
+    pushDr(out, '511', netVnd);
+    pushDr(out, '3331', vatVnd);
+  } else {
+    pushDr(out, '511', input.totalRefundVnd);
+  }
   pushCr(out, '111', input.cashRefundVnd);
   pushCr(out, '112', input.transferRefundVnd);
   pushCr(out, '131', input.debtCreditVnd);
-  let cogs = 0;
-  for (const line of input.lines) {
-    if (line.unitCostVnd != null && line.unitCostVnd > 0 && line.qty > 0) {
-      cogs += Math.round(line.qty * line.unitCostVnd);
-    }
-  }
+  const cogs = cogsFromLines(input.lines);
   pushDr(out, '156', cogs);
   pushCr(out, '632', cogs);
   assertBalanced(out);

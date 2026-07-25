@@ -10,6 +10,7 @@ import {
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { weightedAverageCost } from '../inventory/weighted-average-cost';
+import { splitInclusiveVat } from '../ledger/journal-builders';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -662,6 +663,21 @@ export class StockOpsService {
           });
         }
 
+        const store = await tx.store.findUnique({
+          where: { id: dto.storeId },
+          select: { vatEnabled: true, defaultVatRateBps: true },
+        });
+        const productVat = new Map<string, number | null>();
+        for (const line of lines) {
+          if (!productVat.has(line.productId)) {
+            const p = await tx.product.findUnique({
+              where: { id: line.productId },
+              select: { vatRateBps: true },
+            });
+            productVat.set(line.productId, p?.vatRateBps ?? null);
+          }
+        }
+
         for (const line of lines) {
           const stock = await tx.productStoreStock.findUnique({
             where: {
@@ -696,11 +712,19 @@ export class StockOpsService {
             clientCreatedAt,
           });
           if (line.unitCostVnd != null) {
+            let costForWac = line.unitCostVnd;
+            if (store?.vatEnabled && store.defaultVatRateBps > 0) {
+              const rate =
+                productVat.get(line.productId) ?? store.defaultVatRateBps;
+              if (rate != null && rate > 0) {
+                costForWac = splitInclusiveVat(line.unitCostVnd, rate).netVnd;
+              }
+            }
             const nextAvg = weightedAverageCost(
               oldQty,
               oldAvg,
               Number(line.qty),
-              line.unitCostVnd,
+              costForWac,
             );
             await tx.productStoreStock.update({
               where: {
@@ -713,7 +737,7 @@ export class StockOpsService {
             });
             await tx.product.update({
               where: { id: line.productId },
-              data: { costVnd: line.unitCostVnd },
+              data: { costVnd: costForWac },
             });
           }
         }

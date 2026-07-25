@@ -4,6 +4,7 @@ import {
   Get,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -109,6 +110,21 @@ export class ReportsController {
     }
     const csv = await this.reportsService.periodExportCsv(req.user, periodYm);
     return { periodYm, csv };
+  }
+
+  @Get('period/export.xlsx')
+  async periodExportXlsx(
+    @Req() req: { user: AuthUser },
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    const buf = await this.reportsService.periodExportXlsx(req.user, periodYm);
+    return new StreamableFile(buf, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      disposition: `attachment; filename="period-${periodYm}.xlsx"`,
+    });
   }
 
   @Get('cash-fund')

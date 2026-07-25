@@ -47,4 +47,29 @@ export class StoresController {
       body.debtOverdueDays,
     );
   }
+
+  @Patch(':id/vat')
+  setVat(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Body()
+    body: { vatEnabled?: boolean; defaultVatRateBps?: number },
+  ) {
+    if (body.vatEnabled === undefined && body.defaultVatRateBps === undefined) {
+      throw new BadRequestException(
+        'vatEnabled or defaultVatRateBps is required',
+      );
+    }
+    if (
+      body.defaultVatRateBps !== undefined &&
+      (!Number.isInteger(body.defaultVatRateBps) ||
+        body.defaultVatRateBps < 0 ||
+        body.defaultVatRateBps > 10000)
+    ) {
+      throw new BadRequestException(
+        'defaultVatRateBps must be an integer 0..10000',
+      );
+    }
+    return this.storesService.setVatSettings(req.user, id, body);
+  }
 }

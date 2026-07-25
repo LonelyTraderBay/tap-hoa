@@ -14,4 +14,11 @@ Hardening P1 gate: PASS (`2026-07-24-phase1-hardening.md`).
 
 Mỗi epic sau Epic 1: implement trên nhánh `feat/phase2-<epic>` → PR squash → merge trước khi mở epic kế.
 
-**Phase 3 (outline, chưa plan):** VAT/GTGT CoA thật; provider HĐĐT thật; Excel/PDF; trả hàng NCC; đối chiếu CK đầy đủ.
+**Phase 3:**
+
+| Track | Plan / gate | Status |
+|-------|-------------|--------|
+| VAT / GTGT (ưu tiên #1) | `2026-07-25-phase3-vat.md` | **Done** (journals + báo cáo + Excel) |
+| Outline còn lại | — | provider HĐĐT thật; PDF; trả hàng NCC; đối chiếu CK đầy đủ |
+
+See also `docs/superpowers/plans/2026-07-25-phase3-roadmap.md`.

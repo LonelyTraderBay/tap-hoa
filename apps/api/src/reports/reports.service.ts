@@ -4,6 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import ExcelJS from 'exceljs';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -436,22 +437,27 @@ export class ReportsService {
 
   async vatSummary(user: AuthUser, periodYm: string) {
     const tb = await this.periodTrialBalance(user, periodYm);
-    // MVP: no separate VAT accounts yet — output zero placeholders + revenue base
-    const revenue =
-      -(tb.rows.find((r) => r.accountCode === '511')?.balanceVnd ?? 0);
+    const row = (code: string) =>
+      tb.rows.find((r) => r.accountCode === code) ?? {
+        debitVnd: 0,
+        creditVnd: 0,
+      };
+    const outputVatVnd = row('3331').creditVnd;
+    const inputVatVnd = row('1331').debitVnd;
+    const revenueBaseVnd = row('511').creditVnd;
     return {
       periodYm,
-      outputVatVnd: 0,
-      inputVatVnd: 0,
-      netVatVnd: 0,
-      revenueBaseVnd: revenue,
-      note: 'VAT accounts not seeded; GTGT summary placeholder until tax CoA',
+      outputVatVnd,
+      inputVatVnd,
+      netVatVnd: outputVatVnd - inputVatVnd,
+      revenueBaseVnd,
     };
   }
 
   async periodExportCsv(user: AuthUser, periodYm: string): Promise<string> {
     const tb = await this.periodTrialBalance(user, periodYm);
     const pnl = await this.periodPnl(user, periodYm);
+    const vat = await this.vatSummary(user, periodYm);
     const lines = [
       'section,accountCode,name,debitVnd,creditVnd,balanceVnd',
       ...tb.rows.map(
@@ -463,8 +469,54 @@ export class ReportsService {
       `pnl,gross_profit,,${pnl.grossProfitVnd},,`,
       `pnl,opex,,${pnl.operatingExpenseVnd},,`,
       `pnl,net_income,,${pnl.netIncomeVnd},,`,
+      `vat,output,,${vat.outputVatVnd},,`,
+      `vat,input,,${vat.inputVatVnd},,`,
+      `vat,net,,${vat.netVatVnd},,`,
+      `vat,revenue_base,,${vat.revenueBaseVnd},,`,
     ];
     return lines.join('\n');
+  }
+
+  async periodExportXlsx(user: AuthUser, periodYm: string): Promise<Buffer> {
+    const tb = await this.periodTrialBalance(user, periodYm);
+    const pnl = await this.periodPnl(user, periodYm);
+    const vat = await this.vatSummary(user, periodYm);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'tap-hoa';
+    const tbSheet = wb.addWorksheet('trial_balance');
+    tbSheet.addRow([
+      'accountCode',
+      'name',
+      'type',
+      'debitVnd',
+      'creditVnd',
+      'balanceVnd',
+    ]);
+    for (const r of tb.rows) {
+      tbSheet.addRow([
+        r.accountCode,
+        r.name,
+        r.type,
+        r.debitVnd,
+        r.creditVnd,
+        r.balanceVnd,
+      ]);
+    }
+    const pnlSheet = wb.addWorksheet('pnl');
+    pnlSheet.addRow(['metric', 'vnd']);
+    pnlSheet.addRow(['revenueVnd', pnl.revenueVnd]);
+    pnlSheet.addRow(['cogsVnd', pnl.cogsVnd]);
+    pnlSheet.addRow(['grossProfitVnd', pnl.grossProfitVnd]);
+    pnlSheet.addRow(['operatingExpenseVnd', pnl.operatingExpenseVnd]);
+    pnlSheet.addRow(['netIncomeVnd', pnl.netIncomeVnd]);
+    const vatSheet = wb.addWorksheet('vat');
+    vatSheet.addRow(['metric', 'vnd']);
+    vatSheet.addRow(['outputVatVnd', vat.outputVatVnd]);
+    vatSheet.addRow(['inputVatVnd', vat.inputVatVnd]);
+    vatSheet.addRow(['netVatVnd', vat.netVatVnd]);
+    vatSheet.addRow(['revenueBaseVnd', vat.revenueBaseVnd]);
+    const buf = await wb.xlsx.writeBuffer();
+    return Buffer.from(buf);
   }
 
   async cashFundSummary(
