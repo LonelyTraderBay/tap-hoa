@@ -65,27 +65,29 @@ class _ReceiptPrintSettingsPageState extends State<ReceiptPrintSettingsPage> {
               padding: const EdgeInsets.all(16),
               children: [
                 const Text('Chế độ in'),
-                RadioListTile<String>(
-                  title: const Text('Hỏi mỗi lần (ask)'),
-                  value: 'ask',
+                RadioGroup<String>(
                   groupValue: _mode,
                   onChanged: (v) => setState(() => _mode = v ?? 'ask'),
-                ),
-                RadioListTile<String>(
-                  title: const Text('PDF (hộp thoại hệ thống)'),
-                  value: 'pdf',
-                  groupValue: _mode,
-                  onChanged: (v) => setState(() => _mode = v ?? 'pdf'),
-                ),
-                RadioListTile<String>(
-                  title: const Text('ESC/POS thô (Windows)'),
-                  value: 'escpos',
-                  groupValue: _mode,
-                  onChanged: (v) => setState(() => _mode = v ?? 'escpos'),
+                  child: const Column(
+                    children: [
+                      RadioListTile<String>(
+                        title: Text('Hỏi mỗi lần (ask)'),
+                        value: 'ask',
+                      ),
+                      RadioListTile<String>(
+                        title: Text('PDF (hộp thoại hệ thống)'),
+                        value: 'pdf',
+                      ),
+                      RadioListTile<String>(
+                        title: Text('ESC/POS thô (Windows)'),
+                        value: 'escpos',
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String?>(
-                  value: _printers.any((p) => p.name == _printerName)
+                  initialValue: _printers.any((p) => p.name == _printerName)
                       ? _printerName
                       : null,
                   decoration: const InputDecoration(

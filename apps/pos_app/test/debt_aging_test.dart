@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/features/customers/debt_aging.dart';
 
 void main() {
-  final day = (int n) => DateTime.utc(2026, 1, n, 10);
+  DateTime day(int n) => DateTime.utc(2026, 1, n, 10);
 
   test('overdue when oldest unpaid > X days', () {
     final result = computeDebtAging(
