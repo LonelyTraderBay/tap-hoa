@@ -135,7 +135,8 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 | Ledger | `GET /ledger/journal`, `GET /ledger/trial-balance`, `GET|POST /ledger/period-locks` |
 | Suppliers / AP | `GET|POST /suppliers`, `GET /suppliers/:id/payables`, `POST /suppliers/:id/payments`, `GET|POST /suppliers/bank-accounts` |
 | E-invoice | `POST /einvoices/issue`, `GET /einvoices/by-sale/:saleId` |
-| Period reports | `GET /reports/period/trial-balance`, `/pnl`, `/vat`, `/export.csv`, `/export.xlsx`, `GET /reports/cash-fund` |
+| Period reports | `GET /reports/period/trial-balance`, `/pnl`, `/vat`, `/export.csv`, `/export.xlsx`, `/export.pdf`, `/vat-declaration.csv`, `GET /reports/cash-fund`, `/bank-recon` |
+| Suppliers | `POST /suppliers/:id/returns` |
 
 ### Optional FCM
 

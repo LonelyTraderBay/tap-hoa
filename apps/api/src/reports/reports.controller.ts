@@ -129,6 +129,36 @@ export class ReportsController {
     });
   }
 
+  @Get('period/export.pdf')
+  async periodExportPdf(
+    @Req() req: { user: AuthUser },
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    const buf = await this.reportsService.periodExportPdf(req.user, periodYm);
+    return new StreamableFile(buf, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="period-${periodYm}.pdf"`,
+    });
+  }
+
+  @Get('period/vat-declaration.csv')
+  async vatDeclaration(
+    @Req() req: { user: AuthUser },
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    const csv = await this.reportsService.vatDeclarationAssist(
+      req.user,
+      periodYm,
+    );
+    return { periodYm, csv };
+  }
+
   @Get('cash-fund')
   cashFund(
     @Req() req: { user: AuthUser },

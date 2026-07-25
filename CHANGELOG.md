@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Phase 3 — PDF kỳ + hỗ trợ kê khai GTGT
+
+- `GET /reports/period/export.pdf` (CĐPS/KQKD/VAT)
+- `GET /reports/period/vat-declaration.csv` — worksheet hỗ trợ kế toán, không nộp CQT
+- Flutter sổ: Xuất PDF + hỗ trợ kê khai
+
 ### Phase 3 — Đối chiếu CK
 
 - Import sao kê CSV, khớp amount với sale/voucher/NCC transfer, khóa kỳ

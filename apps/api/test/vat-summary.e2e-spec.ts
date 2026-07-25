@@ -51,6 +51,7 @@ describe('Phase 3 VAT summary e2e', () => {
     await prisma.journalLine.deleteMany();
     await prisma.journalEntry.deleteMany();
     await prisma.periodLock.deleteMany({ where: { periodYm } });
+    await prisma.eInvoice.deleteMany({ where: { sale: { storeId } } });
     await prisma.supplierPayable.deleteMany({ where: { storeId } });
     await prisma.purchaseReceiptLine.deleteMany({
       where: { receipt: { storeId } },
@@ -182,5 +183,26 @@ describe('Phase 3 VAT summary e2e', () => {
       .expect(200);
     const body = xlsx.body as Buffer;
     expect(body.subarray(0, 2).toString('utf8')).toBe('PK');
+
+    const pdf = await request(app.getHttpServer())
+      .get('/reports/period/export.pdf')
+      .query({ periodYm })
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c) => chunks.push(Buffer.from(c)));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect((pdf.body as Buffer).subarray(0, 4).toString('utf8')).toBe('%PDF');
+
+    const decl = await request(app.getHttpServer())
+      .get('/reports/period/vat-declaration.csv')
+      .query({ periodYm })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(decl.body.csv).toContain('netVatVnd');
+    expect(decl.body.csv).toContain('khong nop CQT');
   });
 });

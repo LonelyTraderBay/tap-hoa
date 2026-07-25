@@ -83,6 +83,23 @@ class LedgerRepository {
     );
     return res.data ?? const [];
   }
+
+  Future<List<int>> periodExportPdf(String periodYm) async {
+    final res = await _dio.get<List<int>>(
+      '/reports/period/export.pdf',
+      queryParameters: {'periodYm': periodYm},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? const [];
+  }
+
+  Future<String> vatDeclarationCsv(String periodYm) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/reports/period/vat-declaration.csv',
+      queryParameters: {'periodYm': periodYm},
+    );
+    return (res.data?['csv'] as String?) ?? '';
+  }
 }
 
 class LedgerHomePage extends StatefulWidget {
@@ -229,6 +246,61 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
     }
   }
 
+  Future<void> _exportPdf() async {
+    try {
+      final bytes = await widget.repository.periodExportPdf(_periodYm);
+      if (bytes.isEmpty) throw Exception('empty_pdf');
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}${Platform.pathSeparator}period-$_periodYm.pdf';
+      await File(path).writeAsBytes(bytes, flush: true);
+      await Clipboard.setData(ClipboardData(text: path));
+      if (Platform.isWindows) {
+        await Process.start('explorer.exe', ['/select,', path]);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã tải PDF: $path')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xuất PDF thất bại: $e')),
+      );
+    }
+  }
+
+  Future<void> _exportVatDeclaration() async {
+    try {
+      final csv = await widget.repository.vatDeclarationCsv(_periodYm);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Hỗ trợ kê khai GTGT $_periodYm'),
+          content: SingleChildScrollView(child: SelectableText(csv)),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: csv));
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Copy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Đóng'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xuất hỗ trợ kê khai thất bại: $e')),
+      );
+    }
+  }
+
   bool get _periodLocked =>
       _locks.any((l) => l['periodYm']?.toString() == _periodYm);
 
@@ -282,6 +354,16 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
               tooltip: 'Xuất Excel',
               onPressed: _exportExcel,
               icon: const Icon(Icons.table_view_outlined),
+            ),
+            IconButton(
+              tooltip: 'Xuất PDF',
+              onPressed: _exportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+            ),
+            IconButton(
+              tooltip: 'Hỗ trợ kê khai GTGT',
+              onPressed: _exportVatDeclaration,
+              icon: const Icon(Icons.receipt_outlined),
             ),
             if (widget.isOwner)
               IconButton(
