@@ -17,7 +17,8 @@
 | Wave 0–1 (merge + ops in-repo) | **Done** on `main` @ `c718984` (synced `origin/main`) |
 | Deploy VPS / secrets / backup thật | Chưa (operator) |
 | Wave 2–5 | Chưa |
-| **Kế hoạch còn lại** | `docs/superpowers/plans/2026-07-25-hoan-thien-con-lai.md` |
+| **Kế hoạch còn lại (ops)** | `docs/superpowers/plans/2026-07-25-hoan-thien-con-lai.md` |
+| **Kế hoạch gap design §4/§5** | `docs/superpowers/plans/2026-07-25-design-gaps-hoan-thien.md` |
 | Nộp CQT / SDK Viettel–MISA riêng | Ngoài scope (giữ YAGNI) |
 
 ## Global Constraints
