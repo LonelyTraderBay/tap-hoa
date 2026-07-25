@@ -582,6 +582,90 @@ export class LedgerService {
     };
   }
 
+  async accountLedger(
+    user: AuthUser,
+    accountCode: string,
+    periodYm: string,
+    storeId?: string,
+  ) {
+    this.assertLedgerAccess(user, storeId);
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new Error('invalid_period');
+    }
+    const account = await this.prisma.account.findUnique({
+      where: { code: accountCode },
+    });
+    if (!account) {
+      throw new Error('invalid_account');
+    }
+    const storeFilter = this.ledgerStoreFilter(user, storeId);
+
+    const openingEntries = await this.prisma.journalEntry.findMany({
+      where: {
+        periodYm: { lt: periodYm },
+        ...storeFilter,
+      },
+      include: {
+        lines: { where: { accountCode } },
+      },
+    });
+    const openingBalance = openingEntries.reduce(
+      (sum, entry) =>
+        sum +
+        entry.lines.reduce(
+          (lineSum, line) => lineSum + line.debitVnd - line.creditVnd,
+          0,
+        ),
+      0,
+    );
+
+    const periodEntries = await this.prisma.journalEntry.findMany({
+      where: {
+        periodYm,
+        ...storeFilter,
+      },
+      include: {
+        lines: { where: { accountCode }, orderBy: { id: 'asc' } },
+      },
+      orderBy: [{ postedAt: 'asc' }, { id: 'asc' }],
+    });
+
+    let runningBalance = openingBalance;
+    const lines = [];
+    for (const entry of periodEntries) {
+      for (const line of entry.lines) {
+        const movement = line.debitVnd - line.creditVnd;
+        runningBalance += movement;
+        lines.push({
+          journalEntryId: entry.id,
+          journalLineId: line.id,
+          postedAt: entry.postedAt,
+          periodYm: entry.periodYm,
+          storeId: entry.storeId,
+          sourceType: entry.sourceType,
+          sourceId: entry.sourceId,
+          memo: entry.memo,
+          debitVnd: line.debitVnd,
+          creditVnd: line.creditVnd,
+          movementVnd: movement,
+          runningBalance,
+        });
+      }
+    }
+
+    return {
+      periodYm,
+      storeId: storeId ?? null,
+      scope: storeId ? 'store' : 'aggregate',
+      accountCode: account.code,
+      accountName: account.name,
+      accountType: account.type,
+      openingBalance,
+      lines,
+      closingBalance: runningBalance,
+    };
+  }
+
   async listPeriodLocks(user: AuthUser) {
     this.assertLedgerAccess(user);
     return this.prisma.periodLock.findMany({ orderBy: { periodYm: 'desc' } });
@@ -749,5 +833,21 @@ export class LedgerService {
       return;
     }
     throw new Error('forbidden');
+  }
+
+  private ledgerStoreFilter(
+    user: AuthUser,
+    storeId?: string,
+  ): Prisma.JournalEntryWhereInput {
+    if (storeId) {
+      return { storeId };
+    }
+    if (user.role === Role.store_manager) {
+      return {
+        storeId:
+          user.storeIds.length === 1 ? user.storeIds[0] : { in: user.storeIds },
+      };
+    }
+    return {};
   }
 }

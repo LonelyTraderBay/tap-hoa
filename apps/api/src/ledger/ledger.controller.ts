@@ -53,6 +53,31 @@ export class LedgerController {
     }
   }
 
+  @Get('account-ledger')
+  async accountLedger(
+    @Req() req: { user: AuthUser },
+    @Query('accountCode') accountCode?: string,
+    @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
+  ) {
+    if (!accountCode) {
+      throw new BadRequestException('accountCode is required');
+    }
+    if (!periodYm) {
+      throw new BadRequestException('periodYm is required');
+    }
+    try {
+      return await this.ledger.accountLedger(
+        req.user,
+        accountCode,
+        periodYm,
+        storeId,
+      );
+    } catch (e) {
+      this.mapError(e);
+    }
+  }
+
   @Get('period-locks')
   async periodLocks(@Req() req: { user: AuthUser }) {
     try {
@@ -116,6 +141,7 @@ export class LedgerController {
     if (
       msg === 'invalid_date' ||
       msg === 'invalid_period' ||
+      msg === 'invalid_account' ||
       msg === 'invalid_reason'
     ) {
       throw new BadRequestException(msg);
