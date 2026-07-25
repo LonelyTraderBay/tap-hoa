@@ -1,0 +1,143 @@
+# Production deploy, migrate, backup, and rollback runbook
+
+Wave 1 go-live uses Docker Compose for the `apps/api` service and PostgreSQL.
+This repository contains deploy artifacts only; a live VPS deployment remains an
+operator follow-up when host credentials are available. Never commit real
+production secrets, passwords, API keys, or backup files.
+
+See also: `docs/ops/production-secrets.md` for `JWT_SECRET`, e-invoice keys, and
+the real owner-account creation flow.
+
+## 1. Host choice
+
+- API image: `apps/api/Dockerfile`
+- Production compose stub: `apps/api/docker-compose.prod.yml`
+- Runtime env file on the host only: `apps/api/.env.production`
+
+Minimum host requirements:
+
+- Docker Engine with Compose v2
+- Disk space for PostgreSQL data and at least 7 retained backups
+- Port `3000` exposed only to the trusted network or reverse proxy
+
+## 2. Prepare production env
+
+Create `apps/api/.env.production` on the production host. This file is ignored
+by Docker context rules and must stay outside git.
+
+```env
+NODE_ENV=production
+PORT=3000
+API_PORT=3000
+
+POSTGRES_DB=tap_hoa
+POSTGRES_USER=tap_hoa_app
+POSTGRES_PASSWORD=<strong-postgres-password>
+DATABASE_URL=postgresql://tap_hoa_app:<strong-postgres-password>@db:5432/tap_hoa?schema=public
+
+JWT_SECRET=<strong-random-secret>
+
+# Optional for real e-invoice issuance:
+# EINVOICE_PROVIDER=http
+# EINVOICE_HTTP_URL=https://...
+# EINVOICE_HTTP_API_KEY=<secret>
+# EINVOICE_HTTP_TIMEOUT_MS=15000
+
+# Optional FCM:
+# FIREBASE_SERVICE_ACCOUNT=/run/secrets/tap-hoa-firebase.json
+```
+
+Generate and handle secrets according to `docs/ops/production-secrets.md`.
+
+## 3. First deploy and migrate
+
+From the checked-out repo on the host:
+
+```sh
+cd apps/api
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d db
+docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml up -d api
+```
+
+The API image also runs `npx prisma migrate deploy` before `node dist/main.js`,
+so restarts apply any pending committed migrations before serving traffic.
+
+Create the real owner account after migrations:
+
+```sh
+cd apps/api
+OWNER_PHONE="<real owner phone>" \
+OWNER_PASSWORD="<strong one-time password>" \
+docker compose -f docker-compose.prod.yml run --rm api npm run create-owner
+```
+
+Then disable or rotate any seed account as described in
+`docs/ops/production-secrets.md`.
+
+Smoke check:
+
+```sh
+curl http://<prod-host>:3000/health
+```
+
+Expected:
+
+```json
+{ "ok": true }
+```
+
+## 4. Daily PostgreSQL backup
+
+Back up with `pg_dump` every day and retain at least 7 successful backups.
+Backups contain customer, sale, debt, and accounting data; store them encrypted
+or on restricted storage.
+
+Example Linux cron entry:
+
+```cron
+15 2 * * * cd /srv/tap-hoa/apps/api && mkdir -p /var/backups/tap-hoa && docker compose -f docker-compose.prod.yml exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > /var/backups/tap-hoa/tap_hoa_$(date +\%F).dump && find /var/backups/tap-hoa -name 'tap_hoa_*.dump' -type f -mtime +7 -delete
+```
+
+Operator checklist:
+
+1. Confirm a new dump file is created daily and is non-empty.
+2. Copy backups to storage outside the VPS.
+3. Run a restore trial on staging before go-live and after schema-heavy releases.
+
+Restore trial on staging:
+
+```sh
+cd apps/api
+docker compose -f docker-compose.prod.yml exec -T db sh -c 'createdb -U "$POSTGRES_USER" tap_hoa_restore'
+docker compose -f docker-compose.prod.yml exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d tap_hoa_restore --clean --if-exists' < /path/to/tap_hoa_YYYY-MM-DD.dump
+docker compose -f docker-compose.prod.yml run --rm -e DATABASE_URL="postgresql://tap_hoa_app:<password>@db:5432/tap_hoa_restore?schema=public" api npx prisma migrate deploy
+```
+
+If restore validation fails, stop the deployment window until the failure is
+understood.
+
+## 5. 15-minute rollback drill
+
+Before each production migration window:
+
+1. Record the current git commit, image tag, and latest verified backup path.
+2. Take a fresh pre-deploy backup or provider snapshot.
+3. Confirm the previous image or commit can still be started.
+
+Rollback steps:
+
+```sh
+cd apps/api
+docker compose -f docker-compose.prod.yml stop api
+# Restore the pre-deploy database snapshot/dump according to the host backup tool.
+# Then redeploy the previous image or checkout the previous commit and rebuild:
+docker compose -f docker-compose.prod.yml build api
+docker compose -f docker-compose.prod.yml up -d api
+curl http://<prod-host>:3000/health
+```
+
+Do not casually run `prisma migrate resolve` on production. Use it only after a
+documented incident review identifies the exact migration state and recovery
+path.

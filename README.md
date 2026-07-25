@@ -154,8 +154,16 @@ Hardening gate: see `docs/superpowers/plans/2026-07-24-phase1-hardening.md` (PAS
 See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklist.  
 **Phase 3:** Feature track Done (PR #12–#16). Production closeout / hardening: see `docs/superpowers/plans/2026-07-25-phase3-hardening.md` (store-scoped period reports, net VAT, supplier return AP integrity, bank recon idempotency, HĐĐT HTTP timeout/retry). Nộp CQT tự động vẫn ngoài scope.
 
-### Phase 3 runbook (env / migrate / rollback)
+### Phase 3 runbook (prod host / env / migrate / backup / rollback)
 
-1. `cd apps/api && npx prisma migrate deploy` (includes `20260725160000_phase3_hardening`).
-2. Optional: `EINVOICE_PROVIDER=http`, `EINVOICE_HTTP_URL=https://…`, `EINVOICE_HTTP_API_KEY=…`, `EINVOICE_HTTP_TIMEOUT_MS=15000`.
-3. Rollback schema: restore DB snapshot before hardening migration; app code on `main` before hardening PRs. Do not `migrate resolve` casually on production.
+- Production deploy/backup/rollback runbook: `docs/ops/production-deploy.md`
+- Production secrets + real owner account: `docs/ops/production-secrets.md`
+- Host choice for Wave 1: Docker Compose (`apps/api/Dockerfile`, `apps/api/docker-compose.prod.yml`); live VPS execution is an operator follow-up when credentials are available.
+
+Short path:
+
+1. Create `apps/api/.env.production` on the host only; never commit real `DATABASE_URL`, `JWT_SECRET`, e-invoice keys, or backup files.
+2. `cd apps/api && docker compose -f docker-compose.prod.yml build`.
+3. Start PostgreSQL, run `npx prisma migrate deploy`, then start API as documented in `docs/ops/production-deploy.md`.
+4. Schedule daily `pg_dump` backups with at least 7 retained copies and run a restore trial on staging.
+5. Rollback schema by restoring the pre-deploy DB snapshot/dump and redeploying the previous app image/commit. Do not `migrate resolve` casually on production.
