@@ -5,7 +5,7 @@
 
 **Goal:** Từ trạng thái “code + runbook go-live đã có trên `main`” → **API/POS prod thật chạy ổn**, rồi vá lỗ sổ & polish.
 
-**Trạng thái (2026-07-25, sau merge local Wave 1):**
+**Trạng thái (2026-07-25, sau Wave A–E in-repo trên `feat/hoan-thien-remaining`):**
 
 | Hạng mục | Status |
 |----------|--------|
@@ -13,8 +13,13 @@
 | Wave 0 (merge hardening) | **Done** |
 | Wave 1 in-repo (Dockerfile, secrets/ops, HĐĐT checklist, Android signing, Windows pointer) | **Done** trên `main` @ `9dd1fad` |
 | `main` vs `origin/main` | **Synced** @ `c718984` (A.1 push done) |
-| Deploy VPS / JWT prod / owner thật / backup thật | **Chưa** (operator) |
-| Wave 2–5 | Chưa bắt đầu |
+| **Wave A in-repo** (checklist A.2–A.5, ops docs) | **Done** |
+| **Wave B in-repo** (smoke/FCM runbooks, PDF Unicode font) | **Done** |
+| **Wave C in-repo** (wastage journal + plan) | **Done** |
+| **Wave D in-repo** (period unlock API + Flutter audit UI) | **Done** |
+| **Wave E in-repo** (E.1–E.6 polish; E.7 SDK ngoài scope) | **Done** |
+| Deploy VPS / JWT prod / owner thật / backup thật (**A.2–A.5**) | **Chưa** (operator) |
+| Smoke 2 máy thật (**B.1**) | **Chưa** (operator) |
 
 ## Global Constraints
 
@@ -36,17 +41,19 @@ Wave D  Period unlock + audit UI                 [P1–P2]
 Wave E  Polish sau ổn định                       [P2]
 ```
 
-Ops docs neo: `docs/ops/production-secrets.md`, `production-deploy.md`, `einvoice-http.md`, `android-release.md`, `windows-prod.md` (index trong README).
+Ops docs neo: `docs/ops/production-secrets.md`, `production-deploy.md`, `einvoice-http.md`, `android-release.md`, `windows-prod.md`, `npm-audit.md` (index trong README).
 
 ---
 
 ## Wave A — Đưa go-live lên prod thật (P0)
 
+> **In-repo:** Done (checklist + ops docs). **Operator còn lại:** A.2–A.5 trên VPS thật.
+
 **DoD:** `origin/main` có Wave 1; API prod healthy; owner thật login; backup Postgres đã thử restore; POS trỏ API prod bán được ≥ 1 đơn.
 
 ### Task A.1: Đồng bộ remote
 
-- [ ] **Step 1:** Push `main`
+- [x] **Step 1:** Push `main`
 
 ```powershell
 cd c:\Users\C-PC\Documents\Projects\tap-hoa
@@ -101,6 +108,8 @@ git push origin --delete chore/go-live-wave1
 
 ## Wave B — Vận hành ổn định (P1)
 
+> **In-repo:** Done (runbooks B.2–B.3, PDF Unicode). **Operator còn lại:** B.1 smoke 2 máy trên quán.
+
 **DoD:** 2 thiết bị offline→online khớp; PDF kỳ tiếng Việt trên host; FCM on hoặc documented off.
 
 ### Task B.1: Smoke multi-device (bắt buộc)
@@ -129,14 +138,16 @@ Ghi kết quả vào note nội bộ / issue:
 - Modify: `apps/api/Dockerfile` / `.dockerignore` nếu cần COPY assets
 - Test: e2e hoặc smoke PDF chứa dấu Việt
 
-- [ ] Bundle TTF trong repo/image (không phụ thuộc `C:\Windows\Fonts\arial.ttf`).
-- [ ] `doc.font(<bundled path>)`; fallback Helvetica chỉ khi thiếu file.
-- [ ] Verify `GET /reports/period/export.pdf`.
-- [ ] Commit: `fix: embed Unicode font for period PDF export`.
+- [x] Bundle TTF trong repo/image (không phụ thuộc `C:\Windows\Fonts\arial.ttf`).
+- [x] `doc.font(<bundled path>)`; fallback Helvetica chỉ khi thiếu file.
+- [x] Verify `GET /reports/period/export.pdf`.
+- [x] Commit: `fix: embed Unicode font for period PDF export`.
 
 ---
 
 ## Wave C — Journal xuất hủy / chuyển kho (P1)
+
+> **In-repo:** Done (wastage journal C.1; C.2 transfer optional deferred).
 
 > **Trước code:** plan con `docs/superpowers/plans/YYYY-MM-DD-wastage-transfer-journals.md` (TDD).
 
@@ -144,16 +155,16 @@ Ghi kết quả vào note nội bộ / issue:
 
 ### Task C.0: Plan con + quyết định CoA
 
-- [ ] Chốt tài khoản wastage (bám `postFromStocktake` / journal-builders hiện có).
-- [ ] Viết plan con với RED/GREEN e2e.
+- [x] Chốt tài khoản wastage (bám `postFromStocktake` / journal-builders hiện có).
+- [x] Viết plan con với RED/GREEN e2e.
 
 ### Task C.1: Journal wastage (bắt buộc)
 
 **Files:** `apps/api/src/ledger/*`, `apps/api/src/sync/stock-ops.service.ts`, `apps/api/test/wastage-journal.e2e-spec.ts`
 
-- [ ] Builder + `postFromWastage` (fail-soft, period lock).
-- [ ] Hook sau persist wastage.
-- [ ] e2e PASS.
+- [x] Builder + `postFromWastage` (fail-soft, period lock).
+- [x] Hook sau persist wastage.
+- [x] e2e PASS.
 
 ### Task C.2: Journal chuyển kho (optional)
 
@@ -169,34 +180,38 @@ Ghi kết quả vào note nội bộ / issue:
 
 ## Wave D — Period unlock + audit UI (P1–P2)
 
+> **In-repo:** Done (API unlock + Flutter audit UI).
+
 > Plan con riêng trước khi implement.
 
 ### Task D.1: API
 
-- [ ] `POST /ledger/period-locks/:periodYm/unlock` — chỉ `owner` + lý do.
-- [ ] Ghi `AuditLog`.
-- [ ] e2e: lock → post 403/blocked → unlock → post OK.
+- [x] `POST /ledger/period-locks/:periodYm/unlock` — chỉ `owner` + lý do.
+- [x] Ghi `AuditLog`.
+- [x] e2e: lock → post 403/blocked → unlock → post OK.
 
 ### Task D.2: Flutter
 
-- [ ] Section **Sổ kế toán**: lock list + unlock + audit gần đây.
-- [ ] `flutter analyze` sạch trên path đụng.
+- [x] Section **Sổ kế toán**: lock list + unlock + audit gần đây.
+- [x] `flutter analyze` sạch trên path đụng.
 
 ---
 
 ## Wave E — Polish (P2, sau ổn định quán)
 
+> **In-repo:** Done E.1–E.6. E.7 SDK Viettel/MISA ngoài scope.
+
 Một plan / một mục — không nhồi sprint go-live.
 
-| # | Mục | Khi nào |
-|---|-----|---------|
-| E.1 | Giảm giá theo dòng giỏ | UX bán hàng cần |
-| E.2 | Gửi ảnh hóa đơn | Khách hay xin ảnh |
-| E.3 | Hủy / điều chỉnh HĐĐT | Có gateway thật |
-| E.4 | PO NCC | NCC bắt buộc |
-| E.5 | Backup SQLite local định kỳ | Rủi ro mất máy quầy |
-| E.6 | Theo dõi `npm audit` upstream | Định kỳ |
-| E.7 | SDK Viettel/MISA | HTTP gateway không đủ |
+| # | Mục | Khi nào | In-repo |
+|---|-----|---------|---------|
+| E.1 | Giảm giá theo dòng giỏ | UX bán hàng cần | Done |
+| E.2 | Gửi ảnh hóa đơn | Khách hay xin ảnh | Done |
+| E.3 | Hủy / điều chỉnh HĐĐT | Có gateway thật | Done |
+| E.4 | PO NCC | NCC bắt buộc | Deferred |
+| E.5 | Backup SQLite local định kỳ | Rủi ro mất máy quầy | Done |
+| E.6 | Theo dõi `npm audit` upstream | Định kỳ | Done (`docs/ops/npm-audit.md`) |
+| E.7 | SDK Viettel/MISA | HTTP gateway không đủ | Out of scope |
 
 **Ngoài scope:** nộp CQT; website; loyalty; HR; chuỗi > ~10 điểm.
 
@@ -229,11 +244,11 @@ Một plan / một mục — không nhồi sprint go-live.
 
 ## Self-review
 
-| Gap | Wave |
-|-----|------|
-| Push remote + deploy thật | A |
-| Smoke 2 máy, FCM, PDF Unicode | B |
-| Wastage/transfer journals | C |
-| Unlock kỳ + audit UI | D |
-| Polish design | E |
+| Gap | Wave | Status |
+|-----|------|--------|
+| Push remote + deploy thật | A | In-repo Done; **operator A.2–A.5** |
+| Smoke 2 máy, FCM, PDF Unicode | B | In-repo Done; **operator B.1** |
+| Wastage/transfer journals | C | Wastage Done; transfer optional deferred |
+| Unlock kỳ + audit UI | D | Done |
+| Polish design | E | E.1–E.6 Done; E.7 out of scope |
 )

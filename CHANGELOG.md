@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Ops
+
+- Documented periodic `npm audit --omit=dev` tracking for `apps/api` (no `audit fix --force`; exceljs / firebase-admin transitive findings).
+
 ### POS
 
 - Added per-cart-line VND discounts, synced as `SaleLine.discountVnd`; line discounts apply before invoice-level discounts.

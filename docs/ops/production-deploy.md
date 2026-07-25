@@ -11,6 +11,7 @@ See also:
 - `docs/ops/einvoice-http.md` — HĐĐT HTTP gateway vs stub operator checklist
 - `docs/ops/android-release.md` — Android release signing and APK
 - `docs/ops/windows-prod.md` — Windows prod `API_URL`, build, operator smoke
+- `docs/ops/npm-audit.md` — periodic `npm audit --omit=dev` tracking (no `--force`)
 
 ## 1. Host choice
 

@@ -166,6 +166,7 @@ See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklis
 | HĐĐT HTTP gateway / stub | `docs/ops/einvoice-http.md` |
 | Android release signing + APK | `docs/ops/android-release.md` |
 | Windows prod `API_URL` + smoke | `docs/ops/windows-prod.md` |
+| npm audit tracking (no `--force`) | `docs/ops/npm-audit.md` |
 
 ### Wave B ops (stable day 1–3)
 
