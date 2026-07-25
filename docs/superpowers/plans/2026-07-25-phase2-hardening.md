@@ -67,4 +67,4 @@
 - Real e-invoice provider adapter
 - Excel/PDF export; trả hàng NCC giảm AP; full bank recon
 - [x] Journals for wastage (Dr 642 / Cr 156 at WAC)
-- Journals for transfer; period unlock
+- [x] Journals for transfer; period unlock

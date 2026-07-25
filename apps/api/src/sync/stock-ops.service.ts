@@ -414,6 +414,14 @@ export class StockOpsService {
           },
         });
       });
+      await this.ledger.safePost(
+        () => this.ledger.postFromStockTransfer(dto.id, user.userId),
+        {
+          sourceType: 'stock_transfer',
+          sourceId: dto.id,
+          actorUserId: user.userId,
+        },
+      );
       return { accepted: true };
     } catch (error) {
       if (error instanceof Error && error.message === 'stock_not_found') {

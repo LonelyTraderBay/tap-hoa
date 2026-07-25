@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/client';
+import { Prisma, Role, TransferStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +12,7 @@ import {
   buildPurchaseReturnJournal,
   buildSaleJournal,
   buildSaleReturnJournal,
+  buildStockTransferJournal,
   buildStocktakeJournal,
   buildSupplierPaymentJournal,
   buildWastageJournal,
@@ -442,6 +443,39 @@ export class LedgerService {
     });
   }
 
+  async postFromStockTransfer(stockTransferId: string, actorUserId?: string) {
+    const row = await this.prisma.stockTransfer.findUnique({
+      where: { id: stockTransferId },
+      include: { lines: true },
+    });
+    if (!row || row.status !== TransferStatus.received) return;
+    const costLines: { qty: number; avgCostVnd: number | null }[] = [];
+    for (const line of row.lines) {
+      const stock = await this.prisma.productStoreStock.findUnique({
+        where: {
+          productId_storeId: {
+            productId: line.productId,
+            storeId: row.fromStoreId,
+          },
+        },
+      });
+      costLines.push({
+        qty: Number(line.qty),
+        avgCostVnd: stock?.avgCostVnd ?? null,
+      });
+    }
+    const lines = buildStockTransferJournal({ lines: costLines });
+    await this.postEntry({
+      storeId: row.toStoreId,
+      sourceType: 'stock_transfer',
+      sourceId: row.id,
+      postedAt: row.receivedAt ?? row.updatedAt,
+      memo: row.note ?? undefined,
+      lines,
+      actorUserId,
+    });
+  }
+
   async postFromWastage(wastageId: string, actorUserId?: string) {
     const row = await this.prisma.wastageVoucher.findUnique({
       where: { id: wastageId },
@@ -680,6 +714,9 @@ export class LedgerService {
         return true;
       case 'stocktake':
         await this.postFromStocktake(sourceId, actorUserId);
+        return true;
+      case 'stock_transfer':
+        await this.postFromStockTransfer(sourceId, actorUserId);
         return true;
       case 'wastage':
         await this.postFromWastage(sourceId, actorUserId);

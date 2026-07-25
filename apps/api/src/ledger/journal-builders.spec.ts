@@ -5,6 +5,7 @@ import {
   buildPurchaseReturnJournal,
   buildSaleJournal,
   buildSaleReturnJournal,
+  buildStockTransferJournal,
   buildStocktakeJournal,
   buildWastageJournal,
   computeSaleLineVatSnapshots,
@@ -76,6 +77,56 @@ describe('journal-builders', () => {
         lines: [{ varianceQty: 5, avgCostVnd: null }],
       }),
     ).toEqual([]);
+  });
+
+  it('buildStockTransferJournal posts transfer at WAC without COGS', () => {
+    const lines = buildStockTransferJournal({
+      lines: [
+        { qty: 2, avgCostVnd: 8000 },
+        { qty: 1.5, avgCostVnd: 10000 },
+        { qty: 1, avgCostVnd: null },
+        { qty: 1, avgCostVnd: 0 },
+      ],
+    });
+    expect(() => assertBalanced(lines)).not.toThrow();
+    const dr156 = lines
+      .filter((l) => l.accountCode === '156')
+      .reduce((s, l) => s + l.debitVnd, 0);
+    const cr156 = lines
+      .filter((l) => l.accountCode === '156')
+      .reduce((s, l) => s + l.creditVnd, 0);
+    expect(dr156).toBe(31000);
+    expect(cr156).toBe(31000);
+    expect(lines.some((l) => l.accountCode === '632')).toBe(false);
+  });
+
+  it('buildStockTransferJournal returns empty when no costed lines', () => {
+    expect(
+      buildStockTransferJournal({
+        lines: [
+          { qty: 1, avgCostVnd: null },
+          { qty: 1, avgCostVnd: 0 },
+          { qty: 1, avgCostVnd: -1000 },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('buildStockTransferJournal rounds each costed line', () => {
+    const lines = buildStockTransferJournal({
+      lines: [
+        { qty: 0.333, avgCostVnd: 1000 },
+        { qty: 0.333, avgCostVnd: 1000 },
+      ],
+    });
+    const dr156 = lines
+      .filter((l) => l.accountCode === '156')
+      .reduce((s, l) => s + l.debitVnd, 0);
+    const cr156 = lines
+      .filter((l) => l.accountCode === '156')
+      .reduce((s, l) => s + l.creditVnd, 0);
+    expect(dr156).toBe(666);
+    expect(cr156).toBe(666);
   });
 
   it('buildWastageJournal posts wastage at WAC', () => {

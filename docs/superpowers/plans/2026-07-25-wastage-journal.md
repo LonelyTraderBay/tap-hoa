@@ -16,7 +16,7 @@
 - Use `sourceType: 'wastage'`.
 - Posting must be fail-soft after the wastage voucher persists, matching the stocktake hook.
 - Period lock must block posting.
-- Stock transfer journals are out of scope for this plan; Task C.2 stays deferred.
+- Stock transfer journals were out of scope for this plan; Task C.2 is completed by `2026-07-25-transfer-journals.md`.
 
 ## Current patterns to mirror
 

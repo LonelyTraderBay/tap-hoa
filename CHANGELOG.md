@@ -16,6 +16,7 @@
 
 - Ledger periods can now be unlocked by owners with an audit reason; Flutter sổ shows period lock/unlock audit and unlock controls.
 - Wastage sync now posts WAC ledger journals (Dr `642` / Cr `156`) with period-lock audit coverage.
+- Stock transfer receive now posts WAC transfer journals (Dr `156` / Cr `156`) with period-lock replay coverage.
 
 ### Phase 3 — PDF kỳ + hỗ trợ kê khai GTGT
 
