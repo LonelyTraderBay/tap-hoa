@@ -6,6 +6,8 @@ import {
 import { Role } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 import ExcelJS from 'exceljs';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import PDFDocument from 'pdfkit';
 import { AuthUser } from '../auth/jwt.strategy';
 import { periodYmFromDate } from '../ledger/journal-builders';
@@ -58,6 +60,8 @@ export type StockOnHandResponse = {
 };
 
 const ICT_OFFSET_HOURS = 7;
+const PERIOD_PDF_FONT_NAME = 'NotoSans';
+const PERIOD_PDF_FONT_FILE = 'NotoSans-Regular.ttf';
 
 import { computeDebtAging } from './debt-aging';
 
@@ -595,6 +599,27 @@ export class ReportsService {
     return new Intl.NumberFormat('vi-VN').format(n) + ' đ';
   }
 
+  private resolvePeriodPdfFontPath(): string | null {
+    const candidates = [
+      join(process.cwd(), 'assets', 'fonts', PERIOD_PDF_FONT_FILE),
+      join(__dirname, '..', '..', 'assets', 'fonts', PERIOD_PDF_FONT_FILE),
+      join(__dirname, '..', '..', '..', 'assets', 'fonts', PERIOD_PDF_FONT_FILE),
+    ];
+
+    return candidates.find((candidate) => existsSync(candidate)) ?? null;
+  }
+
+  private usePeriodPdfFont(doc: PDFKit.PDFDocument): void {
+    const fontPath = this.resolvePeriodPdfFontPath();
+    if (!fontPath) {
+      doc.font('Helvetica');
+      return;
+    }
+
+    doc.registerFont(PERIOD_PDF_FONT_NAME, fontPath);
+    doc.font(PERIOD_PDF_FONT_NAME);
+  }
+
   async periodExportPdf(
     user: AuthUser,
     periodYm: string,
@@ -618,14 +643,7 @@ export class ReportsService {
       doc.on('data', (c) => chunks.push(Buffer.from(c)));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
-      // pdfkit built-in fonts lack Vietnamese; embed Helvetica and use
-      // NFC text — for full Unicode use a TTF when available.
-      try {
-        // Prefer Windows Vietnamese-capable font when present.
-        doc.font('C:\\Windows\\Fonts\\arial.ttf');
-      } catch {
-        doc.font('Helvetica');
-      }
+      this.usePeriodPdfFont(doc);
       doc.fontSize(16).text(`Báo cáo kỳ ${periodYm}`, { underline: true });
       doc.fontSize(10).text(`Cửa hàng: ${storeName} (${tb.scope})`);
       doc.text(`Ngày tạo: ${createdAt}`);
