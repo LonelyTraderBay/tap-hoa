@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CustomersService } from '../customers/customers.service';
 import { DevicesService } from '../devices/devices.service';
+import { computeSaleLineVatSnapshots } from '../ledger/journal-builders';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
@@ -872,6 +873,15 @@ export class SyncService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
+        const storeVatRow = await tx.store.findUnique({
+          where: { id: sale.storeId },
+          select: { vatEnabled: true, defaultVatRateBps: true },
+        });
+        const storeVat =
+          storeVatRow?.vatEnabled && storeVatRow.defaultVatRateBps > 0
+            ? storeVatRow.defaultVatRateBps
+            : null;
+
         const saleLines: {
           id: string;
           productId: string;
@@ -879,6 +889,10 @@ export class SyncService {
           unitPrice: number;
           lineTotal: number;
           unitCostVnd: number;
+          productVatRateBps: number | null;
+          vatRateBps: number | null;
+          netVnd: number | null;
+          vatVnd: number | null;
         }[] = [];
 
         for (const line of sale.lines) {
@@ -931,7 +945,27 @@ export class SyncService {
             unitPrice: line.unitPrice,
             lineTotal: line.lineTotal,
             unitCostVnd,
+            productVatRateBps: product?.vatRateBps ?? null,
+            vatRateBps: null,
+            netVnd: null,
+            vatVnd: null,
           });
+        }
+
+        if (storeVat != null) {
+          const snaps = computeSaleLineVatSnapshots({
+            lines: saleLines.map((l) => ({
+              lineTotal: l.lineTotal,
+              vatRateBps: l.productVatRateBps ?? storeVat,
+            })),
+            discountVnd: sale.discountVnd,
+            storeVatRateBps: storeVat,
+          });
+          for (let i = 0; i < saleLines.length; i++) {
+            saleLines[i].vatRateBps = snaps[i].vatRateBps;
+            saleLines[i].netVnd = snaps[i].netVnd;
+            saleLines[i].vatVnd = snaps[i].vatVnd;
+          }
         }
 
         for (const line of saleLines) {
@@ -995,6 +1029,9 @@ export class SyncService {
                 unitPrice: line.unitPrice,
                 lineTotal: line.lineTotal,
                 unitCostVnd: line.unitCostVnd,
+                vatRateBps: line.vatRateBps,
+                netVnd: line.netVnd,
+                vatVnd: line.vatVnd,
               })),
             },
           },

@@ -73,56 +73,69 @@ export class ReportsController {
   periodTrial(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
     }
-    return this.reportsService.periodTrialBalance(req.user, periodYm);
+    return this.reportsService.periodTrialBalance(req.user, periodYm, storeId);
   }
 
   @Get('period/pnl')
   periodPnl(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
     }
-    return this.reportsService.periodPnl(req.user, periodYm);
+    return this.reportsService.periodPnl(req.user, periodYm, storeId);
   }
 
   @Get('period/vat')
   periodVat(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
     }
-    return this.reportsService.vatSummary(req.user, periodYm);
+    return this.reportsService.vatSummary(req.user, periodYm, storeId);
   }
 
   @Get('period/export.csv')
   async periodExport(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
     }
-    const csv = await this.reportsService.periodExportCsv(req.user, periodYm);
-    return { periodYm, csv };
+    const csv = await this.reportsService.periodExportCsv(
+      req.user,
+      periodYm,
+      storeId,
+    );
+    return { periodYm, storeId: storeId ?? null, csv };
   }
 
   @Get('period/export.xlsx')
   async periodExportXlsx(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
     }
-    const buf = await this.reportsService.periodExportXlsx(req.user, periodYm);
+    const buf = await this.reportsService.periodExportXlsx(
+      req.user,
+      periodYm,
+      storeId,
+    );
     return new StreamableFile(buf, {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       disposition: `attachment; filename="period-${periodYm}.xlsx"`,
@@ -133,11 +146,16 @@ export class ReportsController {
   async periodExportPdf(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
     }
-    const buf = await this.reportsService.periodExportPdf(req.user, periodYm);
+    const buf = await this.reportsService.periodExportPdf(
+      req.user,
+      periodYm,
+      storeId,
+    );
     return new StreamableFile(buf, {
       type: 'application/pdf',
       disposition: `attachment; filename="period-${periodYm}.pdf"`,
@@ -148,6 +166,7 @@ export class ReportsController {
   async vatDeclaration(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
+    @Query('storeId') storeId?: string,
   ) {
     if (!periodYm) {
       throw new BadRequestException('periodYm is required');
@@ -155,8 +174,9 @@ export class ReportsController {
     const csv = await this.reportsService.vatDeclarationAssist(
       req.user,
       periodYm,
+      storeId,
     );
-    return { periodYm, csv };
+    return { periodYm, storeId: storeId ?? null, csv };
   }
 
   @Get('cash-fund')
@@ -205,6 +225,71 @@ export class ReportsController {
       throw new BadRequestException('storeId and periodYm required');
     }
     return this.reportsService.bankReconSummary(req.user, storeId, periodYm);
+  }
+
+  @Post('bank-recon/match')
+  matchBank(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      periodYm?: string;
+      statementId?: string;
+      bookRef?: string;
+      matchVersion?: number;
+    },
+  ) {
+    if (!body.storeId || !body.periodYm || !body.statementId || !body.bookRef) {
+      throw new BadRequestException(
+        'storeId, periodYm, statementId, bookRef required',
+      );
+    }
+    return this.reportsService.matchBankLine(req.user, {
+      storeId: body.storeId,
+      periodYm: body.periodYm,
+      statementId: body.statementId,
+      bookRef: body.bookRef,
+      matchVersion: body.matchVersion,
+    });
+  }
+
+  @Post('bank-recon/unmatch')
+  unmatchBank(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      periodYm?: string;
+      statementId?: string;
+      matchVersion?: number;
+    },
+  ) {
+    if (!body.storeId || !body.periodYm || !body.statementId) {
+      throw new BadRequestException(
+        'storeId, periodYm, statementId required',
+      );
+    }
+    return this.reportsService.unmatchBankLine(req.user, {
+      storeId: body.storeId,
+      periodYm: body.periodYm,
+      statementId: body.statementId,
+      matchVersion: body.matchVersion,
+    });
+  }
+
+  @Post('bank-recon/auto-match')
+  autoMatchBank(
+    @Req() req: { user: AuthUser },
+    @Body() body: { storeId?: string; periodYm?: string },
+  ) {
+    if (!body.storeId || !body.periodYm) {
+      throw new BadRequestException('storeId and periodYm required');
+    }
+    return this.reportsService.autoMatchBankRecon(
+      req.user,
+      body.storeId,
+      body.periodYm,
+    );
   }
 
   @Post('bank-recon/lock')

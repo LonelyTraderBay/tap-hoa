@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, Role, StockDocType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { splitInclusiveVat } from '../ledger/journal-builders';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushSaleReturnDto } from './dto/push-sale.dto';
@@ -132,6 +133,40 @@ export class SaleReturnsService {
       return { accepted: false, reason: 'invalid_return' };
     }
 
+    // Tax snapshot per line: prefer original sale line snapshot rate,
+    // then product override, then store default (when VAT on).
+    const store = await this.prisma.store.findUnique({
+      where: { id: dto.storeId },
+      select: { vatEnabled: true, defaultVatRateBps: true },
+    });
+    const storeVat =
+      store?.vatEnabled && store.defaultVatRateBps > 0
+        ? store.defaultVatRateBps
+        : null;
+    const productVat = new Map<string, number | null>();
+    for (const line of dto.lines) {
+      if (!productVat.has(line.productId)) {
+        const p = await this.prisma.product.findUnique({
+          where: { id: line.productId },
+          select: { vatRateBps: true },
+        });
+        productVat.set(line.productId, p?.vatRateBps ?? null);
+      }
+    }
+    const taxSnapshot = (line: {
+      productId: string;
+      lineRefundVnd: number;
+    }): { vatRateBps: number | null; netVnd: number | null; vatVnd: number | null } => {
+      const orig = soldByProduct.get(line.productId);
+      const rate =
+        orig?.vatRateBps ?? productVat.get(line.productId) ?? storeVat;
+      if (rate == null || rate <= 0) {
+        return { vatRateBps: null, netVnd: null, vatVnd: null };
+      }
+      const { netVnd, vatVnd } = splitInclusiveVat(line.lineRefundVnd, rate);
+      return { vatRateBps: rate, netVnd, vatVnd };
+    };
+
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.saleReturn.create({
@@ -148,13 +183,19 @@ export class SaleReturnsService {
             note: dto.note ?? null,
             clientCreatedAt,
             lines: {
-              create: dto.lines.map((l) => ({
-                id: l.id ?? randomUUID(),
-                productId: l.productId,
-                qty: new Prisma.Decimal(l.qty),
-                unitPrice: l.unitPrice,
-                lineRefundVnd: l.lineRefundVnd,
-              })),
+              create: dto.lines.map((l) => {
+                const snap = taxSnapshot(l);
+                return {
+                  id: l.id ?? randomUUID(),
+                  productId: l.productId,
+                  qty: new Prisma.Decimal(l.qty),
+                  unitPrice: l.unitPrice,
+                  lineRefundVnd: l.lineRefundVnd,
+                  vatRateBps: snap.vatRateBps,
+                  netVnd: snap.netVnd,
+                  vatVnd: snap.vatVnd,
+                };
+              }),
             },
           },
         });

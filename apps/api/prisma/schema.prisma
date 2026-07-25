@@ -75,6 +75,7 @@ enum EInvoiceStatus {
   draft
   pending_sign
   issued
+  failed
   cancelled
 }
 
@@ -177,6 +178,7 @@ model Product {
   transferLines StockTransferLine[]
   stocktakeLines StocktakeLine[]
   purchaseLines  PurchaseReceiptLine[]
+  saleLines      SaleLine[]
   supplierReturnLines SupplierReturnLine[]
   wastageLines   WastageVoucherLine[]
   stockMovements StockMovement[]
@@ -298,7 +300,13 @@ model SaleLine {
   unitPrice   Int
   lineTotal   Int
   unitCostVnd Int?
+  /** Snapshot at sale time: Product.vatRateBps ?? Store.default when VAT on. */
+  vatRateBps  Int?
+  netVnd      Int?
+  vatVnd      Int?
   sale        Sale    @relation(fields: [saleId], references: [id])
+  product     Product @relation(fields: [productId], references: [id])
+  @@index([productId])
 }
 
 model SaleReturn {
@@ -330,6 +338,10 @@ model SaleReturnLine {
   qty           Decimal    @db.Decimal(18, 3)
   unitPrice     Int
   lineRefundVnd Int
+  /** Snapshot at return time: prefer original sale line snapshot. */
+  vatRateBps    Int?
+  netVnd        Int?
+  vatVnd        Int?
   saleReturn    SaleReturn @relation(fields: [returnId], references: [id])
 }
 
@@ -472,6 +484,10 @@ model PurchaseReceiptLine {
   productId  String
   qty        Decimal         @db.Decimal(18, 3)
   unitCostVnd Int?
+  /** Snapshot at receipt time (inclusive split). */
+  vatRateBps  Int?
+  netVnd      Int?
+  vatVnd      Int?
   receipt    PurchaseReceipt @relation(fields: [receiptId], references: [id])
   product    Product         @relation(fields: [productId], references: [id])
   @@index([receiptId])
@@ -605,6 +621,7 @@ model SupplierReturn {
   storeId         String
   supplierId      String
   purchaseReceiptId String?
+  clientId        String?
   note            String?
   amountVnd       Int
   recordedById    String
@@ -615,8 +632,10 @@ model SupplierReturn {
   supplier        Supplier @relation(fields: [supplierId], references: [id])
   recordedBy      User     @relation(fields: [recordedById], references: [id])
   lines           SupplierReturnLine[]
+  @@unique([storeId, clientId])
   @@index([storeId, clientCreatedAt])
   @@index([supplierId])
+  @@index([purchaseReceiptId])
 }
 
 model SupplierReturnLine {
@@ -625,6 +644,10 @@ model SupplierReturnLine {
   productId   String
   qty         Decimal        @db.Decimal(18, 3)
   unitCostVnd Int
+  purchaseReceiptLineId String?
+  vatRateBps  Int?
+  netVnd      Int?
+  vatVnd      Int?
   supplierReturn SupplierReturn @relation(fields: [returnId], references: [id])
   product     Product        @relation(fields: [productId], references: [id])
   @@index([returnId])
@@ -651,9 +674,13 @@ model BankStatementLine {
   amountVnd     Int
   memo          String?
   matchedRef    String?
+  /** Idempotency key for CSV re-import (store-scoped). */
+  fingerprint   String?
+  matchVersion  Int      @default(0)
   createdAt     DateTime @default(now())
   store         Store    @relation(fields: [storeId], references: [id])
   bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id])
+  @@unique([storeId, fingerprint])
   @@index([storeId, periodYm])
 }
 
@@ -714,6 +741,8 @@ model EInvoice {
   xmlPath         String?
   pdfPath         String?
   errorMessage    String?
+  retryCount      Int            @default(0)
+  lastAttemptAt   DateTime?
   issuedAt        DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt

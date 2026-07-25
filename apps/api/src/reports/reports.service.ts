@@ -4,7 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -377,15 +377,35 @@ export class ReportsService {
     };
   }
 
-  async periodTrialBalance(user: AuthUser, periodYm: string) {
+  private async resolvePeriodStoreFilter(
+    user: AuthUser,
+    storeId?: string,
+  ): Promise<{ storeIds: string[]; scope: 'store' | 'aggregate' }> {
     if (user.role !== Role.owner && user.role !== Role.store_manager) {
       throw new ForbiddenException('forbidden');
     }
+    const storeIds = await this.resolveStoreIds(user, storeId);
+    return { storeIds, scope: storeId ? 'store' : 'aggregate' };
+  }
+
+  async periodTrialBalance(
+    user: AuthUser,
+    periodYm: string,
+    storeId?: string,
+  ) {
     if (!/^\d{4}-\d{2}$/.test(periodYm)) {
       throw new BadRequestException('periodYm must be YYYY-MM');
     }
+    const { storeIds, scope } = await this.resolvePeriodStoreFilter(
+      user,
+      storeId,
+    );
     const entries = await this.prisma.journalEntry.findMany({
-      where: { periodYm },
+      where: {
+        periodYm,
+        storeId:
+          storeIds.length === 1 ? storeIds[0] : { in: storeIds },
+      },
       include: { lines: true },
     });
     const byCode = new Map<string, { debitVnd: number; creditVnd: number }>();
@@ -402,6 +422,9 @@ export class ReportsService {
     });
     return {
       periodYm,
+      storeId: storeId ?? null,
+      scope,
+      storeIds,
       rows: accounts.map((a) => {
         const t = byCode.get(a.code) ?? { debitVnd: 0, creditVnd: 0 };
         return {
@@ -416,8 +439,8 @@ export class ReportsService {
     };
   }
 
-  async periodPnl(user: AuthUser, periodYm: string) {
-    const tb = await this.periodTrialBalance(user, periodYm);
+  async periodPnl(user: AuthUser, periodYm: string, storeId?: string) {
+    const tb = await this.periodTrialBalance(user, periodYm, storeId);
     const pick = (code: string) =>
       tb.rows.find((r) => r.accountCode === code)?.balanceVnd ?? 0;
     // Revenue credits → negative balance in Dr-Cr convention; flip for PnL
@@ -430,6 +453,8 @@ export class ReportsService {
     const net = gross - expense642;
     return {
       periodYm,
+      storeId: tb.storeId,
+      scope: tb.scope,
       revenueVnd: revenue,
       cogsVnd: cogs632,
       grossProfitVnd: gross,
@@ -438,18 +463,21 @@ export class ReportsService {
     };
   }
 
-  async vatSummary(user: AuthUser, periodYm: string) {
-    const tb = await this.periodTrialBalance(user, periodYm);
+  async vatSummary(user: AuthUser, periodYm: string, storeId?: string) {
+    const tb = await this.periodTrialBalance(user, periodYm, storeId);
     const row = (code: string) =>
       tb.rows.find((r) => r.accountCode === code) ?? {
         debitVnd: 0,
         creditVnd: 0,
       };
-    const outputVatVnd = row('3331').creditVnd;
-    const inputVatVnd = row('1331').debitVnd;
-    const revenueBaseVnd = row('511').creditVnd;
+    // Net movement: returns reverse VAT/revenue
+    const outputVatVnd = row('3331').creditVnd - row('3331').debitVnd;
+    const inputVatVnd = row('1331').debitVnd - row('1331').creditVnd;
+    const revenueBaseVnd = row('511').creditVnd - row('511').debitVnd;
     return {
       periodYm,
+      storeId: tb.storeId,
+      scope: tb.scope,
       outputVatVnd,
       inputVatVnd,
       netVatVnd: outputVatVnd - inputVatVnd,
@@ -457,15 +485,34 @@ export class ReportsService {
     };
   }
 
-  async periodExportCsv(user: AuthUser, periodYm: string): Promise<string> {
-    const tb = await this.periodTrialBalance(user, periodYm);
-    const pnl = await this.periodPnl(user, periodYm);
-    const vat = await this.vatSummary(user, periodYm);
+  private csvEscape(value: string | number): string {
+    const s = String(value);
+    if (/[",\n\r]/.test(s)) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  }
+
+  async periodExportCsv(
+    user: AuthUser,
+    periodYm: string,
+    storeId?: string,
+  ): Promise<string> {
+    const tb = await this.periodTrialBalance(user, periodYm, storeId);
+    const pnl = await this.periodPnl(user, periodYm, storeId);
+    const vat = await this.vatSummary(user, periodYm, storeId);
     const lines = [
       'section,accountCode,name,debitVnd,creditVnd,balanceVnd',
       ...tb.rows.map(
         (r) =>
-          `trial_balance,${r.accountCode},"${r.name}",${r.debitVnd},${r.creditVnd},${r.balanceVnd}`,
+          [
+            'trial_balance',
+            r.accountCode,
+            this.csvEscape(r.name),
+            r.debitVnd,
+            r.creditVnd,
+            r.balanceVnd,
+          ].join(','),
       ),
       `pnl,revenue,,${pnl.revenueVnd},,`,
       `pnl,cogs,,${pnl.cogsVnd},,`,
@@ -476,16 +523,33 @@ export class ReportsService {
       `vat,input,,${vat.inputVatVnd},,`,
       `vat,net,,${vat.netVatVnd},,`,
       `vat,revenue_base,,${vat.revenueBaseVnd},,`,
+      `meta,scope,${this.csvEscape(tb.scope)},,,`,
+      `meta,storeId,${this.csvEscape(tb.storeId ?? 'all')},,,`,
     ];
     return lines.join('\n');
   }
 
-  async periodExportXlsx(user: AuthUser, periodYm: string): Promise<Buffer> {
-    const tb = await this.periodTrialBalance(user, periodYm);
-    const pnl = await this.periodPnl(user, periodYm);
-    const vat = await this.vatSummary(user, periodYm);
+  async periodExportXlsx(
+    user: AuthUser,
+    periodYm: string,
+    storeId?: string,
+  ): Promise<Buffer> {
+    const tb = await this.periodTrialBalance(user, periodYm, storeId);
+    const pnl = await this.periodPnl(user, periodYm, storeId);
+    const vat = await this.vatSummary(user, periodYm, storeId);
     const wb = new ExcelJS.Workbook();
     wb.creator = 'tap-hoa';
+    const moneyCols = new Set(['debitVnd', 'creditVnd', 'balanceVnd', 'vnd']);
+    const formatMoneySheet = (sheet: ExcelJS.Worksheet, headerRow: number) => {
+      sheet.views = [{ state: 'frozen', ySplit: headerRow }];
+      sheet.getRow(headerRow).font = { bold: true };
+      sheet.columns.forEach((col) => {
+        const key = String(col.values?.[headerRow] ?? '').toLowerCase();
+        if (moneyCols.has(key) || key === 'vnd') {
+          col.numFmt = '#,##0';
+        }
+      });
+    };
     const tbSheet = wb.addWorksheet('trial_balance');
     tbSheet.addRow([
       'accountCode',
@@ -505,6 +569,7 @@ export class ReportsService {
         r.balanceVnd,
       ]);
     }
+    formatMoneySheet(tbSheet, 1);
     const pnlSheet = wb.addWorksheet('pnl');
     pnlSheet.addRow(['metric', 'vnd']);
     pnlSheet.addRow(['revenueVnd', pnl.revenueVnd]);
@@ -512,48 +577,80 @@ export class ReportsService {
     pnlSheet.addRow(['grossProfitVnd', pnl.grossProfitVnd]);
     pnlSheet.addRow(['operatingExpenseVnd', pnl.operatingExpenseVnd]);
     pnlSheet.addRow(['netIncomeVnd', pnl.netIncomeVnd]);
+    formatMoneySheet(pnlSheet, 1);
     const vatSheet = wb.addWorksheet('vat');
     vatSheet.addRow(['metric', 'vnd']);
     vatSheet.addRow(['outputVatVnd', vat.outputVatVnd]);
     vatSheet.addRow(['inputVatVnd', vat.inputVatVnd]);
     vatSheet.addRow(['netVatVnd', vat.netVatVnd]);
     vatSheet.addRow(['revenueBaseVnd', vat.revenueBaseVnd]);
+    vatSheet.addRow(['scope', tb.scope]);
+    vatSheet.addRow(['storeId', tb.storeId ?? 'all']);
+    formatMoneySheet(vatSheet, 1);
     const buf = await wb.xlsx.writeBuffer();
     return Buffer.from(buf);
   }
 
-  async periodExportPdf(user: AuthUser, periodYm: string): Promise<Buffer> {
-    const tb = await this.periodTrialBalance(user, periodYm);
-    const pnl = await this.periodPnl(user, periodYm);
-    const vat = await this.vatSummary(user, periodYm);
+  private formatVnd(n: number): string {
+    return new Intl.NumberFormat('vi-VN').format(n) + ' đ';
+  }
+
+  async periodExportPdf(
+    user: AuthUser,
+    periodYm: string,
+    storeId?: string,
+  ): Promise<Buffer> {
+    const tb = await this.periodTrialBalance(user, periodYm, storeId);
+    const pnl = await this.periodPnl(user, periodYm, storeId);
+    const vat = await this.vatSummary(user, periodYm, storeId);
+    let storeName = 'Tất cả cửa hàng';
+    if (storeId) {
+      const store = await this.prisma.store.findUnique({
+        where: { id: storeId },
+        select: { name: true, code: true },
+      });
+      storeName = store ? `${store.code} — ${store.name}` : storeId;
+    }
+    const createdAt = new Date().toISOString();
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 48, size: 'A4' });
       const chunks: Buffer[] = [];
       doc.on('data', (c) => chunks.push(Buffer.from(c)));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
-      doc.fontSize(16).text(`Bao cao ky ${periodYm}`, { underline: true });
+      // pdfkit built-in fonts lack Vietnamese; embed Helvetica and use
+      // NFC text — for full Unicode use a TTF when available.
+      try {
+        // Prefer Windows Vietnamese-capable font when present.
+        doc.font('C:\\Windows\\Fonts\\arial.ttf');
+      } catch {
+        doc.font('Helvetica');
+      }
+      doc.fontSize(16).text(`Báo cáo kỳ ${periodYm}`, { underline: true });
+      doc.fontSize(10).text(`Cửa hàng: ${storeName} (${tb.scope})`);
+      doc.text(`Ngày tạo: ${createdAt}`);
       doc.moveDown();
-      doc.fontSize(12).text('KQKD');
-      doc.text(`Doanh thu: ${pnl.revenueVnd}`);
-      doc.text(`Gia von: ${pnl.cogsVnd}`);
-      doc.text(`Lai gop: ${pnl.grossProfitVnd}`);
-      doc.text(`Chi phi: ${pnl.operatingExpenseVnd}`);
-      doc.text(`Lai rong: ${pnl.netIncomeVnd}`);
+      doc.fontSize(12).text('Kết quả kinh doanh');
+      doc.text(`Doanh thu: ${this.formatVnd(pnl.revenueVnd)}`);
+      doc.text(`Giá vốn: ${this.formatVnd(pnl.cogsVnd)}`);
+      doc.text(`Lãi gộp: ${this.formatVnd(pnl.grossProfitVnd)}`);
+      doc.text(`Chi phí: ${this.formatVnd(pnl.operatingExpenseVnd)}`);
+      doc.text(`Lãi ròng: ${this.formatVnd(pnl.netIncomeVnd)}`);
       doc.moveDown();
-      doc.text('VAT / GTGT');
-      doc.text(`Dau ra (3331): ${vat.outputVatVnd}`);
-      doc.text(`Dau vao (1331): ${vat.inputVatVnd}`);
-      doc.text(`Phai nop: ${vat.netVatVnd}`);
-      doc.text(`Doanh thu chiu thue: ${vat.revenueBaseVnd}`);
+      doc.text('VAT / GTGT (ròng)');
+      doc.text(`Đầu ra (3331): ${this.formatVnd(vat.outputVatVnd)}`);
+      doc.text(`Đầu vào (1331): ${this.formatVnd(vat.inputVatVnd)}`);
+      doc.text(`Phải nộp: ${this.formatVnd(vat.netVatVnd)}`);
+      doc.text(`Doanh thu chịu thuế: ${this.formatVnd(vat.revenueBaseVnd)}`);
       doc.moveDown();
-      doc.text('CDPS (tom tat)');
+      doc.text('Cân đối phát sinh (tóm tắt)');
       for (const r of tb.rows) {
         if (r.debitVnd === 0 && r.creditVnd === 0) continue;
+        if (doc.y > 720) doc.addPage();
         doc
           .fontSize(10)
           .text(
-            `${r.accountCode} ${r.name}: Dr ${r.debitVnd} / Cr ${r.creditVnd}`,
+            `${r.accountCode} ${r.name}: Nợ ${this.formatVnd(r.debitVnd)} / Có ${this.formatVnd(r.creditVnd)}`,
           );
       }
       doc.end();
@@ -564,14 +661,16 @@ export class ReportsService {
   async vatDeclarationAssist(
     user: AuthUser,
     periodYm: string,
+    storeId?: string,
   ): Promise<string> {
-    const vat = await this.vatSummary(user, periodYm);
+    const vat = await this.vatSummary(user, periodYm, storeId);
     const lines = [
       'field,valueVnd,note',
-      `periodYm,${periodYm},ky ke toan ICT`,
-      `revenueBaseVnd,${vat.revenueBaseVnd},Co 511 (net khi VAT on)`,
-      `outputVatVnd,${vat.outputVatVnd},Co 3331 — GTGT dau ra`,
-      `inputVatVnd,${vat.inputVatVnd},No 1331 — GTGT dau vao`,
+      `periodYm,${this.csvEscape(periodYm)},ky ke toan ICT`,
+      `storeId,${this.csvEscape(vat.storeId ?? 'all')},${vat.scope}`,
+      `revenueBaseVnd,${vat.revenueBaseVnd},Co 511 net (Cr-Dr)`,
+      `outputVatVnd,${vat.outputVatVnd},3331 Cr-Dr — GTGT dau ra rong`,
+      `inputVatVnd,${vat.inputVatVnd},1331 Dr-Cr — GTGT dau vao rong`,
       `netVatVnd,${vat.netVatVnd},output - input (ho tro ke khai; khong nop CQT)`,
     ];
     return lines.join('\n');
@@ -621,9 +720,72 @@ export class ReportsService {
     };
   }
 
+  /** RFC4180-ish CSV parse with quoted fields. */
+  private parseCsvRows(csv: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < csv.length; i++) {
+      const ch = csv[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (csv[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += ch;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inQuotes = true;
+        continue;
+      }
+      if (ch === ',' || ch === ';') {
+        row.push(field.trim());
+        field = '';
+        continue;
+      }
+      if (ch === '\n') {
+        row.push(field.trim());
+        field = '';
+        if (row.some((c) => c.length > 0)) rows.push(row);
+        row = [];
+        continue;
+      }
+      if (ch === '\r') continue;
+      field += ch;
+    }
+    row.push(field.trim());
+    if (row.some((c) => c.length > 0)) rows.push(row);
+    return rows;
+  }
+
+  private statementFingerprint(input: {
+    storeId: string;
+    periodYm: string;
+    bookedAt: Date;
+    amountVnd: number;
+    memo: string | null;
+  }): string {
+    const raw = [
+      input.storeId,
+      input.periodYm,
+      input.bookedAt.toISOString(),
+      String(input.amountVnd),
+      input.memo ?? '',
+    ].join('|');
+    return createHash('sha256').update(raw).digest('hex');
+  }
+
   /**
    * Import CSV lines: date,amountVnd,memo (header optional).
    * date = YYYY-MM-DD; amount positive = store inbound transfer.
+   * Idempotent via fingerprint unique constraint.
    */
   async importBankStatement(
     user: AuthUser,
@@ -639,6 +801,9 @@ export class ReportsService {
     if (!/^\d{4}-\d{2}$/.test(periodYm)) {
       throw new BadRequestException('periodYm must be YYYY-MM');
     }
+    if (csv.length > 2_000_000) {
+      throw new BadRequestException('csv_too_large');
+    }
     const lock = await this.prisma.bankReconLock.findUnique({
       where: { storeId_periodYm: { storeId, periodYm } },
     });
@@ -653,12 +818,12 @@ export class ReportsService {
       bookedAt: Date;
       amountVnd: number;
       memo: string | null;
+      fingerprint: string;
     }[] = [];
-    for (const raw of csv.split(/\r?\n/)) {
-      const row = raw.trim();
-      if (!row || /^date[,;]/i.test(row)) continue;
-      const parts = row.split(/[,;]/).map((p) => p.trim());
+    const seen = new Set<string>();
+    for (const parts of this.parseCsvRows(csv)) {
       if (parts.length < 2) continue;
+      if (/^date$/i.test(parts[0])) continue;
       const bookedAt = new Date(`${parts[0]}T12:00:00.000Z`);
       const amountVnd = Number(parts[1]);
       if (Number.isNaN(bookedAt.getTime()) || !Number.isSafeInteger(amountVnd)) {
@@ -667,6 +832,16 @@ export class ReportsService {
       if (periodYmFromDate(bookedAt) !== periodYm) {
         continue;
       }
+      const memo = parts[2] || null;
+      const fingerprint = this.statementFingerprint({
+        storeId,
+        periodYm,
+        bookedAt,
+        amountVnd,
+        memo,
+      });
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
       lines.push({
         id: randomUUID(),
         storeId,
@@ -674,28 +849,33 @@ export class ReportsService {
         periodYm,
         bookedAt,
         amountVnd,
-        memo: parts[2] || null,
+        memo,
+        fingerprint,
       });
     }
     if (lines.length === 0) {
       throw new BadRequestException('no_valid_statement_lines');
     }
-    await this.prisma.bankStatementLine.createMany({ data: lines });
-    return { imported: lines.length, periodYm };
+    const result = await this.prisma.bankStatementLine.createMany({
+      data: lines,
+      skipDuplicates: true,
+    });
+    return {
+      imported: result.count,
+      skippedDuplicates: lines.length - result.count,
+      periodYm,
+    };
   }
 
-  async bankReconSummary(user: AuthUser, storeId: string, periodYm: string) {
-    this.assertStoreAccess(user, storeId);
-    if (user.role !== Role.owner && user.role !== Role.store_manager) {
-      throw new ForbiddenException('forbidden');
-    }
-    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
-      throw new BadRequestException('periodYm must be YYYY-MM');
-    }
+  private async loadBankBook(
+    storeId: string,
+    periodYm: string,
+  ): Promise<
+    { ref: string; kind: string; amountVnd: number; at: string; memo: string }[]
+  > {
     const [y, m] = periodYm.split('-').map(Number);
     const from = new Date(Date.UTC(y, m - 1, 1) - 7 * 3600_000);
     const to = new Date(Date.UTC(y, m, 1) - 7 * 3600_000 - 1);
-
     const sales = await this.prisma.sale.findMany({
       where: {
         storeId,
@@ -717,6 +897,125 @@ export class ReportsService {
         clientCreatedAt: { gte: from, lte: to },
       },
     });
+    return [
+      ...sales.map((s) => ({
+        ref: `sale:${s.id}`,
+        kind: 'sale_transfer',
+        amountVnd: s.transferAmount,
+        at: s.clientCreatedAt.toISOString(),
+        memo: s.id.slice(0, 8),
+      })),
+      ...vouchers.map((v) => ({
+        ref: `voucher:${v.id}`,
+        kind: `voucher_${v.direction}`,
+        amountVnd: v.direction === 'in' ? v.amountVnd : -v.amountVnd,
+        at: v.clientCreatedAt.toISOString(),
+        memo: v.note ?? v.id.slice(0, 8),
+      })),
+      ...supplierPays.map((p) => ({
+        ref: `supplier_pay:${p.id}`,
+        kind: 'supplier_payment',
+        amountVnd: -p.amountVnd,
+        at: p.clientCreatedAt.toISOString(),
+        memo: p.note ?? p.id.slice(0, 8),
+      })),
+    ];
+  }
+
+  /**
+   * Score book↔statement candidates: amount exact + date window + memo overlap.
+   * Higher is better; < 0 means reject.
+   */
+  private matchScore(
+    st: { amountVnd: number; bookedAt: Date; memo: string | null },
+    book: { amountVnd: number; at: string; memo: string; ref: string },
+  ): number {
+    if (st.amountVnd !== book.amountVnd) return -1;
+    const bookAt = new Date(book.at).getTime();
+    const stAt = st.bookedAt.getTime();
+    const dayMs = 86_400_000;
+    const days = Math.abs(stAt - bookAt) / dayMs;
+    // Same calendar period is already enforced by loaders; allow full-month window.
+    if (days > 40) return -1;
+    let score = 100 - Math.min(days, 30) * 2;
+    const memo = (st.memo ?? '').toLowerCase();
+    if (memo && book.memo && memo.includes(book.memo.toLowerCase())) {
+      score += 30;
+    }
+    if (memo && book.ref && memo.includes(book.ref.split(':')[1]?.slice(0, 8))) {
+      score += 20;
+    }
+    return score;
+  }
+
+  private computeMatches(
+    statements: {
+      id: string;
+      amountVnd: number;
+      bookedAt: Date;
+      memo: string | null;
+      matchedRef: string | null;
+    }[],
+    book: { ref: string; kind: string; amountVnd: number; at: string; memo: string }[],
+  ) {
+    const unmatchedBook = [...book];
+    const matched: {
+      statementId: string;
+      bookRef: string;
+      amountVnd: number;
+      suggested: boolean;
+    }[] = [];
+    // Honor persisted matches first
+    for (const st of statements) {
+      if (!st.matchedRef) continue;
+      const idx = unmatchedBook.findIndex((b) => b.ref === st.matchedRef);
+      if (idx >= 0) {
+        const [b] = unmatchedBook.splice(idx, 1);
+        matched.push({
+          statementId: st.id,
+          bookRef: b.ref,
+          amountVnd: st.amountVnd,
+          suggested: false,
+        });
+      }
+    }
+    // Suggest remaining by score
+    const unmatchedSt = statements.filter(
+      (s) => !matched.some((m) => m.statementId === s.id),
+    );
+    for (const st of unmatchedSt) {
+      let bestIdx = -1;
+      let bestScore = -1;
+      for (let i = 0; i < unmatchedBook.length; i++) {
+        const score = this.matchScore(st, unmatchedBook[i]);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx >= 0 && bestScore >= 50) {
+        const [b] = unmatchedBook.splice(bestIdx, 1);
+        matched.push({
+          statementId: st.id,
+          bookRef: b.ref,
+          amountVnd: st.amountVnd,
+          suggested: true,
+        });
+      }
+    }
+    return { matched, unmatchedBook };
+  }
+
+  /** Read-only summary — never mutates matchedRef. */
+  async bankReconSummary(user: AuthUser, storeId: string, periodYm: string) {
+    this.assertStoreAccess(user, storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const book = await this.loadBankBook(storeId, periodYm);
     const statements = await this.prisma.bankStatementLine.findMany({
       where: { storeId, periodYm },
       orderBy: { bookedAt: 'asc' },
@@ -724,60 +1023,12 @@ export class ReportsService {
     const lock = await this.prisma.bankReconLock.findUnique({
       where: { storeId_periodYm: { storeId, periodYm } },
     });
-
-    type BookLine = {
-      ref: string;
-      kind: string;
-      amountVnd: number;
-      at: string;
-    };
-    const book: BookLine[] = [
-      ...sales.map((s) => ({
-        ref: `sale:${s.id}`,
-        kind: 'sale_transfer',
-        amountVnd: s.transferAmount,
-        at: s.clientCreatedAt.toISOString(),
-      })),
-      ...vouchers.map((v) => ({
-        ref: `voucher:${v.id}`,
-        kind: `voucher_${v.direction}`,
-        amountVnd: v.direction === 'in' ? v.amountVnd : -v.amountVnd,
-        at: v.clientCreatedAt.toISOString(),
-      })),
-      ...supplierPays.map((p) => ({
-        ref: `supplier_pay:${p.id}`,
-        kind: 'supplier_payment',
-        amountVnd: -p.amountVnd,
-        at: p.clientCreatedAt.toISOString(),
-      })),
-    ];
-
     const bookTotal = book.reduce((s, b) => s + b.amountVnd, 0);
     const statementTotal = statements.reduce((s, l) => s + l.amountVnd, 0);
-
-    const unmatchedBook = [...book];
-    const matched: {
-      statementId: string;
-      bookRef: string;
-      amountVnd: number;
-    }[] = [];
-    for (const st of statements) {
-      const idx = unmatchedBook.findIndex((b) => b.amountVnd === st.amountVnd);
-      if (idx >= 0) {
-        const [b] = unmatchedBook.splice(idx, 1);
-        matched.push({
-          statementId: st.id,
-          bookRef: b.ref,
-          amountVnd: st.amountVnd,
-        });
-        if (!st.matchedRef) {
-          await this.prisma.bankStatementLine.update({
-            where: { id: st.id },
-            data: { matchedRef: b.ref },
-          });
-        }
-      }
-    }
+    const { matched, unmatchedBook } = this.computeMatches(statements, book);
+    const persistedMatched = matched.filter((m) => !m.suggested);
+    const unmatchedStatementCount =
+      statements.length - persistedMatched.length;
 
     return {
       storeId,
@@ -786,14 +1037,136 @@ export class ReportsService {
       bookTotalVnd: bookTotal,
       statementTotalVnd: statementTotal,
       varianceVnd: statementTotal - bookTotal,
-      matchedCount: matched.length,
+      matchedCount: persistedMatched.length,
+      suggestedMatchCount: matched.filter((m) => m.suggested).length,
       unmatchedBookCount: unmatchedBook.length,
-      unmatchedStatementCount: statements.length - matched.length,
+      unmatchedStatementCount,
       book,
       statements,
       matched,
       unmatchedBook,
     };
+  }
+
+  async matchBankLine(
+    user: AuthUser,
+    input: {
+      storeId: string;
+      periodYm: string;
+      statementId: string;
+      bookRef: string;
+      matchVersion?: number;
+    },
+  ) {
+    this.assertStoreAccess(user, input.storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    const lock = await this.prisma.bankReconLock.findUnique({
+      where: {
+        storeId_periodYm: {
+          storeId: input.storeId,
+          periodYm: input.periodYm,
+        },
+      },
+    });
+    if (lock) throw new BadRequestException('bank_recon_locked');
+    const st = await this.prisma.bankStatementLine.findUnique({
+      where: { id: input.statementId },
+    });
+    if (!st || st.storeId !== input.storeId || st.periodYm !== input.periodYm) {
+      throw new BadRequestException('statement_not_found');
+    }
+    if (
+      input.matchVersion != null &&
+      st.matchVersion !== input.matchVersion
+    ) {
+      throw new BadRequestException('match_version_conflict');
+    }
+    const book = await this.loadBankBook(input.storeId, input.periodYm);
+    const bookLine = book.find((b) => b.ref === input.bookRef);
+    if (!bookLine) throw new BadRequestException('book_ref_not_found');
+    if (bookLine.amountVnd !== st.amountVnd) {
+      throw new BadRequestException('amount_mismatch');
+    }
+    const taken = await this.prisma.bankStatementLine.findFirst({
+      where: {
+        storeId: input.storeId,
+        periodYm: input.periodYm,
+        matchedRef: input.bookRef,
+        NOT: { id: st.id },
+      },
+    });
+    if (taken) throw new BadRequestException('book_ref_already_matched');
+    return this.prisma.bankStatementLine.update({
+      where: { id: st.id },
+      data: {
+        matchedRef: input.bookRef,
+        matchVersion: { increment: 1 },
+      },
+    });
+  }
+
+  async unmatchBankLine(
+    user: AuthUser,
+    input: {
+      storeId: string;
+      periodYm: string;
+      statementId: string;
+      matchVersion?: number;
+    },
+  ) {
+    this.assertStoreAccess(user, input.storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    const lock = await this.prisma.bankReconLock.findUnique({
+      where: {
+        storeId_periodYm: {
+          storeId: input.storeId,
+          periodYm: input.periodYm,
+        },
+      },
+    });
+    if (lock) throw new BadRequestException('bank_recon_locked');
+    const st = await this.prisma.bankStatementLine.findUnique({
+      where: { id: input.statementId },
+    });
+    if (!st || st.storeId !== input.storeId || st.periodYm !== input.periodYm) {
+      throw new BadRequestException('statement_not_found');
+    }
+    if (
+      input.matchVersion != null &&
+      st.matchVersion !== input.matchVersion
+    ) {
+      throw new BadRequestException('match_version_conflict');
+    }
+    return this.prisma.bankStatementLine.update({
+      where: { id: st.id },
+      data: { matchedRef: null, matchVersion: { increment: 1 } },
+    });
+  }
+
+  /** Persist high-confidence suggested matches. */
+  async autoMatchBankRecon(
+    user: AuthUser,
+    storeId: string,
+    periodYm: string,
+  ) {
+    const summary = await this.bankReconSummary(user, storeId, periodYm);
+    if (summary.locked) throw new BadRequestException('bank_recon_locked');
+    let applied = 0;
+    for (const m of summary.matched) {
+      if (!m.suggested) continue;
+      await this.matchBankLine(user, {
+        storeId,
+        periodYm,
+        statementId: m.statementId,
+        bookRef: m.bookRef,
+      });
+      applied += 1;
+    }
+    return { applied };
   }
 
   async lockBankRecon(user: AuthUser, storeId: string, periodYm: string) {
@@ -804,7 +1177,35 @@ export class ReportsService {
     if (!/^\d{4}-\d{2}$/.test(periodYm)) {
       throw new BadRequestException('periodYm must be YYYY-MM');
     }
-    return this.prisma.bankReconLock.upsert({
+    const summary = await this.bankReconSummary(user, storeId, periodYm);
+    if (summary.varianceVnd !== 0) {
+      throw new BadRequestException('bank_recon_variance_nonzero');
+    }
+    if (
+      summary.unmatchedStatementCount > 0 ||
+      summary.unmatchedBookCount > 0
+    ) {
+      // Allow lock if suggestions cover everything — auto-apply first
+      if (
+        summary.suggestedMatchCount > 0 &&
+        summary.matchedCount + summary.suggestedMatchCount ===
+          summary.statements.length &&
+        summary.unmatchedBookCount === 0
+      ) {
+        await this.autoMatchBankRecon(user, storeId, periodYm);
+        const again = await this.bankReconSummary(user, storeId, periodYm);
+        if (
+          again.unmatchedStatementCount > 0 ||
+          again.unmatchedBookCount > 0 ||
+          again.varianceVnd !== 0
+        ) {
+          throw new BadRequestException('bank_recon_unmatched_remaining');
+        }
+      } else {
+        throw new BadRequestException('bank_recon_unmatched_remaining');
+      }
+    }
+    const lock = await this.prisma.bankReconLock.upsert({
       where: { storeId_periodYm: { storeId, periodYm } },
       create: {
         id: randomUUID(),
@@ -814,5 +1215,19 @@ export class ReportsService {
       },
       update: {},
     });
+    await this.prisma.auditLog.create({
+      data: {
+        id: randomUUID(),
+        actorUserId: user.userId,
+        action: 'bank_recon_locked',
+        entityType: 'bank_recon',
+        entityId: `${storeId}:${periodYm}`,
+        detailJson: JSON.stringify({
+          varianceVnd: summary.varianceVnd,
+          matchedCount: summary.matchedCount,
+        }),
+      },
+    });
+    return lock;
   }
 }

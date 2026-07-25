@@ -31,10 +31,16 @@ class LedgerRepository {
     return (res.data ?? []).cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> trialBalance(String periodYm) async {
+  Future<Map<String, dynamic>> trialBalance(
+    String periodYm, {
+    String? storeId,
+  }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/ledger/trial-balance',
-      queryParameters: {'periodYm': periodYm},
+      queryParameters: {
+        'periodYm': periodYm,
+        'storeId': ?storeId,
+      },
     );
     return res.data ?? {};
   }
@@ -51,62 +57,102 @@ class LedgerRepository {
     return (res.data ?? []).cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> periodPnl(String periodYm) async {
+  Future<Map<String, dynamic>> periodPnl(
+    String periodYm, {
+    String? storeId,
+  }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/reports/period/pnl',
-      queryParameters: {'periodYm': periodYm},
+      queryParameters: {
+        'periodYm': periodYm,
+        'storeId': ?storeId,
+      },
     );
     return res.data ?? {};
   }
 
-  Future<String> periodExportCsv(String periodYm) async {
+  Future<String> periodExportCsv(String periodYm, {String? storeId}) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/reports/period/export.csv',
-      queryParameters: {'periodYm': periodYm},
+      queryParameters: {
+        'periodYm': periodYm,
+        'storeId': ?storeId,
+      },
     );
     return (res.data?['csv'] as String?) ?? '';
   }
 
-  Future<Map<String, dynamic>> periodVat(String periodYm) async {
+  Future<Map<String, dynamic>> periodVat(
+    String periodYm, {
+    String? storeId,
+  }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/reports/period/vat',
-      queryParameters: {'periodYm': periodYm},
+      queryParameters: {
+        'periodYm': periodYm,
+        'storeId': ?storeId,
+      },
     );
     return res.data ?? {};
   }
 
-  Future<List<int>> periodExportXlsx(String periodYm) async {
+  Future<List<int>> periodExportXlsx(
+    String periodYm, {
+    String? storeId,
+  }) async {
     final res = await _dio.get<List<int>>(
       '/reports/period/export.xlsx',
-      queryParameters: {'periodYm': periodYm},
+      queryParameters: {
+        'periodYm': periodYm,
+        'storeId': ?storeId,
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return res.data ?? const [];
   }
 
-  Future<List<int>> periodExportPdf(String periodYm) async {
+  Future<List<int>> periodExportPdf(
+    String periodYm, {
+    String? storeId,
+  }) async {
     final res = await _dio.get<List<int>>(
       '/reports/period/export.pdf',
-      queryParameters: {'periodYm': periodYm},
+      queryParameters: {
+        'periodYm': periodYm,
+        'storeId': ?storeId,
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return res.data ?? const [];
   }
 
-  Future<String> vatDeclarationCsv(String periodYm) async {
+  Future<String> vatDeclarationCsv(
+    String periodYm, {
+    String? storeId,
+  }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/reports/period/vat-declaration.csv',
-      queryParameters: {'periodYm': periodYm},
+      queryParameters: {
+        'periodYm': periodYm,
+        'storeId': ?storeId,
+      },
     );
     return (res.data?['csv'] as String?) ?? '';
   }
 }
 
 class LedgerHomePage extends StatefulWidget {
-  const LedgerHomePage({super.key, required this.repository, required this.isOwner});
+  const LedgerHomePage({
+    super.key,
+    required this.repository,
+    required this.isOwner,
+    this.storeId,
+  });
 
   final LedgerRepository repository;
   final bool isOwner;
+  /// When set, period reports are store-scoped; null = owner aggregate.
+  final String? storeId;
 
   @override
   State<LedgerHomePage> createState() => _LedgerHomePageState();
@@ -145,10 +191,20 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
       final entries = await widget.repository.journal(
         from: from.toIso8601String(),
         to: to.toIso8601String(),
+        storeId: widget.storeId,
       );
-      final tb = await widget.repository.trialBalance(_periodYm);
-      final pnl = await widget.repository.periodPnl(_periodYm);
-      final vat = await widget.repository.periodVat(_periodYm);
+      final tb = await widget.repository.trialBalance(
+        _periodYm,
+        storeId: widget.storeId,
+      );
+      final pnl = await widget.repository.periodPnl(
+        _periodYm,
+        storeId: widget.storeId,
+      );
+      final vat = await widget.repository.periodVat(
+        _periodYm,
+        storeId: widget.storeId,
+      );
       final locks = await widget.repository.periodLocks();
       if (!mounted) return;
       setState(() {
@@ -186,7 +242,10 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
 
   Future<void> _exportCsv() async {
     try {
-      final csv = await widget.repository.periodExportCsv(_periodYm);
+      final csv = await widget.repository.periodExportCsv(
+        _periodYm,
+        storeId: widget.storeId,
+      );
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -223,7 +282,10 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
 
   Future<void> _exportExcel() async {
     try {
-      final bytes = await widget.repository.periodExportXlsx(_periodYm);
+      final bytes = await widget.repository.periodExportXlsx(
+        _periodYm,
+        storeId: widget.storeId,
+      );
       if (bytes.isEmpty) {
         throw Exception('empty_xlsx');
       }
@@ -248,7 +310,10 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
 
   Future<void> _exportPdf() async {
     try {
-      final bytes = await widget.repository.periodExportPdf(_periodYm);
+      final bytes = await widget.repository.periodExportPdf(
+        _periodYm,
+        storeId: widget.storeId,
+      );
       if (bytes.isEmpty) throw Exception('empty_pdf');
       final dir = await getTemporaryDirectory();
       final path = '${dir.path}${Platform.pathSeparator}period-$_periodYm.pdf';
@@ -271,7 +336,10 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
 
   Future<void> _exportVatDeclaration() async {
     try {
-      final csv = await widget.repository.vatDeclarationCsv(_periodYm);
+      final csv = await widget.repository.vatDeclarationCsv(
+        _periodYm,
+        storeId: widget.storeId,
+      );
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -319,9 +387,13 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Sổ kế toán'),
               Text(
-                lockHint,
+                widget.storeId == null
+                    ? 'Sổ kế toán (tổng hợp)'
+                    : 'Sổ kế toán (cửa hàng)',
+              ),
+              Text(
+                '$_periodYm · $lockHint',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

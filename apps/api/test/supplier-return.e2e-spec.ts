@@ -104,6 +104,8 @@ describe('Phase 3 supplier return e2e', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         storeId,
+        purchaseReceiptId: receiptId,
+        clientId: randomUUID(),
         lines: [{ productId, qty: '2', unitCostVnd: 11_000 }],
       })
       .expect(201);

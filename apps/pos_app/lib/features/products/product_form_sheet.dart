@@ -407,7 +407,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String?>(
-                    value: _groupId,
+                    initialValue: _groupId,
                     decoration: const InputDecoration(labelText: 'Nhóm hàng'),
                     items: [
                       const DropdownMenuItem<String?>(
@@ -427,7 +427,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: _kind,
+                    initialValue: _kind,
                     decoration: const InputDecoration(labelText: 'Loại'),
                     items: const [
                       DropdownMenuItem(value: 'normal', child: Text('Thường')),

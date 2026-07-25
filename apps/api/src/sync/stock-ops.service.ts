@@ -628,6 +628,25 @@ export class StockOpsService {
           }
         }
 
+        const store = await tx.store.findUnique({
+          where: { id: dto.storeId },
+          select: { vatEnabled: true, defaultVatRateBps: true },
+        });
+        const productVat = new Map<string, number | null>();
+        for (const line of lines) {
+          if (!productVat.has(line.productId)) {
+            const p = await tx.product.findUnique({
+              where: { id: line.productId },
+              select: { vatRateBps: true },
+            });
+            productVat.set(line.productId, p?.vatRateBps ?? null);
+          }
+        }
+        const storeVat =
+          store?.vatEnabled && store.defaultVatRateBps > 0
+            ? store.defaultVatRateBps
+            : null;
+
         await tx.purchaseReceipt.create({
           data: {
             id: dto.id,
@@ -639,12 +658,34 @@ export class StockOpsService {
             recordedById: user.userId,
             clientCreatedAt,
             lines: {
-              create: lines.map((l) => ({
-                id: l.id,
-                productId: l.productId,
-                qty: l.qty,
-                unitCostVnd: l.unitCostVnd,
-              })),
+              create: lines.map((l) => {
+                const gross =
+                  l.unitCostVnd != null && l.unitCostVnd > 0
+                    ? Math.round(Number(l.qty) * l.unitCostVnd)
+                    : 0;
+                const rate =
+                  storeVat != null
+                    ? (productVat.get(l.productId) ?? storeVat)
+                    : null;
+                if (rate != null && rate > 0 && gross > 0) {
+                  const { netVnd, vatVnd } = splitInclusiveVat(gross, rate);
+                  return {
+                    id: l.id,
+                    productId: l.productId,
+                    qty: l.qty,
+                    unitCostVnd: l.unitCostVnd,
+                    vatRateBps: rate,
+                    netVnd,
+                    vatVnd,
+                  };
+                }
+                return {
+                  id: l.id,
+                  productId: l.productId,
+                  qty: l.qty,
+                  unitCostVnd: l.unitCostVnd,
+                };
+              }),
             },
           },
         });
@@ -661,21 +702,6 @@ export class StockOpsService {
               clientCreatedAt,
             },
           });
-        }
-
-        const store = await tx.store.findUnique({
-          where: { id: dto.storeId },
-          select: { vatEnabled: true, defaultVatRateBps: true },
-        });
-        const productVat = new Map<string, number | null>();
-        for (const line of lines) {
-          if (!productVat.has(line.productId)) {
-            const p = await tx.product.findUnique({
-              where: { id: line.productId },
-              select: { vatRateBps: true },
-            });
-            productVat.set(line.productId, p?.vatRateBps ?? null);
-          }
         }
 
         for (const line of lines) {
