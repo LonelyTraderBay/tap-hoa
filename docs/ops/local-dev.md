@@ -4,6 +4,22 @@ Use this when developing **multiple projects** on one PC. Everything below is
 namespaced to the folder / product name **tap-hoa** so ports, DB, Docker, and
 window titles do not collide with other repos.
 
+## Quick start (scripts are the entrypoint)
+
+From repo root — prefer these wrappers over raw `docker` / `npm` commands:
+
+```powershell
+cd C:\Users\C-PC\Documents\Projects\tap-hoa
+.\scripts\dev-up.ps1      # Postgres :55422 (Docker Compose or Supabase fallback)
+.\scripts\dev-setup.ps1   # npm install + migrate + seed (loads apps/api/.env)
+.\scripts\start-api.ps1   # Nest API :3040 (loads apps/api/.env)
+cd apps\pos_app
+flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
+```
+
+Copy `apps/api/.env.example` → `apps/api/.env` if `dev-setup` has not created it yet.
+IDE debug: `.vscode/launch.json` (API + Flutter with `API_URL` on `:3040`).
+
 ## Identity map
 
 | Concern | Value |
@@ -21,10 +37,17 @@ window titles do not collide with other repos.
 | Docker Compose project | `tap-hoa` (`docker-compose.dev.yml`) |
 | Prod Compose project | `tap-hoa` (`apps/api/docker-compose.prod.yml`) |
 
+## Docker PATH (Windows)
+
+Docker Desktop often installs `docker.exe` under
+`C:\Program Files\Docker\Docker\resources\bin`, which **may not be on PATH** in
+non-interactive shells (CI, Cursor agents, scheduled tasks). `.\scripts\dev-up.ps1`
+**prepends** that directory before calling `docker compose`. If raw `docker`
+fails with "command not found", use the script or add that folder to your PATH.
+
 ## Preferred DB: Docker Compose (when Docker Desktop is installed)
 
 ```powershell
-cd C:\Users\C-PC\Documents\Projects\tap-hoa
 .\scripts\dev-up.ps1
 .\scripts\dev-setup.ps1
 ```
@@ -76,6 +99,19 @@ flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 
 **Seed login (dev only):** `0900000001` / `123456`
 
+## Minimal POS smoke (local)
+
+After API is healthy and POS is running (`flutter run` above):
+
+1. **Đăng nhập** — seed `0900000001` / `123456`
+2. **Chọn cửa hàng** — CH1 or CH2
+3. **Mở ca** — enter opening cash; selling is blocked until shift is open
+4. **Bán 1 đơn tiền mặt** — add a product (e.g. STING-330 from synced catalog), complete cash (TM) sale
+5. **Đồng bộ** — tap **Đồng bộ** (or wait for auto sync); confirm no sync errors
+
+Quick API checks without POS: `docs/ops/local-smoke.md`. Full multi-device smoke:
+`docs/ops/smoke-multi-device.md`.
+
 ## Port cheat sheet (tap-hoa only)
 
 | Port | Service |
@@ -95,7 +131,7 @@ flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 - Point this app at another project's `postgres` DB on `:54322` / `:5432`
 - Commit `apps/api/.env` or real JWT / owner passwords
 - Reuse Compose project name `api` (old default from folder name)
-- Leave a global/shell `DATABASE_URL` from another project — it **overrides** `apps/api/.env`. Prefer `.\scripts\dev-setup.ps1` (loads `.env` into the process) or clear the variable first:
+- Leave a global/shell `DATABASE_URL` from another project — it **overrides** `apps/api/.env` when Prisma/npm read the shell env. Prefer `.\scripts\dev-setup.ps1` and `.\scripts\start-api.ps1` (both load `.env` into the process) or clear the variable first:
 
 ```powershell
 Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
