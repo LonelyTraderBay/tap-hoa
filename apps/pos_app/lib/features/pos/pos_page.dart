@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -32,11 +33,14 @@ import '../push/push_service.dart';
 import '../shifts/shift_repository.dart';
 import '../stores/store_management_page.dart';
 import 'cart.dart';
+import 'barcode_scanner_page.dart';
 import 'checkout_service.dart';
 import 'payment_sheet.dart';
 import 'receipt_print_settings_page.dart';
 import 'sale_return_service.dart';
 import 'sale_return_sheet.dart';
+
+typedef OpenBarcodeScanner = Future<String?> Function(BuildContext context);
 
 String _normalizeBarcodeQuery(String value) => value.trim().toLowerCase();
 
@@ -74,6 +78,20 @@ ProductWithStock? posExactBarcodeMatch(
   return match;
 }
 
+bool posCameraBarcodeScannerAvailable(
+  TargetPlatform platform, {
+  bool isWeb = kIsWeb,
+}) {
+  if (isWeb) return false;
+  return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+}
+
+Future<String?> openCameraBarcodeScanner(BuildContext context) {
+  return Navigator.of(context).push<String>(
+    MaterialPageRoute(builder: (_) => const PosBarcodeScannerPage()),
+  );
+}
+
 class PosPage extends StatefulWidget {
   const PosPage({
     super.key,
@@ -93,6 +111,7 @@ class PosPage extends StatefulWidget {
     required this.storeId,
     required this.storeName,
     required this.role,
+    this.openBarcodeScanner,
   });
 
   final ProductRepository productRepository;
@@ -111,6 +130,7 @@ class PosPage extends StatefulWidget {
   final String storeId;
   final String storeName;
   final String role;
+  final OpenBarcodeScanner? openBarcodeScanner;
 
   @override
   State<PosPage> createState() => _PosPageState();
@@ -220,6 +240,24 @@ class _PosPageState extends State<PosPage> {
     setState(() {
       _addProductToCart(product, qty: qty);
       _message = null;
+    });
+  }
+
+  Future<void> _scanBarcode() async {
+    final opener = widget.openBarcodeScanner ?? openCameraBarcodeScanner;
+    final scannedBarcode = await opener(context);
+    if (!mounted) {
+      return;
+    }
+
+    final query = scannedBarcode?.trim();
+    if (query == null || query.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _searchController.text = query;
+      _query = query;
     });
   }
 
@@ -835,13 +873,28 @@ class _PosPageState extends State<PosPage> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Tìm tên, mã SKU hoặc barcode',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (value) => setState(() => _query = value.trim()),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tìm tên, mã SKU hoặc barcode',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (value) => setState(() => _query = value.trim()),
+                  ),
+                ),
+                if (posCameraBarcodeScannerAvailable(defaultTargetPlatform))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: IconButton.filledTonal(
+                      onPressed: _scanBarcode,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      tooltip: 'Quét barcode bằng camera',
+                    ),
+                  ),
+              ],
             ),
           ),
           SizedBox(

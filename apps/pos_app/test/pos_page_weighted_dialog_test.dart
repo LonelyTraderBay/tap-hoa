@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -54,6 +55,7 @@ void main() {
   Future<void> pumpPosPage(
     WidgetTester tester, {
     required List<ProductWithStock> products,
+    OpenBarcodeScanner? openBarcodeScanner,
   }) async {
     await tester.binding.setSurfaceSize(const Size(1600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -90,6 +92,7 @@ void main() {
           storeId: 'store-1',
           storeName: 'Cửa hàng 1',
           role: 'owner',
+          openBarcodeScanner: openBarcodeScanner,
         ),
       ),
     );
@@ -191,6 +194,63 @@ void main() {
     expect(find.text('12500 VND'), findsOneWidget);
 
     await unmount(tester);
+  });
+
+  testWidgets('camera scanner button is hidden on Windows', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+
+    try {
+      await pumpPosPage(
+        tester,
+        products: [
+          _product(
+            id: 'water',
+            name: 'Nước suối',
+            barcode: '893WATER',
+            unit: 'chai',
+            isWeighted: false,
+            basePriceVnd: 5000,
+          ),
+        ],
+      );
+
+      expect(find.byTooltip('Quét barcode bằng camera'), findsNothing);
+
+      await unmount(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('camera scan reuses exact barcode auto-add path', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+    try {
+      await pumpPosPage(
+        tester,
+        products: [
+          _product(
+            id: 'water',
+            name: 'Nước suối',
+            barcode: '893WATER',
+            unit: 'chai',
+            isWeighted: false,
+            basePriceVnd: 5000,
+          ),
+        ],
+        openBarcodeScanner: (_) async => '893water',
+      );
+
+      await tester.tap(find.byTooltip('Quét barcode bằng camera'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 chai × 5000 VND'), findsOneWidget);
+      expect(find.text('5000 VND'), findsOneWidget);
+
+      await unmount(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }
 
