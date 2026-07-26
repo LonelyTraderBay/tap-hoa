@@ -29,10 +29,10 @@ Edit `key.properties` with real local values:
 storePassword=<real store password>
 keyPassword=<real key password>
 keyAlias=tap-hoa-release
-storeFile=C:\\Users\\YOUR_USER\\keystores\\tap-hoa-release.jks
+storeFile=C:/path/to/keystores/tap-hoa-release.jks
 ```
 
-`storeFile` may be an absolute path or a path relative to `apps/pos_app/android`.
+`storeFile` is absolute, or relative to `apps/pos_app/android`. Use the same keystore created in step 1 (`$HOME\keystores\tap-hoa-release.jks`).
 Release builds fail closed with a clear error when `key.properties` or the keystore file is missing.
 
 ## 3. Build the release APK

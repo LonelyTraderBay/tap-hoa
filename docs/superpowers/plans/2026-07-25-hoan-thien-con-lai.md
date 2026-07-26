@@ -56,7 +56,7 @@ Ops docs neo: `docs/ops/production-secrets.md`, `production-deploy.md`, `einvoic
 - [x] **Step 1:** Push `main`
 
 ```powershell
-cd c:\Users\C-PC\Documents\Projects\tap-hoa
+# From repo root
 git checkout main
 git push origin main
 ```
