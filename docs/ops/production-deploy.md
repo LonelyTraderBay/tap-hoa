@@ -150,7 +150,7 @@ docker compose -f docker-compose.prod.yml stop api
 # Then redeploy the previous image or checkout the previous commit and rebuild:
 docker compose -f docker-compose.prod.yml build api
 docker compose -f docker-compose.prod.yml up -d api
-curl http://<prod-host>:3000/health
+curl http://<prod-host>:3040/health
 ```
 
 Do not casually run `prisma migrate resolve` on production. Use it only after a

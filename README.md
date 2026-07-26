@@ -66,8 +66,9 @@ cd apps/api
 npm install
 npx prisma migrate deploy
 npx prisma db seed
-npm run start:dev           # http://127.0.0.1:3040
 ```
+
+From repo root, prefer `.\scripts\start-api.ps1` (loads `apps/api/.env` so a shell `DATABASE_URL` from another project does not override tap-hoa). Or from `apps/api`: `npm run start:dev` → http://127.0.0.1:3040
 
 Verify: `GET http://127.0.0.1:3040/health` → `{ "ok": true }`.
 
