@@ -67,10 +67,12 @@ Gate: `docs/superpowers/plans/2026-07-25-phase2-hardening.md`.
 **Phase 3 (outline):** VAT/GTGT CoA thật; provider HĐĐT thật; Excel/PDF; trả hàng NCC; đối chiếu CK đầy đủ.
 ## Cách chạy nhanh
 
-1. PostgreSQL (khuyến nghị Supabase local port `54322` trên Windows)
-2. `apps/api`: `npm i` → migrate/seed → `npm run start:dev`
-3. `apps/pos_app`: `flutter run -d windows --dart-define=API_URL=http://localhost:3000`
-4. Đăng nhập seed: `0900000001` / `123456`
+Local DB = **Supabase only** (`project_id=tap-hoa`, DB `tap_hoa` cổng **55422**, API **3040**). Chi tiết: `docs/ops/local-dev.md`.
+
+1. Repo root: `.\scripts\dev-up.ps1` → `.\scripts\dev-setup.ps1` → `.\scripts\start-api.ps1`
+2. `apps/pos_app`: `flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040`
+3. Đăng nhập seed: `0900000001` / `123456`
+4. Studio: http://127.0.0.1:55423
 
 ## Kiểm thử đã ghi nhận
 

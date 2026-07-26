@@ -7,7 +7,7 @@
 
 **Architecture:** Không đổi monorepo. Chỉ xác minh + polish docs/scripts; không mở feature mới trừ khi smoke phát hiện lỗi thật.
 
-**Tech Stack:** Docker Compose `tap-hoa` / Supabase fallback; Nest `:3040`; Flutter POS; seed dev `0900000001` / `123456`.
+**Tech Stack:** Local DB = **Supabase only** (`project_id=tap-hoa`, `:55422` / DB `tap_hoa`); Nest `:3040` + `tap-hoa.identity` lock; Flutter POS; seed `0900000001` / `123456`.
 
 ---
 
@@ -50,7 +50,7 @@ A-live  VPS go-live          [P0 thương mại — blocked credentials]
 
 | Check | Result | Notes |
 |-------|--------|-------|
-| L1.1 DB + migrate + seed | **PASS** | `tap-hoa-db` healthy on `:55422`; `prisma migrate status` — 25 migrations, schema up to date |
+| L1.1 DB + migrate + seed | **PASS** | Supabase `supabase_db_tap-hoa` / DB `tap_hoa` on `:55422`; 25 migrations (re-verified after Supabase-only switch) |
 | L1.2 API health | **PASS** | `GET http://127.0.0.1:3040/health` → `{ "ok": true }` |
 | L1.3 Seed login (API) | **PASS** | `POST /auth/login` → `accessToken` + owner user `Chu quan` |
 | L1.4 POS path | **PASS (docs)** | Minimal path documented in `docs/ops/local-dev.md`; GUI smoke not automated (no display) |
