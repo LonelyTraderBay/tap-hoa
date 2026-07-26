@@ -20,28 +20,32 @@
 
 ---
 
-## Trạng thái hiện tại (2026-07-25)
+## Trạng thái hiện tại (2026-07-26)
 
 | Hạng mục | Status |
 |----------|--------|
 | Phase 1–3 + hardening | Done trên `main` |
 | Gap design §4/§5 (PR #18) | **Merged** |
-| Runbook go-live / Docker / signing | Done in-repo |
-| **Deploy VPS + owner + backup + smoke 2 máy** | **Chưa** (operator) |
-| Đối chiếu sao kê NCC (5b) | Deferred |
-| Camera barcode / tách role KT–HĐĐT | Skipped (tuỳ chọn) |
+| **Wave A in-repo** (checklist + ops docs handoff) | **Done** (`be892e1`) |
+| **Wave B in-repo** (CI, CHANGELOG, README, tag docs) | **Done** (`61e607c`) |
+| **Wave C in-repo** (AP statement recon) | **Done** (`1a175d3`) |
+| **Wave D in-repo** (camera barcode mobile) | **Done** (`2e98b23`) |
+| **Wave E in-repo** (`canLedger` / `canEinvoice`; toolbar fix `21f38ac`) | **Done** |
+| **Wave F in-repo** (manager ledger, PO multi-line, debt adjust, batch HĐĐT idempotent, npm-audit) | **Done** (`a482b8d`) |
+| **Deploy VPS + owner + backup + smoke 2 máy** | **Chưa** (operator — Wave A live) |
+| **100% plan in-repo** | **Done** — còn Wave A live trên VPS |
 
 ---
 
 ## Thứ tự ưu tiên
 
 ```text
-Wave A  Go-live prod thật (operator)           [P0 — chặn mở quán]
-Wave B  CI + release hygiene trên main         [P0 khuyến nghị]
-Wave C  Đối chiếu sao kê NCC (AP recon)        [P1 kế toán — nếu cần]
-Wave D  Camera barcode (mobile)                [P2 — nếu wedge chưa đủ]
-Wave E  Tách quyền kế toán ≠ HĐĐT              [P2 — nếu chủ yêu cầu]
-Wave F  Hardening UX/ops nhỏ                   [P3]
+Wave A  Go-live prod thật (operator)           [P0 — chặn mở quán]  in-repo Done; VPS live còn operator
+Wave B  CI + release hygiene trên main         [P0 khuyến nghị]      Done in-repo
+Wave C  Đối chiếu sao kê NCC (AP recon)        [P1 kế toán]          Done in-repo
+Wave D  Camera barcode (mobile)                [P2]                  Done in-repo
+Wave E  Tách quyền kế toán ≠ HĐĐT              [P2]                  Done in-repo (+ toolbar fix 21f38ac)
+Wave F  Hardening UX/ops nhỏ                   [P3]                  Done in-repo
 ```
 
 **Đủ mở quán:** xong **Wave A** (khuyến nghị thêm Wave B).  
@@ -63,6 +67,8 @@ Waves C–F không chặn ngày mở quán.
 ---
 
 ## Wave A — Go-live prod thật (P0)
+
+> **In-repo:** Done (checklist + ops docs @ `be892e1`). **Operator còn lại:** A.1–A.5 trên VPS thật.
 
 **DoD:** `GET /health` prod OK; owner thật login; không còn seed password; backup Postgres đã restore thử; ≥1 máy POS bán+sync+đóng ca; khuyến nghị smoke 2 máy.
 
@@ -117,6 +123,8 @@ git pull origin main
 
 ## Wave B — CI + release hygiene (P0 khuyến nghị)
 
+> **In-repo:** Done @ `61e607c`.
+
 **DoD:** PR/`main` có pipeline tối thiểu; nhánh cũ dọn; tài liệu phiên bản rõ.
 
 ### Task B.1: GitHub Actions tối thiểu
@@ -143,65 +151,61 @@ git pull origin main
 
 ## Wave C — Đối chiếu sao kê NCC (P1, optional)
 
-> **Plan con bắt buộc:** `docs/superpowers/plans/YYYY-MM-DD-ap-statement-recon.md`.  
-> Mirror pattern bank-recon Phase 3.
+> **In-repo:** Done @ `1a175d3`. Plan con: `docs/superpowers/plans/2026-07-26-ap-statement-recon.md` (nếu có).
 
 **DoD:** Import CSV phải trả / sao kê NCC; khớp payment/AP; khóa kỳ đối chiếu; e2e; Flutter màn NCC.
 
 **Gợi ý schema:** `SupplierStatementLine`, match tới `SupplierPayment` / payable; fingerprint idempotent.
 
-- [ ] Plan con (match rules, lock, roles)
-- [ ] API import/match/unmatch/lock + e2e
-- [ ] Flutter UI trên Công nợ NCC
-- [ ] CHANGELOG
-
-**Bỏ qua** nếu quán không đối chiếu sao kê NCC thủ công.
+- [x] Plan con (match rules, lock, roles)
+- [x] API import/match/unmatch/lock + e2e
+- [x] Flutter UI trên Công nợ NCC
+- [x] CHANGELOG
 
 ---
 
 ## Wave D — Camera barcode (P2, optional)
 
+> **In-repo:** Done @ `2e98b23`.
+
 **DoD:** Trên Android/iOS, nút quét camera → điền query / auto-add như wedge hiện có.
 
 **Files:** `pos_page.dart`, dependency `mobile_scanner` (hoặc tương đương), quyền camera.
 
-- [ ] Chỉ bật trên mobile; Windows giữ bàn phím wedge
-- [ ] Reuse exact-barcode auto-add path
-- [ ] Tests mock / analyze
-- [ ] Commit: `feat(pos): camera barcode scan on mobile`
-
-**Bỏ qua** nếu scanner USB/wedge đủ.
+- [x] Chỉ bật trên mobile; Windows giữ bàn phím wedge
+- [x] Reuse exact-barcode auto-add path
+- [x] Tests mock / analyze
+- [x] Commit: `feat(pos): quét barcode bằng camera`
 
 ---
 
 ## Wave E — Tách quyền kế toán ≠ HĐĐT (P2, optional)
 
-> Plan con bắt buộc nếu đụng schema Role.
+> **In-repo:** Done @ `444ac24`; plan con `docs/superpowers/plans/2026-07-26-ledger-einvoice-permissions.md`.  
+> **Toolbar fix:** @ `21f38ac` — gắn `canLedger`/`canEinvoice` đúng nút **Sổ kế toán** và **Xuất HĐĐT** trên POS toolbar.
 
 **DoD:** Thu ngân = bán; role/permission riêng cho sổ vs xuất HĐĐT (hiện manager gộp cả hai).
 
-**Hướng tối thiểu (chọn 1 trong plan con):**
-1. Thêm role `accountant` + `einvoice_clerk`, hoặc
-2. Flags trên User: `canLedger`, `canEinvoice`
+**Hướng đã chọn:** Flags trên User: `canLedger`, `canEinvoice`
 
-- [ ] Plan con + migration
-- [ ] Guards Nest + ẩn/hiện Flutter nav
-- [ ] e2e role matrix
-- [ ] Seed/docs cập nhật
+- [x] Plan con + migration
+- [x] Guards Nest + ẩn/hiện Flutter nav/toolbar
+- [x] e2e role matrix
+- [x] Seed/docs cập nhật
 
 ---
 
 ## Wave F — Hardening UX/ops nhỏ (P3)
 
-Làm từng mục khi có complaint thực tế:
+> **In-repo:** Done @ `a482b8d`.
 
 | # | Mục | Ghi chú |
 |---|-----|---------|
-| F.1 | Manager vào Ledger UI | API đã cho manager; nav Flutter đang owner-only |
-| F.2 | PO UI nhiều dòng một lần | Hiện tạo/nhận từng dòng |
-| F.3 | Audit `debt_adjust` API | Nếu cần chỉnh số dư ngoài thu nợ |
-| F.4 | Batch HĐĐT idempotent re-call | Trả invoice cũ thay vì lỗi `already_issued` |
-| F.5 | `npm audit` quarterly | Theo `docs/ops/npm-audit.md` |
+| F.1 | Manager vào Ledger UI | Done — `canLedger` POS nav |
+| F.2 | PO UI nhiều dòng một lần | Done — multi-line create/receive |
+| F.3 | Audit `debt_adjust` API | Done — audit + debt ledger entries |
+| F.4 | Batch HĐĐT idempotent re-call | Done — trả invoice cũ thay vì `already_issued` |
+| F.5 | `npm audit` quarterly | Done — `docs/ops/npm-audit.md` reminders |
 
 ---
 
@@ -216,12 +220,13 @@ Làm từng mục khi có complaint thực tế:
 ## Tiêu chí “hoàn thiện tối thiểu” (mở quán)
 
 1. [x] Code design §4/§5 + Phase 3 trên `main` (PR #18)
-2. [ ] Wave A: migrate + JWT + owner + backup restore + POS prod
-3. [ ] Wave A: smoke ≥ 1 máy (khuyến nghị 2 máy)
-4. [ ] HĐĐT: gateway thử **hoặc** chấp nhận stub
-5. [ ] (Khuyến nghị) Wave B: CI xanh trên `main`
+2. [ ] Wave A live: migrate + JWT + owner + backup restore + POS prod (operator)
+3. [ ] Wave A live: smoke ≥ 1 máy (khuyến nghị 2 máy) (operator)
+4. [ ] HĐĐT live: gateway thử **hoặc** chấp nhận stub (operator)
+5. [x] Wave B: CI xanh trên `main`
 
-**Hoàn thiện 100% plan này** = A+B xong + C/D/E/F đã làm hoặc ghi rõ “won't do” trong CHANGELOG/ops.
+**Hoàn thiện 100% plan in-repo** = B–F Done + Wave A handoff Done (`be892e1`).  
+**Còn lại:** Wave A live trên VPS (operator).
 
 ---
 
@@ -240,13 +245,13 @@ Làm từng mục khi có complaint thực tế:
 
 ## Self-review (coverage)
 
-| Còn lại sau PR #18 | Wave |
-|--------------------|------|
-| Deploy/secrets/backup/smoke | A |
-| CI + tag/docs | B |
-| Sao kê NCC | C |
-| Camera barcode | D |
-| Tách quyền KT/HĐĐT | E |
-| UX nhỏ (manager ledger, PO multi-line…) | F |
-| CQT / SDK vendor / YAGNI | Ngoài scope |
+| Hạng mục | Wave | In-repo | Live operator |
+|----------|------|---------|---------------|
+| Checklist + ops handoff | A | Done | VPS deploy/secrets/backup/smoke còn operator |
+| CI + tag/docs | B | Done | — |
+| Sao kê NCC | C | Done | — |
+| Camera barcode | D | Done | — |
+| Tách quyền KT/HĐĐT (+ toolbar fix) | E | Done | — |
+| UX nhỏ (manager ledger, PO multi-line…) | F | Done | — |
+| CQT / SDK vendor / YAGNI | — | Ngoài scope | — |
 )
