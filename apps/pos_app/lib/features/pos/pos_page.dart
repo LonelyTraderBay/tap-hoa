@@ -738,7 +738,7 @@ class _PosPageState extends State<PosPage> {
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cấu hình in',
           ),
-          if (widget.role == 'owner')
+          if (widget.user.canLedger)
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -762,7 +762,7 @@ class _PosPageState extends State<PosPage> {
                       repository: LedgerRepository(
                         dio: widget.dayReportRepository.dio,
                       ),
-                      isOwner: true,
+                      isOwner: widget.role == 'owner',
                       storeId: widget.storeId,
                     ),
                   ),
@@ -771,7 +771,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.menu_book_outlined),
               tooltip: 'Sổ kế toán',
             ),
-          if (widget.role == 'owner' || widget.role == 'store_manager')
+          if (widget.user.canEinvoice)
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(

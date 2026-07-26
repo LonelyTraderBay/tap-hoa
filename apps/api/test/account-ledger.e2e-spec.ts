@@ -37,12 +37,20 @@ describe('Wave 4 account ledger e2e', () => {
     const passwordHash = await bcrypt.hash('123456', 10);
     const manager = await prisma.user.upsert({
       where: { phone: MANAGER_PHONE },
-      update: { active: true, passwordHash, role: 'store_manager' },
+      update: {
+        active: true,
+        passwordHash,
+        role: 'store_manager',
+        canLedger: true,
+        canEinvoice: false,
+      },
       create: {
         phone: MANAGER_PHONE,
         name: 'QL so cai',
         passwordHash,
         role: 'store_manager',
+        canLedger: true,
+        canEinvoice: false,
       },
     });
     await prisma.userStore.upsert({

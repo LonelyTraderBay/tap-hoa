@@ -88,6 +88,8 @@ void main() {
             name: 'Owner',
             role: 'owner',
             storeIds: ['store-1'],
+            canLedger: true,
+            canEinvoice: true,
           ),
           storeId: 'store-1',
           storeName: 'Cửa hàng 1',

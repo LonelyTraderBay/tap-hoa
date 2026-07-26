@@ -69,12 +69,14 @@ async function main() {
   }
   const owner = await prisma.user.upsert({
     where: { phone: '0900000001' },
-    update: {},
+    update: { canLedger: true, canEinvoice: true },
     create: {
       phone: '0900000001',
       name: 'Chu quan',
       passwordHash,
       role: Role.owner,
+      canLedger: true,
+      canEinvoice: true,
       stores: { create: [{ storeId: s1.id }, { storeId: s2.id }] },
     },
   });

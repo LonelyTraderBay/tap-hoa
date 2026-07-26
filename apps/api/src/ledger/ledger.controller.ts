@@ -13,10 +13,11 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
+import { LedgerPermissionGuard } from '../auth/ledger-permission.guard';
 import { LedgerService } from './ledger.service';
 
 @Controller('ledger')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, LedgerPermissionGuard)
 export class LedgerController {
   constructor(private readonly ledger: LedgerService) {}
 

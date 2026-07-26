@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, Role, TransferStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { hasLedgerPermission } from '../auth/permission-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   JournalLineDraft,
@@ -854,6 +855,9 @@ export class LedgerService {
 
   private assertLedgerAccess(user: AuthUser, storeId?: string) {
     if (user.role === Role.owner) return;
+    if (!hasLedgerPermission(user)) {
+      throw new Error('forbidden');
+    }
     if (user.role === Role.store_manager) {
       if (storeId && !user.storeIds.includes(storeId)) {
         throw new Error('store_forbidden');

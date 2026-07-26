@@ -8,6 +8,7 @@ import {
 import { EInvoiceStatus, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { hasEinvoicePermission } from '../auth/permission-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import { EInvoiceAdapter, IssueEInvoiceResult } from './einvoice.adapter';
 import { EINVOICE_ADAPTER } from './einvoice.tokens';
@@ -19,8 +20,8 @@ export class EInvoiceService {
     @Inject(EINVOICE_ADAPTER) private readonly adapter: EInvoiceAdapter,
   ) {}
 
-  private assertManager(user: AuthUser) {
-    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+  private assertEinvoiceAccess(user: AuthUser) {
+    if (!hasEinvoicePermission(user)) {
       throw new ForbiddenException('forbidden');
     }
   }
@@ -247,7 +248,7 @@ export class EInvoiceService {
       serial?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     if (!body.saleId) {
       throw new BadRequestException('saleId required');
     }
@@ -268,7 +269,7 @@ export class EInvoiceService {
       serial?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const saleIds = this.normalizeSaleIds(body.saleIds);
     if (!body.customerId) {
       throw new BadRequestException('customerId required');
@@ -282,7 +283,7 @@ export class EInvoiceService {
   }
 
   async getBySale(user: AuthUser, saleId: string) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const sale = await this.prisma.sale.findUnique({
       where: { id: saleId },
     });
@@ -301,7 +302,7 @@ export class EInvoiceService {
       reason?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const reason = body.reason?.trim();
     if (!reason) {
       throw new BadRequestException('reason required');
@@ -350,7 +351,7 @@ export class EInvoiceService {
       reason?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const reason = body.reason?.trim();
     if (!reason) {
       throw new BadRequestException('reason required');

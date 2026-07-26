@@ -117,6 +117,8 @@ void main() {
         name: 'Owner',
         role: 'owner',
         storeIds: ['store-1'],
+        canLedger: true,
+        canEinvoice: true,
       ),
     );
     when(() => shiftRepository.fetchStores()).thenAnswer(

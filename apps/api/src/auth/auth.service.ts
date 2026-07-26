@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { effectivePermissions } from './permission-flags';
 
 @Injectable()
 export class AuthService {
@@ -22,14 +23,22 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
     const storeIds = user.stores.map((s) => s.storeId);
+    const permissions = effectivePermissions(user);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       role: user.role,
       storeIds,
+      ...permissions,
     });
     return {
       accessToken,
-      user: { id: user.id, name: user.name, role: user.role, storeIds },
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        storeIds,
+        ...permissions,
+      },
     };
   }
 }
