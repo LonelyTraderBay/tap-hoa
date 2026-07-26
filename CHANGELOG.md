@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Wave C: AP statement reconciliation for suppliers with CSV import, read-only summaries, match/unmatch/auto-match, zero-variance locking, e2e coverage, and Flutter entry points from Công nợ NCC.
+
 ## 0.3.0
 
 ### Design complete

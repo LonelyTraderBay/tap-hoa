@@ -317,4 +317,137 @@ export class ReportsController {
       body.periodYm,
     );
   }
+
+  @Post('ap-recon/import')
+  importApRecon(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      supplierId?: string;
+      periodYm?: string;
+      csv?: string;
+    },
+  ) {
+    if (!body.storeId || !body.supplierId || !body.periodYm || !body.csv) {
+      throw new BadRequestException('storeId, supplierId, periodYm, csv required');
+    }
+    return this.reportsService.importApStatement(
+      req.user,
+      body.storeId,
+      body.supplierId,
+      body.periodYm,
+      body.csv,
+    );
+  }
+
+  @Get('ap-recon')
+  apRecon(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!storeId || !supplierId || !periodYm) {
+      throw new BadRequestException('storeId, supplierId and periodYm required');
+    }
+    return this.reportsService.apReconSummary(
+      req.user,
+      storeId,
+      supplierId,
+      periodYm,
+    );
+  }
+
+  @Post('ap-recon/match')
+  matchAp(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      supplierId?: string;
+      periodYm?: string;
+      statementId?: string;
+      bookRef?: string;
+      matchVersion?: number;
+    },
+  ) {
+    if (
+      !body.storeId ||
+      !body.supplierId ||
+      !body.periodYm ||
+      !body.statementId ||
+      !body.bookRef
+    ) {
+      throw new BadRequestException(
+        'storeId, supplierId, periodYm, statementId, bookRef required',
+      );
+    }
+    return this.reportsService.matchApLine(req.user, {
+      storeId: body.storeId,
+      supplierId: body.supplierId,
+      periodYm: body.periodYm,
+      statementId: body.statementId,
+      bookRef: body.bookRef,
+      matchVersion: body.matchVersion,
+    });
+  }
+
+  @Post('ap-recon/unmatch')
+  unmatchAp(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      supplierId?: string;
+      periodYm?: string;
+      statementId?: string;
+      matchVersion?: number;
+    },
+  ) {
+    if (!body.storeId || !body.supplierId || !body.periodYm || !body.statementId) {
+      throw new BadRequestException(
+        'storeId, supplierId, periodYm, statementId required',
+      );
+    }
+    return this.reportsService.unmatchApLine(req.user, {
+      storeId: body.storeId,
+      supplierId: body.supplierId,
+      periodYm: body.periodYm,
+      statementId: body.statementId,
+      matchVersion: body.matchVersion,
+    });
+  }
+
+  @Post('ap-recon/auto-match')
+  autoMatchAp(
+    @Req() req: { user: AuthUser },
+    @Body() body: { storeId?: string; supplierId?: string; periodYm?: string },
+  ) {
+    if (!body.storeId || !body.supplierId || !body.periodYm) {
+      throw new BadRequestException('storeId, supplierId and periodYm required');
+    }
+    return this.reportsService.autoMatchApRecon(
+      req.user,
+      body.storeId,
+      body.supplierId,
+      body.periodYm,
+    );
+  }
+
+  @Post('ap-recon/lock')
+  lockApRecon(
+    @Req() req: { user: AuthUser },
+    @Body() body: { storeId?: string; supplierId?: string; periodYm?: string },
+  ) {
+    if (!body.storeId || !body.supplierId || !body.periodYm) {
+      throw new BadRequestException('storeId, supplierId and periodYm required');
+    }
+    return this.reportsService.lockApRecon(
+      req.user,
+      body.storeId,
+      body.supplierId,
+      body.periodYm,
+    );
+  }
 }

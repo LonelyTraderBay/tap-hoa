@@ -119,6 +119,8 @@ model Store {
   supplierPayments   SupplierPayment[]
   bankStatementLines BankStatementLine[]
   bankReconLocks     BankReconLock[]
+  apStatementLines   ApStatementLine[]
+  apReconLocks       ApReconLock[]
 }
 
 model User {
@@ -670,6 +672,8 @@ model Supplier {
   returns   SupplierReturn[]
   payables  SupplierPayable[]
   payments  SupplierPayment[]
+  apStatementLines ApStatementLine[]
+  apReconLocks     ApReconLock[]
 }
 
 /** Return goods to supplier — reduces stock and AP (gross). */
@@ -749,6 +753,38 @@ model BankReconLock {
   lockedAt   DateTime @default(now())
   store      Store    @relation(fields: [storeId], references: [id])
   @@unique([storeId, periodYm])
+}
+
+/** Imported supplier AP statement line for payable/payment reconciliation. */
+model ApStatementLine {
+  id            String   @id @default(uuid())
+  storeId       String
+  supplierId    String
+  periodYm      String
+  bookedAt      DateTime
+  amountVnd     Int
+  memo          String?
+  matchedRef    String?
+  /** Idempotency key for CSV re-import (store+supplier scoped). */
+  fingerprint   String?
+  matchVersion  Int      @default(0)
+  createdAt     DateTime @default(now())
+  store         Store    @relation(fields: [storeId], references: [id])
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  @@unique([storeId, supplierId, fingerprint])
+  @@index([storeId, supplierId, periodYm])
+}
+
+model ApReconLock {
+  id         String   @id @default(uuid())
+  storeId    String
+  supplierId String
+  periodYm   String
+  lockedById String
+  lockedAt   DateTime @default(now())
+  store      Store    @relation(fields: [storeId], references: [id])
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  @@unique([storeId, supplierId, periodYm])
 }
 
 model SupplierPayable {

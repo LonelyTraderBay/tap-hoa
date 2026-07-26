@@ -906,6 +906,25 @@ export class ReportsService {
     return createHash('sha256').update(raw).digest('hex');
   }
 
+  private apStatementFingerprint(input: {
+    storeId: string;
+    supplierId: string;
+    periodYm: string;
+    bookedAt: Date;
+    amountVnd: number;
+    memo: string | null;
+  }): string {
+    const raw = [
+      input.storeId,
+      input.supplierId,
+      input.periodYm,
+      input.bookedAt.toISOString(),
+      String(input.amountVnd),
+      input.memo ?? '',
+    ].join('|');
+    return createHash('sha256').update(raw).digest('hex');
+  }
+
   /**
    * Import CSV lines: date,amountVnd,memo (header optional).
    * date = YYYY-MM-DD; amount positive = store inbound transfer.
@@ -1346,6 +1365,411 @@ export class ReportsService {
         action: 'bank_recon_locked',
         entityType: 'bank_recon',
         entityId: `${storeId}:${periodYm}`,
+        detailJson: JSON.stringify({
+          varianceVnd: summary.varianceVnd,
+          matchedCount: summary.matchedCount,
+        }),
+      },
+    });
+    return lock;
+  }
+
+  /**
+   * Import CSV supplier AP statement lines: date,amountVnd,memo (header optional).
+   * Positive amounts are new payable lines; negative amounts are supplier payments.
+   */
+  async importApStatement(
+    user: AuthUser,
+    storeId: string,
+    supplierId: string,
+    periodYm: string,
+    csv: string,
+  ) {
+    this.assertStoreAccess(user, storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    if (csv.length > 2_000_000) {
+      throw new BadRequestException('csv_too_large');
+    }
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: supplierId },
+    });
+    if (!supplier || !supplier.active) {
+      throw new BadRequestException('supplier_not_found');
+    }
+    const lock = await this.prisma.apReconLock.findUnique({
+      where: { storeId_supplierId_periodYm: { storeId, supplierId, periodYm } },
+    });
+    if (lock) {
+      throw new BadRequestException('ap_recon_locked');
+    }
+    const lines: {
+      id: string;
+      storeId: string;
+      supplierId: string;
+      periodYm: string;
+      bookedAt: Date;
+      amountVnd: number;
+      memo: string | null;
+      fingerprint: string;
+    }[] = [];
+    const seen = new Set<string>();
+    for (const parts of this.parseCsvRows(csv)) {
+      if (parts.length < 2) continue;
+      if (/^date$/i.test(parts[0])) continue;
+      const bookedAt = new Date(`${parts[0]}T12:00:00.000Z`);
+      const amountVnd = Number(parts[1]);
+      if (Number.isNaN(bookedAt.getTime()) || !Number.isSafeInteger(amountVnd)) {
+        continue;
+      }
+      if (amountVnd === 0 || periodYmFromDate(bookedAt) !== periodYm) {
+        continue;
+      }
+      const memo = parts[2] || null;
+      const fingerprint = this.apStatementFingerprint({
+        storeId,
+        supplierId,
+        periodYm,
+        bookedAt,
+        amountVnd,
+        memo,
+      });
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
+      lines.push({
+        id: randomUUID(),
+        storeId,
+        supplierId,
+        periodYm,
+        bookedAt,
+        amountVnd,
+        memo,
+        fingerprint,
+      });
+    }
+    if (lines.length === 0) {
+      throw new BadRequestException('no_valid_statement_lines');
+    }
+    const result = await this.prisma.apStatementLine.createMany({
+      data: lines,
+      skipDuplicates: true,
+    });
+    return {
+      imported: result.count,
+      skippedDuplicates: lines.length - result.count,
+      periodYm,
+      supplierId,
+    };
+  }
+
+  private async loadApBook(
+    storeId: string,
+    supplierId: string,
+    periodYm: string,
+  ): Promise<
+    { ref: string; kind: string; amountVnd: number; at: string; memo: string }[]
+  > {
+    const [y, m] = periodYm.split('-').map(Number);
+    const from = new Date(Date.UTC(y, m - 1, 1) - 7 * 3600_000);
+    const to = new Date(Date.UTC(y, m, 1) - 7 * 3600_000 - 1);
+    const [payables, payments] = await Promise.all([
+      this.prisma.supplierPayable.findMany({
+        where: {
+          storeId,
+          supplierId,
+          clientCreatedAt: { gte: from, lte: to },
+        },
+      }),
+      this.prisma.supplierPayment.findMany({
+        where: {
+          storeId,
+          supplierId,
+          clientCreatedAt: { gte: from, lte: to },
+        },
+      }),
+    ]);
+    return [
+      ...payables.map((p) => ({
+        ref: `supplier_payable:${p.id}`,
+        kind: 'supplier_payable',
+        amountVnd: p.amountVnd,
+        at: p.clientCreatedAt.toISOString(),
+        memo: p.purchaseReceiptId ?? p.id.slice(0, 8),
+      })),
+      ...payments.map((p) => ({
+        ref: `supplier_pay:${p.id}`,
+        kind: `supplier_payment_${p.channel}`,
+        amountVnd: -p.amountVnd,
+        at: p.clientCreatedAt.toISOString(),
+        memo: p.note ?? p.id.slice(0, 8),
+      })),
+    ];
+  }
+
+  /** Read-only AP recon summary — never mutates matchedRef. */
+  async apReconSummary(
+    user: AuthUser,
+    storeId: string,
+    supplierId: string,
+    periodYm: string,
+  ) {
+    this.assertStoreAccess(user, storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: supplierId },
+    });
+    if (!supplier || !supplier.active) {
+      throw new BadRequestException('supplier_not_found');
+    }
+    const book = await this.loadApBook(storeId, supplierId, periodYm);
+    const statements = await this.prisma.apStatementLine.findMany({
+      where: { storeId, supplierId, periodYm },
+      orderBy: { bookedAt: 'asc' },
+    });
+    const lock = await this.prisma.apReconLock.findUnique({
+      where: { storeId_supplierId_periodYm: { storeId, supplierId, periodYm } },
+    });
+    const bookTotal = book.reduce((s, b) => s + b.amountVnd, 0);
+    const statementTotal = statements.reduce((s, l) => s + l.amountVnd, 0);
+    const { matched, unmatchedBook } = this.computeMatches(statements, book);
+    const persistedMatched = matched.filter((m) => !m.suggested);
+    const unmatchedStatementCount =
+      statements.length - persistedMatched.length;
+
+    return {
+      storeId,
+      supplierId,
+      supplierName: supplier.name,
+      periodYm,
+      locked: !!lock,
+      bookTotalVnd: bookTotal,
+      statementTotalVnd: statementTotal,
+      varianceVnd: statementTotal - bookTotal,
+      matchedCount: persistedMatched.length,
+      suggestedMatchCount: matched.filter((m) => m.suggested).length,
+      unmatchedBookCount: unmatchedBook.length,
+      unmatchedStatementCount,
+      book,
+      statements,
+      matched,
+      unmatchedBook,
+    };
+  }
+
+  async matchApLine(
+    user: AuthUser,
+    input: {
+      storeId: string;
+      supplierId: string;
+      periodYm: string;
+      statementId: string;
+      bookRef: string;
+      matchVersion?: number;
+    },
+  ) {
+    this.assertStoreAccess(user, input.storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    const lock = await this.prisma.apReconLock.findUnique({
+      where: {
+        storeId_supplierId_periodYm: {
+          storeId: input.storeId,
+          supplierId: input.supplierId,
+          periodYm: input.periodYm,
+        },
+      },
+    });
+    if (lock) throw new BadRequestException('ap_recon_locked');
+    const st = await this.prisma.apStatementLine.findUnique({
+      where: { id: input.statementId },
+    });
+    if (
+      !st ||
+      st.storeId !== input.storeId ||
+      st.supplierId !== input.supplierId ||
+      st.periodYm !== input.periodYm
+    ) {
+      throw new BadRequestException('statement_not_found');
+    }
+    if (
+      input.matchVersion != null &&
+      st.matchVersion !== input.matchVersion
+    ) {
+      throw new BadRequestException('match_version_conflict');
+    }
+    const book = await this.loadApBook(
+      input.storeId,
+      input.supplierId,
+      input.periodYm,
+    );
+    const bookLine = book.find((b) => b.ref === input.bookRef);
+    if (!bookLine) throw new BadRequestException('book_ref_not_found');
+    if (bookLine.amountVnd !== st.amountVnd) {
+      throw new BadRequestException('amount_mismatch');
+    }
+    const taken = await this.prisma.apStatementLine.findFirst({
+      where: {
+        storeId: input.storeId,
+        supplierId: input.supplierId,
+        periodYm: input.periodYm,
+        matchedRef: input.bookRef,
+        NOT: { id: st.id },
+      },
+    });
+    if (taken) throw new BadRequestException('book_ref_already_matched');
+    return this.prisma.apStatementLine.update({
+      where: { id: st.id },
+      data: {
+        matchedRef: input.bookRef,
+        matchVersion: { increment: 1 },
+      },
+    });
+  }
+
+  async unmatchApLine(
+    user: AuthUser,
+    input: {
+      storeId: string;
+      supplierId: string;
+      periodYm: string;
+      statementId: string;
+      matchVersion?: number;
+    },
+  ) {
+    this.assertStoreAccess(user, input.storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    const lock = await this.prisma.apReconLock.findUnique({
+      where: {
+        storeId_supplierId_periodYm: {
+          storeId: input.storeId,
+          supplierId: input.supplierId,
+          periodYm: input.periodYm,
+        },
+      },
+    });
+    if (lock) throw new BadRequestException('ap_recon_locked');
+    const st = await this.prisma.apStatementLine.findUnique({
+      where: { id: input.statementId },
+    });
+    if (
+      !st ||
+      st.storeId !== input.storeId ||
+      st.supplierId !== input.supplierId ||
+      st.periodYm !== input.periodYm
+    ) {
+      throw new BadRequestException('statement_not_found');
+    }
+    if (
+      input.matchVersion != null &&
+      st.matchVersion !== input.matchVersion
+    ) {
+      throw new BadRequestException('match_version_conflict');
+    }
+    return this.prisma.apStatementLine.update({
+      where: { id: st.id },
+      data: { matchedRef: null, matchVersion: { increment: 1 } },
+    });
+  }
+
+  /** Persist high-confidence AP suggested matches. */
+  async autoMatchApRecon(
+    user: AuthUser,
+    storeId: string,
+    supplierId: string,
+    periodYm: string,
+  ) {
+    const summary = await this.apReconSummary(user, storeId, supplierId, periodYm);
+    if (summary.locked) throw new BadRequestException('ap_recon_locked');
+    let applied = 0;
+    for (const m of summary.matched) {
+      if (!m.suggested) continue;
+      await this.matchApLine(user, {
+        storeId,
+        supplierId,
+        periodYm,
+        statementId: m.statementId,
+        bookRef: m.bookRef,
+      });
+      applied += 1;
+    }
+    return { applied };
+  }
+
+  async lockApRecon(
+    user: AuthUser,
+    storeId: string,
+    supplierId: string,
+    periodYm: string,
+  ) {
+    this.assertStoreAccess(user, storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const summary = await this.apReconSummary(user, storeId, supplierId, periodYm);
+    if (summary.varianceVnd !== 0) {
+      throw new BadRequestException('ap_recon_variance_nonzero');
+    }
+    if (
+      summary.unmatchedStatementCount > 0 ||
+      summary.unmatchedBookCount > 0
+    ) {
+      if (
+        summary.suggestedMatchCount > 0 &&
+        summary.matchedCount + summary.suggestedMatchCount ===
+          summary.statements.length &&
+        summary.unmatchedBookCount === 0
+      ) {
+        await this.autoMatchApRecon(user, storeId, supplierId, periodYm);
+        const again = await this.apReconSummary(
+          user,
+          storeId,
+          supplierId,
+          periodYm,
+        );
+        if (
+          again.unmatchedStatementCount > 0 ||
+          again.unmatchedBookCount > 0 ||
+          again.varianceVnd !== 0
+        ) {
+          throw new BadRequestException('ap_recon_unmatched_remaining');
+        }
+      } else {
+        throw new BadRequestException('ap_recon_unmatched_remaining');
+      }
+    }
+    const lock = await this.prisma.apReconLock.upsert({
+      where: { storeId_supplierId_periodYm: { storeId, supplierId, periodYm } },
+      create: {
+        id: randomUUID(),
+        storeId,
+        supplierId,
+        periodYm,
+        lockedById: user.userId,
+      },
+      update: {},
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        id: randomUUID(),
+        actorUserId: user.userId,
+        action: 'ap_recon_locked',
+        entityType: 'ap_recon',
+        entityId: `${storeId}:${supplierId}:${periodYm}`,
         detailJson: JSON.stringify({
           varianceVnd: summary.varianceVnd,
           matchedCount: summary.matchedCount,
