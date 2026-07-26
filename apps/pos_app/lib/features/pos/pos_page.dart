@@ -86,6 +86,15 @@ bool posCameraBarcodeScannerAvailable(
   return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
 }
 
+bool posShowStoreManagementAction(String role) => role == 'owner';
+
+bool posShowLedgerHomeAction({required bool canLedger}) => canLedger;
+
+bool posShowCashFundAction(String role) =>
+    role == 'owner' || role == 'store_manager';
+
+bool posShowEInvoiceIssueAction({required bool canEinvoice}) => canEinvoice;
+
 Future<String?> openCameraBarcodeScanner(BuildContext context) {
   return Navigator.of(context).push<String>(
     MaterialPageRoute(builder: (_) => const PosBarcodeScannerPage()),
@@ -738,7 +747,7 @@ class _PosPageState extends State<PosPage> {
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cấu hình in',
           ),
-          if (widget.user.canLedger)
+          if (posShowStoreManagementAction(widget.role))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -753,7 +762,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.store_mall_directory_outlined),
               tooltip: 'Cửa hàng',
             ),
-          if (widget.user.canLedger)
+          if (posShowLedgerHomeAction(canLedger: widget.user.canLedger))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -771,7 +780,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.menu_book_outlined),
               tooltip: 'Sổ kế toán',
             ),
-          if (widget.user.canEinvoice)
+          if (posShowCashFundAction(widget.role))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -805,7 +814,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.compare_arrows_outlined),
               tooltip: 'Đối chiếu CK',
             ),
-          if (widget.role == 'owner' || widget.role == 'store_manager')
+          if (posShowEInvoiceIssueAction(canEinvoice: widget.user.canEinvoice))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
