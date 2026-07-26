@@ -10,7 +10,8 @@ Offline-first grocery POS monorepo (Phase 1–2 + Phase 3 VAT track).
 **Spec:** `docs/superpowers/specs/2026-07-23-tap-hoa-pos-ke-toan-design.md`  
 **Phase 2 closeout:** `docs/superpowers/plans/2026-07-25-phase2-hardening.md`  
 **Phase 3 VAT gate:** `docs/superpowers/plans/2026-07-25-phase3-vat.md`  
-**Phase 3 roadmap:** `docs/superpowers/plans/2026-07-25-phase3-roadmap.md`
+**Phase 3 roadmap:** `docs/superpowers/plans/2026-07-25-phase3-roadmap.md`  
+**Design complete:** §4/§5 feature-complete on `main` via PR #18; go-live now follows Wave A ops in `docs/superpowers/plans/2026-07-25-hoan-thien-van-hanh.md`.
 
 ## Prerequisites
 

@@ -202,6 +202,7 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     }
     final remaining = Decimal.parse(line.qty) - Decimal.parse(line.receivedQty);
     final qtyCtrl = TextEditingController(text: formatInventoryQty(remaining));
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

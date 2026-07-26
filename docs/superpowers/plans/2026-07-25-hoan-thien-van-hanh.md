@@ -123,21 +123,21 @@ git pull origin main
 
 **Create:** `.github/workflows/ci.yml`
 
-- [ ] Job API: `npm ci` → `npm run build` → `npm run test:unit` (e2e optional với service Postgres)
-- [ ] Job Flutter: `flutter pub get` → `flutter analyze` → `flutter test` (matrix hoặc ubuntu)
-- [ ] Chạy trên `pull_request` + `push` `main`
-- [ ] Commit: `ci: thêm workflow build/test API và Flutter`
+- [x] Job API: `npm ci` → `npx prisma generate` → `npm run build` → `npm run test:unit` (e2e optional với service Postgres)
+- [x] Job Flutter: `flutter pub get` → `flutter analyze` → `flutter test` (matrix hoặc ubuntu)
+- [x] Chạy trên `pull_request` + `push` `main`
+- [x] Commit: `ci: thêm workflow API/Flutter và đóng vòng tài liệu`
 
 ### Task B.2: Dọn nhánh & tag
 
-- [ ] Xóa remote nhánh đã merge nếu còn (`cursor/hoan-thien-gap-thiet-ke` sau khi không cần)
-- [ ] Tag release gợi ý: `v0.3.0-design-complete` trên `main` (sau Wave A hoặc ngay khi sẵn sàng freeze code)
-- [ ] Cập nhật `CHANGELOG.md` section version nếu chưa có
+- [x] Xóa remote nhánh đã merge nếu còn (`cursor/hoan-thien-gap-thiet-ke` sau khi không cần)
+- [x] Ghi tag release gợi ý trong docs (chưa tạo tag): `v0.3.0-design-complete` trên `main`
+- [x] Cập nhật `CHANGELOG.md` section version nếu chưa có
 
 ### Task B.3: Docs đóng vòng
 
-- [ ] README: một dòng “Design §4/§5 feature-complete trên `main`; go-live = Wave A ops”
-- [ ] Đánh dấu plan `2026-07-25-design-gaps-hoan-thien.md` **Merged via #18**
+- [x] README: một dòng “Design §4/§5 feature-complete trên `main`; go-live = Wave A ops”
+- [x] Đánh dấu plan `2026-07-25-design-gaps-hoan-thien.md` **Merged via #18**
 
 ---
 

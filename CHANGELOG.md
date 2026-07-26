@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0
+
+### Design complete
+
+- Design §4/§5 is feature-complete via PR #18: POS gaps, accounting/VAT, HĐĐT, audit, and reporting closeout are documented as complete.
+- Prepared release tag name for documentation only: `v0.3.0-design-complete` (tag not created).
+
 ### Ops
 
 - Documented periodic `npm audit --omit=dev` tracking for `apps/api` (no `audit fix --force`; exceljs / firebase-admin transitive findings).
