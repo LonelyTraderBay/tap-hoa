@@ -228,6 +228,16 @@ describe('Phase 2 e-invoice e2e', () => {
       .expect(201);
     expect(repeated.body.id).toBe(issued.body.id);
 
+    const repeatedBatch = await request(app.getHttpServer())
+      .post('/einvoices/issue-batch')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ customerId: customer.id, saleIds: [saleA, saleB] })
+      .expect(201);
+    expect(repeatedBatch.body.id).toBe(issued.body.id);
+    expect(repeatedBatch.body.saleIds).toEqual(
+      expect.arrayContaining([saleA, saleB]),
+    );
+
     const adjusted = await request(app.getHttpServer())
       .post(`/einvoices/${issued.body.id}/adjust`)
       .set('Authorization', `Bearer ${token}`)

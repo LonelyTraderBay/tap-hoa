@@ -25,6 +25,7 @@ enum DebtLedgerType {
   sale_debt
   payment
   sale_return_credit
+  debt_adjust
 }
 
 enum DebtPaymentChannel {

@@ -30,6 +30,28 @@ class InventoryHubPage extends StatefulWidget {
   State<InventoryHubPage> createState() => _InventoryHubPageState();
 }
 
+class _PurchaseLineDraft {
+  _PurchaseLineDraft({
+    required this.productId,
+    String qty = '1',
+    String cost = '',
+    this.unitCostVnd,
+    this.maxQty,
+  }) : qtyCtrl = TextEditingController(text: qty),
+       costCtrl = TextEditingController(text: cost);
+
+  String productId;
+  final TextEditingController qtyCtrl;
+  final TextEditingController costCtrl;
+  final int? unitCostVnd;
+  final Decimal? maxQty;
+
+  void dispose() {
+    qtyCtrl.dispose();
+    costCtrl.dispose();
+  }
+}
+
 class _InventoryHubPageState extends State<InventoryHubPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
@@ -74,6 +96,193 @@ class _InventoryHubPageState extends State<InventoryHubPage>
         ],
       ),
     );
+  }
+
+  Future<List<InventoryLineInput>?> _showPurchaseLinesDialog({
+    required String title,
+    required List<ProductWithStock> products,
+    required List<_PurchaseLineDraft> drafts,
+    Widget? header,
+    bool includeCost = false,
+    bool canAddLines = false,
+    bool allowZeroQty = false,
+  }) async {
+    if (products.isEmpty) {
+      await _snack('Chưa có sản phẩm');
+      return null;
+    }
+    final productById = {for (final product in products) product.id: product};
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(title),
+          content: StatefulBuilder(
+            builder: (ctx, setDialogState) => SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (header != null) ...[header, const SizedBox(height: 12)],
+                    for (var i = 0; i < drafts.length; i++)
+                      Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            children: [
+                              if (canAddLines)
+                                DropdownButtonFormField<String>(
+                                  value: drafts[i].productId,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Sản phẩm',
+                                  ),
+                                  items: [
+                                    for (final p in products)
+                                      DropdownMenuItem(
+                                        value: p.id,
+                                        child: Text('${p.name} (${p.qty})'),
+                                      ),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value == null) return;
+                                    setDialogState(() {
+                                      drafts[i].productId = value;
+                                    });
+                                  },
+                                )
+                              else
+                                ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    productById[drafts[i].productId]?.name ??
+                                        drafts[i].productId,
+                                  ),
+                                  subtitle: drafts[i].maxQty == null
+                                      ? null
+                                      : Text(
+                                          'Còn ${formatInventoryQty(drafts[i].maxQty!)}',
+                                        ),
+                                ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: drafts[i].qtyCtrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Số lượng',
+                                      ),
+                                    ),
+                                  ),
+                                  if (includeCost) ...[
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: drafts[i].costCtrl,
+                                        keyboardType: TextInputType.number,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Giá nhập dự kiến',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  if (canAddLines && drafts.length > 1)
+                                    IconButton(
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          drafts.removeAt(i).dispose();
+                                        });
+                                      },
+                                      icon: const Icon(Icons.delete_outline),
+                                      tooltip: 'Xóa dòng',
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (canAddLines)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              drafts.add(
+                                _PurchaseLineDraft(
+                                  productId: products.first.id,
+                                ),
+                              );
+                            });
+                          },
+                          icon: const Icon(Icons.add),
+                          label: const Text('Thêm dòng'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Lưu'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return null;
+
+      final seen = <String>{};
+      final parsed = <InventoryLineInput>[];
+      for (final draft in drafts) {
+        final qtyText = draft.qtyCtrl.text.trim();
+        final qty = qtyText.isEmpty && allowZeroQty
+            ? Decimal.zero
+            : Decimal.parse(qtyText);
+        if (allowZeroQty && qty == Decimal.zero) {
+          continue;
+        }
+        if (qty <= Decimal.zero) {
+          throw const FormatException('invalid_qty');
+        }
+        if (draft.maxQty != null && qty > draft.maxQty!) {
+          throw StateError('over_received');
+        }
+        if (!seen.add(draft.productId)) {
+          throw StateError('duplicate_product');
+        }
+        final costText = draft.costCtrl.text.trim();
+        parsed.add(
+          InventoryLineInput(
+            productId: draft.productId,
+            qty: qty,
+            unitCostVnd: includeCost
+                ? (costText.isEmpty ? null : int.parse(costText))
+                : draft.unitCostVnd,
+          ),
+        );
+      }
+      if (parsed.isEmpty) {
+        throw StateError('empty_lines');
+      }
+      return parsed;
+    } catch (_) {
+      await _snack('Dòng hàng không hợp lệ');
+      return null;
+    } finally {
+      for (final draft in drafts) {
+        draft.dispose();
+      }
+    }
   }
 
   Future<void> _createPurchase() async {
@@ -130,58 +339,36 @@ class _InventoryHubPageState extends State<InventoryHubPage>
   }
 
   Future<void> _createPurchaseOrder() async {
-    final product = await _pickProduct();
-    if (product == null || !mounted) return;
-    final qtyCtrl = TextEditingController(text: '1');
-    final costCtrl = TextEditingController();
-    final supplierCtrl = TextEditingController(text: 'NCC');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tạo PO'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: supplierCtrl,
-              decoration: const InputDecoration(labelText: 'Nhà cung cấp'),
-            ),
-            Text(product.name),
-            TextField(
-              controller: qtyCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Số lượng đặt'),
-            ),
-            TextField(
-              controller: costCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Giá nhập dự kiến'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Lưu'),
-          ),
-        ],
-      ),
+    final products = await widget.productRepository.listWithStock(
+      widget.storeId,
     );
-    if (ok != true) return;
+    if (!mounted || products.isEmpty) {
+      await _snack('Chưa có sản phẩm');
+      return;
+    }
+    final supplierCtrl = TextEditingController(text: 'NCC');
+    final lines = await _showPurchaseLinesDialog(
+      title: 'Tạo PO',
+      products: products,
+      drafts: [_PurchaseLineDraft(productId: products.first.id)],
+      header: TextField(
+        controller: supplierCtrl,
+        decoration: const InputDecoration(labelText: 'Nhà cung cấp'),
+      ),
+      includeCost: true,
+      canAddLines: true,
+    );
+    final supplierName = supplierCtrl.text.trim();
+    supplierCtrl.dispose();
+    if (lines == null) return;
+    if (supplierName.isEmpty) {
+      await _snack('Nhập nhà cung cấp');
+      return;
+    }
     try {
       await widget.inventoryService.createPurchaseOrder(
-        supplierName: supplierCtrl.text,
-        lines: [
-          InventoryLineInput(
-            productId: product.id,
-            qty: Decimal.parse(qtyCtrl.text.trim()),
-            unitCostVnd: int.tryParse(costCtrl.text.trim()),
-          ),
-        ],
+        supplierName: supplierName,
+        lines: lines,
       );
       await _snack('Đã tạo PO draft');
     } catch (e) {
@@ -190,53 +377,43 @@ class _InventoryHubPageState extends State<InventoryHubPage>
   }
 
   Future<void> _receivePurchaseOrder(PurchaseOrdersLocalData order) async {
-    final lines = await (widget.db.select(
+    final poLines = await (widget.db.select(
       widget.db.purchaseOrderLinesLocal,
     )..where((l) => l.purchaseOrderId.equals(order.id))).get();
-    final line = lines
-        .where((l) => Decimal.parse(l.receivedQty) < Decimal.parse(l.qty))
-        .firstOrNull;
-    if (line == null) {
+    final openLines = poLines
+        .where((line) {
+          return Decimal.parse(line.receivedQty) < Decimal.parse(line.qty);
+        })
+        .toList(growable: false);
+    if (openLines.isEmpty) {
       await _snack('PO đã nhận đủ');
       return;
     }
-    final remaining = Decimal.parse(line.qty) - Decimal.parse(line.receivedQty);
-    final qtyCtrl = TextEditingController(text: formatInventoryQty(remaining));
-    if (!mounted) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Nhận PO ${order.supplierName}'),
-        content: TextField(
-          controller: qtyCtrl,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: 'Số lượng nhận (còn ${formatInventoryQty(remaining)})',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Nhận'),
-          ),
-        ],
-      ),
+    final products = await widget.productRepository.listWithStock(
+      widget.storeId,
     );
-    if (ok != true) return;
+    if (!mounted) return;
+    final lines = await _showPurchaseLinesDialog(
+      title: 'Nhận PO ${order.supplierName}',
+      products: products,
+      drafts: [
+        for (final line in openLines)
+          _PurchaseLineDraft(
+            productId: line.productId,
+            qty: formatInventoryQty(
+              Decimal.parse(line.qty) - Decimal.parse(line.receivedQty),
+            ),
+            unitCostVnd: line.unitCostVnd,
+            maxQty: Decimal.parse(line.qty) - Decimal.parse(line.receivedQty),
+          ),
+      ],
+      allowZeroQty: true,
+    );
+    if (lines == null) return;
     try {
       await widget.inventoryService.receivePurchaseOrder(
         purchaseOrderId: order.id,
-        lines: [
-          InventoryLineInput(
-            productId: line.productId,
-            qty: Decimal.parse(qtyCtrl.text.trim()),
-            unitCostVnd: line.unitCostVnd,
-          ),
-        ],
+        lines: lines,
       );
       await _snack('Đã nhận PO');
     } catch (e) {

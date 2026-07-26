@@ -120,25 +120,33 @@ DebtAgingResult computeDebtAging(
     ..sort((a, b) => a.clientCreatedAt.compareTo(b.clientCreatedAt));
 
   final open = <({int remaining, DateTime at})>[];
+  void reduceOpenDebt(int amountVnd) {
+    var left = amountVnd;
+    while (left > 0 && open.isNotEmpty) {
+      final head = open.first;
+      final take = head.remaining < left ? head.remaining : left;
+      final nextRemaining = head.remaining - take;
+      left -= take;
+      open.removeAt(0);
+      if (nextRemaining > 0) {
+        open.insert(0, (remaining: nextRemaining, at: head.at));
+      }
+    }
+  }
 
   for (final e in sorted) {
-    if (e.type == 'sale_debt' && e.amountVnd > 0) {
+    if ((e.type == 'sale_debt' ||
+            (e.type == 'debt_adjust' && e.amountVnd > 0)) &&
+        e.amountVnd > 0) {
       open.add((remaining: e.amountVnd, at: e.clientCreatedAt));
       continue;
     }
     if ((e.type == 'payment' || e.type == 'sale_return_credit') &&
         e.amountVnd > 0) {
-      var left = e.amountVnd;
-      while (left > 0 && open.isNotEmpty) {
-        final head = open.first;
-        final take = head.remaining < left ? head.remaining : left;
-        final nextRemaining = head.remaining - take;
-        left -= take;
-        open.removeAt(0);
-        if (nextRemaining > 0) {
-          open.insert(0, (remaining: nextRemaining, at: head.at));
-        }
-      }
+      reduceOpenDebt(e.amountVnd);
+    }
+    if (e.type == 'debt_adjust' && e.amountVnd < 0) {
+      reduceOpenDebt(e.amountVnd.abs());
     }
   }
 

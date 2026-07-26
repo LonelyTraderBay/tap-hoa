@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Query,
   Req,
@@ -36,5 +37,14 @@ export class CustomersController {
     @Body() dto: CreateCustomerDto,
   ) {
     return this.customersService.create(req.user, dto);
+  }
+
+  @Post(':id/debt-adjust')
+  adjustDebt(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Body() body: { amountVnd?: number; reason?: string },
+  ) {
+    return this.customersService.adjustDebt(req.user, id, body);
   }
 }

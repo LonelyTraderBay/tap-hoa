@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Wave F: Manager `canLedger` POS access, multi-line PO create/receive, customer debt adjustments with audit/debt ledger entries, idempotent batch HĐĐT retry, and quarterly npm-audit ops reminders.
 - Wave C: AP statement reconciliation for suppliers with CSV import, read-only summaries, match/unmatch/auto-match, zero-variance locking, e2e coverage, and Flutter entry points from Công nợ NCC.
 
 ## 0.3.0

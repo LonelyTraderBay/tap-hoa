@@ -170,7 +170,7 @@ Go-live roadmap (Wave A–F): `docs/superpowers/plans/2026-07-25-hoan-thien-van-
 | HĐĐT HTTP gateway / stub | `docs/ops/einvoice-http.md` |
 | Android release signing + APK | `docs/ops/android-release.md` |
 | Windows prod `API_URL` + smoke | `docs/ops/windows-prod.md` |
-| npm audit tracking (no `--force`) | `docs/ops/npm-audit.md` |
+| npm audit tracking (quarterly calendar reminder; no `--force`) | `docs/ops/npm-audit.md` |
 
 ### Wave B ops (stable day 1–3)
 

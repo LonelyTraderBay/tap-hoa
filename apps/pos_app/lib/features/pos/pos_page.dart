@@ -753,7 +753,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.store_mall_directory_outlined),
               tooltip: 'Cửa hàng',
             ),
-          if (widget.role == 'owner')
+          if (widget.user.canLedger)
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(

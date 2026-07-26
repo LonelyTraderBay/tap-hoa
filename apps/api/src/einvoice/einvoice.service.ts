@@ -64,6 +64,14 @@ export class EInvoiceService {
     });
   }
 
+  private async saleIdsForInvoice(invoice: { id: string; saleId: string }) {
+    const links = await this.prisma.eInvoiceSale.findMany({
+      where: { invoiceId: invoice.id },
+      select: { saleId: true },
+    });
+    return links.length ? links.map((link) => link.saleId) : [invoice.saleId];
+  }
+
   private mapStatus(result: IssueEInvoiceResult): EInvoiceStatus {
     return result.status === 'issued'
       ? EInvoiceStatus.issued
@@ -145,7 +153,11 @@ export class EInvoiceService {
       orderBy: { createdAt: 'desc' },
     });
     if (existing) {
-      if (saleIds.length === 1 && existing.status === EInvoiceStatus.issued) {
+      const existingSaleIds = await this.saleIdsForInvoice(existing);
+      if (
+        existing.status === EInvoiceStatus.issued &&
+        saleIds.every((saleId) => existingSaleIds.includes(saleId))
+      ) {
         return { sales: ordered, existing };
       }
       throw new BadRequestException('einvoice_sale_already_issued');
@@ -274,11 +286,12 @@ export class EInvoiceService {
     if (!body.customerId) {
       throw new BadRequestException('customerId required');
     }
-    const { sales } = await this.loadSalesForIssue(
+    const { sales, existing } = await this.loadSalesForIssue(
       user,
       saleIds,
       body.customerId,
     );
+    if (existing) return this.decorateInvoice(existing);
     return this.persistIssue(saleIds, sales, body);
   }
 
