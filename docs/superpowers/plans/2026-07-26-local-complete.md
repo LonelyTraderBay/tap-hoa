@@ -54,7 +54,7 @@ A-live  VPS go-live          [P0 thương mại — blocked credentials]
 | L1.2 API health | **PASS** | `GET http://127.0.0.1:3040/health` → `{ "ok": true }` |
 | L1.3 Seed login (API) | **PASS** | `POST /auth/login` → `accessToken` + owner user `Chu quan` |
 | L1.4 POS path | **PASS (docs)** | Minimal path documented in `docs/ops/local-dev.md`; GUI smoke not automated (no display) |
-| Commit | `d857074` | `docs(ops): Wave L1 local smoke API health + seed login` |
+| Commit | `80ffdbf` | `docs(ops): Wave L1 local smoke API health + seed login` |
 
 Commands: `docs/ops/local-smoke.md`
 
