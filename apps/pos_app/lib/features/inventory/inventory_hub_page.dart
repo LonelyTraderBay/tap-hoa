@@ -134,7 +134,7 @@ class _InventoryHubPageState extends State<InventoryHubPage>
                             children: [
                               if (canAddLines)
                                 DropdownButtonFormField<String>(
-                                  value: drafts[i].productId,
+                                  initialValue: drafts[i].productId,
                                   decoration: const InputDecoration(
                                     labelText: 'Sản phẩm',
                                   ),
@@ -540,8 +540,7 @@ class _InventoryHubPageState extends State<InventoryHubPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                // ignore: deprecated_member_use — need controlled value inside StatefulBuilder
-                value: toStoreId,
+                initialValue: toStoreId,
                 items: [
                   for (final s in others)
                     DropdownMenuItem(value: s.id, child: Text(s.name)),
