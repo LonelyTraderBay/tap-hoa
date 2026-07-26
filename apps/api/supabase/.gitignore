@@ -1,0 +1,5 @@
+# Local Supabase CLI artifacts (config.toml is tracked)
+.branches
+.temp
+.env
+seed.sql

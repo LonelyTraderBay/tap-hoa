@@ -4,7 +4,7 @@ import '../../features/auth/auth_repository.dart';
 
 const apiBaseUrl = String.fromEnvironment(
   'API_URL',
-  defaultValue: 'http://localhost:3000',
+  defaultValue: 'http://127.0.0.1:3040',
 );
 
 class AuthInterceptor extends Interceptor {

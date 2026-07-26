@@ -17,51 +17,59 @@ Offline-first grocery POS monorepo (Phase 1–2 + Phase 3 VAT track).
 
 - **Node.js** 18+ and npm
 - **Flutter** 3.24+ (`flutter doctor`)
-- **PostgreSQL 16** — either a local install on port 5432, or **Supabase CLI** for the port **54322** workaround (recommended on Windows; see below)
+- **PostgreSQL** via **Docker Desktop** (preferred) or **Supabase CLI** — both use project identity **`tap-hoa`** (DB `tap_hoa`, port **55422**) so this stack does not collide with other repos on `:54322` / `:3000`
 
-## Dev setup
+Full port / naming map: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
 
-### 1. PostgreSQL
+## Dev setup (tap-hoa identity)
 
-#### Option A — Supabase local (recommended on Windows)
+### Quick start (Windows)
 
-On some Windows machines, a system PostgreSQL service on `:5432` rejects the `postgres:postgres` credentials from `.env.example`. This project uses **Supabase CLI** to run PostgreSQL on **port 54322** instead.
+```powershell
+cd C:\Users\C-PC\Documents\Projects\tap-hoa
+.\scripts\dev-up.ps1      # Docker Compose project tap-hoa, or Supabase project_id tap-hoa
+.\scripts\dev-setup.ps1   # npm install + migrate + seed
+.\scripts\start-api.ps1   # loads apps/api/.env → http://127.0.0.1:3040
+```
+
+### 1. PostgreSQL (namespaced)
+
+| | Value |
+|--|--------|
+| Compose project / container | `tap-hoa` / `tap-hoa-db` |
+| Database | `tap_hoa` |
+| Host port | **55422** |
+| Nest API port | **3040** |
+
+**Option A — Docker Compose (recommended)**
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d
+# DATABASE_URL=postgresql://tap_hoa:tap_hoa_dev@127.0.0.1:55422/tap_hoa?schema=public
+```
+
+**Option B — Supabase CLI** (`apps/api/supabase/config.toml`, `project_id = "tap-hoa"`)
 
 ```powershell
 cd apps/api
-npx supabase start          # first run downloads images; PG listens on 127.0.0.1:54322
+npx supabase start
+..\..\scripts\ensure-tap-hoa-db.ps1
+# DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55422/tap_hoa?schema=public
 ```
 
-Use this `DATABASE_URL` in `apps/api/.env`:
-
-```env
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=public
-JWT_SECRET=dev-change-me
-PORT=3000
-```
-
-Prisma migrations and seed run against the `postgres` database on that instance. Stop the stack with `npx supabase stop` when done.
-
-#### Option B — Standalone PostgreSQL
-
-Create database `tap_hoa` on PostgreSQL 16 (default port 5432), then copy `.env.example` to `.env` unchanged:
-
-```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tap_hoa?schema=public
-```
+Copy `apps/api/.env.example` → `apps/api/.env` (already points at `tap_hoa` / `55422` / `PORT=3040`).
 
 ### 2. API
 
 ```powershell
 cd apps/api
-cp .env.example .env        # edit DATABASE_URL if using Supabase :54322 (see above)
 npm install
-npx prisma migrate dev
+npx prisma migrate deploy
 npx prisma db seed
-npm run start:dev           # http://localhost:3000
+npm run start:dev           # http://127.0.0.1:3040
 ```
 
-Verify: `GET http://localhost:3000/health` → `{ "ok": true }`.
+Verify: `GET http://127.0.0.1:3040/health` → `{ "ok": true }`.
 
 **Seed login:** phone `0900000001`, password `123456` (owner, stores CH1 + CH2, product STING-330).
 
@@ -72,20 +80,20 @@ cd apps/api
 npm run test:e2e
 ```
 
-### 3. Flutter POS (Windows)
+### 3. Flutter POS (Windows) — app title **Tap Hoa POS**
 
 ```powershell
 cd apps/pos_app
 flutter pub get
-flutter run -d windows --dart-define=API_URL=http://localhost:3000
+flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 ```
 
 Signed Android release APKs require a local keystore and `apps/pos_app/android/key.properties`; see `docs/ops/android-release.md`. Production Windows builds use `--dart-define=API_URL=https://…`; see `docs/ops/windows-prod.md`.
 
 | Platform | `API_URL` |
 |----------|-----------|
-| Windows / iOS simulator | `http://localhost:3000` |
-| Android emulator | `http://10.0.2.2:3000` |
+| Windows / iOS simulator | `http://127.0.0.1:3040` |
+| Android emulator | `http://10.0.2.2:3040` |
 
 Run Flutter tests:
 

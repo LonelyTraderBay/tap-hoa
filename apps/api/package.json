@@ -7,7 +7,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "test:unit": "jest --config ./jest-unit.json",
     "build": "nest build",
-    "create-owner": "ts-node prisma/create-owner.ts"
+    "create-owner": "ts-node prisma/create-owner.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "prisma db seed"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

@@ -16,14 +16,16 @@ See also:
 ## 1. Host choice
 
 - API image: `apps/api/Dockerfile`
-- Production compose stub: `apps/api/docker-compose.prod.yml`
+- Production compose stub: `apps/api/docker-compose.prod.yml` (`name: tap-hoa`)
 - Runtime env file on the host only: `apps/api/.env.production`
+- Local multi-project isolation: `docs/ops/local-dev.md` (dev uses host port **3040** / DB **tap_hoa**)
 
 Minimum host requirements:
 
 - Docker Engine with Compose v2
 - Disk space for PostgreSQL data and at least 7 retained backups
-- Port `3000` exposed only to the trusted network or reverse proxy
+- Port `API_PORT` (default **3040**) exposed only to the trusted network or reverse proxy
+  (container still listens on `PORT=3000` inside the image)
 
 ## 2. Prepare production env
 
@@ -33,9 +35,9 @@ by Docker context rules and must stay outside git.
 ```env
 NODE_ENV=production
 PORT=3000
-API_PORT=3000
+API_PORT=3040
 
-`API_PORT` in `docker-compose.prod.yml` is resolved by Compose from the host (`.env` beside the compose file, shell export, or `--env-file`), not only from variables inside `.env.production` loaded into the container.
+`API_PORT` in `docker-compose.prod.yml` is the **host** publish port (default 3040 for tap-hoa identity). Inside the container keep `PORT=3000`. Compose resolves `API_PORT` from the host (`.env` beside the compose file, shell export, or `--env-file`), not only from variables inside `.env.production` loaded into the container.
 
 POSTGRES_DB=tap_hoa
 POSTGRES_USER=tap_hoa_app
@@ -90,7 +92,7 @@ Then disable or rotate any seed account as described in
 Smoke check:
 
 ```sh
-curl http://<prod-host>:3000/health
+curl http://<prod-host>:3040/health
 ```
 
 Expected:
@@ -98,6 +100,8 @@ Expected:
 ```json
 { "ok": true }
 ```
+
+(Use your reverse-proxy HTTPS URL in production; `3040` is the Compose default host port.)
 
 ## 4. Daily PostgreSQL backup
 
