@@ -23,16 +23,22 @@ Full port / naming map: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
 
 ## Dev setup (tap-hoa identity)
 
+**Entrypoints:** use `scripts/dev-up.ps1`, `dev-setup.ps1`, and `start-api.ps1` from repo root — they handle Docker PATH, `.env` loading, and tap-hoa ports. Details: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
+
 ### Quick start (Windows)
 
 ```powershell
 cd C:\Users\C-PC\Documents\Projects\tap-hoa
-.\scripts\dev-up.ps1      # Docker Compose project tap-hoa, or Supabase project_id tap-hoa
+.\scripts\dev-up.ps1      # Postgres :55422 (Docker Compose or Supabase fallback)
 .\scripts\dev-setup.ps1   # npm install + migrate + seed
-.\scripts\start-api.ps1   # loads apps/api/.env → http://127.0.0.1:3040
+.\scripts\start-api.ps1   # API :3040 — loads apps/api/.env
+cd apps\pos_app
+flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 ```
 
-### 1. PostgreSQL (namespaced)
+Seed login: `0900000001` / `123456`. Health: `GET http://127.0.0.1:3040/health`.
+
+### 1. PostgreSQL (manual fallback)
 
 | | Value |
 |--|--------|
@@ -59,20 +65,17 @@ npx supabase start
 
 Copy `apps/api/.env.example` → `apps/api/.env` (already points at `tap_hoa` / `55422` / `PORT=3040`).
 
-### 2. API
+### 2. API (manual fallback)
+
+Prefer `.\scripts\start-api.ps1` from repo root (loads `apps/api/.env` so a shell `DATABASE_URL` from another project does not override tap-hoa). Manual equivalent:
 
 ```powershell
 cd apps/api
 npm install
 npx prisma migrate deploy
 npx prisma db seed
+npm run start:dev   # → http://127.0.0.1:3040
 ```
-
-From repo root, prefer `.\scripts\start-api.ps1` (loads `apps/api/.env` so a shell `DATABASE_URL` from another project does not override tap-hoa). Or from `apps/api`: `npm run start:dev` → http://127.0.0.1:3040
-
-Verify: `GET http://127.0.0.1:3040/health` → `{ "ok": true }`.
-
-**Seed login:** phone `0900000001`, password `123456` (owner, stores CH1 + CH2, product STING-330).
 
 Run API tests:
 
@@ -82,6 +85,8 @@ npm run test:e2e
 ```
 
 ### 3. Flutter POS (Windows) — app title **Tap Hoa POS**
+
+After `.\scripts\start-api.ps1` is running:
 
 ```powershell
 cd apps/pos_app

@@ -16,7 +16,7 @@
 | Wave | Mô tả | Status |
 |------|--------|--------|
 | **L1** | Local smoke (health + seed login + 1 POS path) | **Done** |
-| **L2** | Dev ergonomics (PATH, scripts entrypoints, launch config tuỳ chọn) | **Pending** |
+| **L2** | Dev ergonomics (PATH, scripts entrypoints, launch config tuỳ chọn) | **Done** |
 | **L3** | Release hygiene local (CHANGELOG/tag note) | **Pending** |
 | **A-live** | VPS go-live (operator) | **Blocked** — xem [go-live-signoff.md](../../ops/go-live-signoff.md) |
 
@@ -66,10 +66,10 @@ Commands: `docs/ops/local-smoke.md`
 
 **DoD:** Dev mới chỉ cần scripts làm entrypoint; ghi chú Docker PATH rõ; launch config IDE chỉ khi diff tối thiểu.
 
-- [ ] **L2.1** Xác nhận ghi chú Docker PATH (non-interactive shell) trong `docs/ops/local-dev.md` — script đã prepend `C:\Program Files\Docker\Docker\resources\bin` trong `dev-up.ps1`
-- [ ] **L2.2** README + `local-dev.md`: **scripts là entrypoint** (`dev-up`, `dev-setup`, `start-api`); tránh copy-paste dài lệnh thô
-- [ ] **L2.3** (Tuỳ chọn) `.vscode/launch.json` hoặc Cursor task tối thiểu — API `start:dev` + Flutter `API_URL=3040` — chỉ thêm nếu ≤ ~30 dòng và không trùng scripts
-- [ ] **L2.4** Cảnh báo `DATABASE_URL` shell override (đã có trong `local-dev.md`) — xác nhận còn đúng sau L1
+- [x] **L2.1** Xác nhận ghi chú Docker PATH (non-interactive shell) trong `docs/ops/local-dev.md` — script đã prepend `C:\Program Files\Docker\Docker\resources\bin` trong `dev-up.ps1`
+- [x] **L2.2** README + `local-dev.md`: **scripts là entrypoint** (`dev-up`, `dev-setup`, `start-api`); tránh copy-paste dài lệnh thô
+- [x] **L2.3** (Tuỳ chọn) `.vscode/launch.json` hoặc Cursor task tối thiểu — API `start:dev` + Flutter `API_URL=3040` — chỉ thêm nếu ≤ ~30 dòng và không trùng scripts
+- [x] **L2.4** Cảnh báo `DATABASE_URL` shell override (đã có trong `local-dev.md`) — xác nhận còn đúng sau L1
 
 ---
 
@@ -112,6 +112,6 @@ Commands: `docs/ops/local-smoke.md`
 ## Tiêu chí “local đủ dùng”
 
 1. [x] L1: health + seed + 1 POS path verified
-2. [ ] L2: scripts-only onboarding rõ trong docs
+2. [x] L2: scripts-only onboarding rõ trong docs
 3. [ ] L3: CHANGELOG/tag note confirmed (tag optional)
 4. [ ] A-live: **không chặn** tiêu chí local — theo dõi riêng khi có VPS

@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (tap-hoa :3040)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev"],
+      "envFile": "${workspaceFolder}/apps/api/.env"
+    },
+    {
+      "name": "Flutter POS (tap-hoa)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/pos_app",
+      "program": "lib/main.dart",
+      "deviceId": "windows",
+      "toolArgs": ["--dart-define=API_URL=http://127.0.0.1:3040"]
+    }
+  ]
+}
