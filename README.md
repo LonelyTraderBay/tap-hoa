@@ -158,9 +158,12 @@ See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklis
 
 ### Wave 1 ops (go-live)
 
+Go-live roadmap (Wave A–F): `docs/superpowers/plans/2026-07-25-hoan-thien-van-hanh.md`.
+
 | Topic | Doc |
 |-------|-----|
 | **Operator checklist (A.2–A.5)** | `docs/ops/go-live-checklist.md` |
+| **Sign-off template (Wave A)** | `docs/ops/go-live-signoff.md` |
 | Deploy, migrate, backup, rollback | `docs/ops/production-deploy.md` |
 | Secrets + real owner account | `docs/ops/production-secrets.md` |
 | HĐĐT HTTP gateway / stub | `docs/ops/einvoice-http.md` |

@@ -1,0 +1,252 @@
+# Hoàn thiện vận hành & đóng vòng còn lại — Kế hoạch theo thứ tự ưu tiên
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) hoặc `superpowers:executing-plans`. Một Wave / Task tại một thời điểm. Epic code lớn → plan con TDD trước khi implement.  
+> **Bối cảnh:** Feature design §4/§5 + Phase 1–3 đã merge (`main` @ `ab65fcc`, PR [#18](https://github.com/LonelyTraderBay/tap-hoa/pull/18)). Kế hoạch này chỉ phần **còn lại để mở quán thật + đóng gap tùy chọn**.
+
+**Goal:** Từ “code đủ trên `main`” → **API/POS prod ổn định**, rồi (tuỳ nhu cầu) đối chiếu NCC, camera barcode, tách quyền KT/HĐĐT.
+
+**Architecture:** Không đổi kiến trúc monorepo. Ưu tiên operator runbook trước; code tiếp theo chỉ khi operator hoặc kế toán yêu cầu.
+
+**Tech Stack:** NestJS + Prisma + PostgreSQL; Flutter POS; Docker/`docs/ops/*`; HĐĐT stub|http; FCM optional.
+
+## Global Constraints
+
+- Không nộp CQT; không SDK Viettel/MISA nếu HTTP gateway đủ.
+- Không `npm audit fix --force` — theo `docs/ops/npm-audit.md`.
+- Prod: `JWT_SECRET` ≥ 32 bytes; `NODE_ENV=production`; chỉ `prisma migrate deploy`.
+- Seed `0900000001` / `123456` chỉ dev/test.
+- Thay đổi sổ/sync → e2e; Flutter → `flutter analyze` sạch trên path đụng.
+- Không mở YAGNI: website, loyalty, HR, chuỗi > ~10 điểm.
+
+---
+
+## Trạng thái hiện tại (2026-07-25)
+
+| Hạng mục | Status |
+|----------|--------|
+| Phase 1–3 + hardening | Done trên `main` |
+| Gap design §4/§5 (PR #18) | **Merged** |
+| Runbook go-live / Docker / signing | Done in-repo |
+| **Deploy VPS + owner + backup + smoke 2 máy** | **Chưa** (operator) |
+| Đối chiếu sao kê NCC (5b) | Deferred |
+| Camera barcode / tách role KT–HĐĐT | Skipped (tuỳ chọn) |
+
+---
+
+## Thứ tự ưu tiên
+
+```text
+Wave A  Go-live prod thật (operator)           [P0 — chặn mở quán]
+Wave B  CI + release hygiene trên main         [P0 khuyến nghị]
+Wave C  Đối chiếu sao kê NCC (AP recon)        [P1 kế toán — nếu cần]
+Wave D  Camera barcode (mobile)                [P2 — nếu wedge chưa đủ]
+Wave E  Tách quyền kế toán ≠ HĐĐT              [P2 — nếu chủ yêu cầu]
+Wave F  Hardening UX/ops nhỏ                   [P3]
+```
+
+**Đủ mở quán:** xong **Wave A** (khuyến nghị thêm Wave B).  
+Waves C–F không chặn ngày mở quán.
+
+---
+
+## Bản đồ file / khu vực
+
+| Wave | Khu vực | Neo |
+|------|---------|-----|
+| A | Ops | `docs/ops/go-live-checklist.md`, `production-secrets.md`, `production-deploy.md`, `smoke-multi-device.md`, `windows-prod.md`, `android-release.md`, `einvoice-http.md`, `fcm.md` |
+| B | CI/docs | `.github/workflows/*` (tạo mới), README |
+| C | AP recon | `apps/api/src/suppliers/*` hoặc `reports/*`, Flutter NCC |
+| D | Scanner | `pos_page.dart`, `mobile_scanner` |
+| E | Roles | Prisma `Role` / permissions, guards Nest + Flutter nav |
+| F | Polish | manager ledger entry, PO multi-line UI, v.v. |
+
+---
+
+## Wave A — Go-live prod thật (P0)
+
+**DoD:** `GET /health` prod OK; owner thật login; không còn seed password; backup Postgres đã restore thử; ≥1 máy POS bán+sync+đóng ca; khuyến nghị smoke 2 máy.
+
+### Task A.1: Đồng bộ & migrate
+
+- [ ] Xác nhận local theo `origin/main` (`ab65fcc` hoặc mới hơn)
+
+```powershell
+git checkout main
+git pull origin main
+```
+
+- [ ] Trên host: `npx prisma migrate deploy` (gồm migrations Wave 5–9 / final-review-fixes)
+
+### Task A.2: Secrets + owner
+
+**Docs:** `docs/ops/production-secrets.md`
+
+- [ ] Sinh `JWT_SECRET` (≥ 32 bytes); đặt env host — **không** commit
+- [ ] Env: `NODE_ENV=production`, `DATABASE_URL`, `PORT`, optional HĐĐT/FCM
+- [ ] `npm run create-owner` với Compose `-e OWNER_PHONE` / `-e OWNER_PASSWORD` (xem `production-deploy.md`)
+- [ ] Disable/đổi mật khẩu seed `0900000001` nếu từng seed
+- [ ] Verify: `/health`; login owner OK; login `123456` fail
+
+### Task A.3: Host + backup
+
+**Docs:** `docs/ops/production-deploy.md`
+
+- [ ] Docker Compose hoặc Node/systemd theo runbook
+- [ ] Cron/`pg_dump` hàng ngày; giữ ≥ 7 bản; restore thử 1 lần staging
+- [ ] Rollback drill 15 phút (snapshot trước migrate)
+
+### Task A.4: HĐĐT ngày 1
+
+**Docs:** `docs/ops/einvoice-http.md`
+
+- [ ] Có gateway: `EINVOICE_PROVIDER=http` + URL/key; xuất 1 HĐ; lần 2 idempotent; thử cancel/adjust nếu dùng
+- [ ] Chưa gateway: giữ `stub`; không xuất HĐ cho khách/CQT; ghi “chưa HĐĐT thật”
+
+### Task A.5: POS prod + smoke
+
+**Docs:** `windows-prod.md`, `android-release.md`, `smoke-multi-device.md`
+
+- [ ] Windows/Android trỏ `API_URL` prod; Android có `key.properties` thật
+- [ ] Smoke 1 máy: login → CH → mở ca → bán TM → đồng bộ → báo cáo ngày
+- [ ] Smoke 2 máy (B.1): offline A → sync → B pull tồn; đóng ca; owner sổ/VAT/PDF thử 1 lần
+- [ ] Ghi kết quả vào note nội bộ / issue GitHub
+
+**Tick checklist:** `docs/ops/go-live-checklist.md` các mục A.* / smoke.
+
+---
+
+## Wave B — CI + release hygiene (P0 khuyến nghị)
+
+**DoD:** PR/`main` có pipeline tối thiểu; nhánh cũ dọn; tài liệu phiên bản rõ.
+
+### Task B.1: GitHub Actions tối thiểu
+
+**Create:** `.github/workflows/ci.yml`
+
+- [ ] Job API: `npm ci` → `npm run build` → `npm run test:unit` (e2e optional với service Postgres)
+- [ ] Job Flutter: `flutter pub get` → `flutter analyze` → `flutter test` (matrix hoặc ubuntu)
+- [ ] Chạy trên `pull_request` + `push` `main`
+- [ ] Commit: `ci: thêm workflow build/test API và Flutter`
+
+### Task B.2: Dọn nhánh & tag
+
+- [ ] Xóa remote nhánh đã merge nếu còn (`cursor/hoan-thien-gap-thiet-ke` sau khi không cần)
+- [ ] Tag release gợi ý: `v0.3.0-design-complete` trên `main` (sau Wave A hoặc ngay khi sẵn sàng freeze code)
+- [ ] Cập nhật `CHANGELOG.md` section version nếu chưa có
+
+### Task B.3: Docs đóng vòng
+
+- [ ] README: một dòng “Design §4/§5 feature-complete trên `main`; go-live = Wave A ops”
+- [ ] Đánh dấu plan `2026-07-25-design-gaps-hoan-thien.md` **Merged via #18**
+
+---
+
+## Wave C — Đối chiếu sao kê NCC (P1, optional)
+
+> **Plan con bắt buộc:** `docs/superpowers/plans/YYYY-MM-DD-ap-statement-recon.md`.  
+> Mirror pattern bank-recon Phase 3.
+
+**DoD:** Import CSV phải trả / sao kê NCC; khớp payment/AP; khóa kỳ đối chiếu; e2e; Flutter màn NCC.
+
+**Gợi ý schema:** `SupplierStatementLine`, match tới `SupplierPayment` / payable; fingerprint idempotent.
+
+- [ ] Plan con (match rules, lock, roles)
+- [ ] API import/match/unmatch/lock + e2e
+- [ ] Flutter UI trên Công nợ NCC
+- [ ] CHANGELOG
+
+**Bỏ qua** nếu quán không đối chiếu sao kê NCC thủ công.
+
+---
+
+## Wave D — Camera barcode (P2, optional)
+
+**DoD:** Trên Android/iOS, nút quét camera → điền query / auto-add như wedge hiện có.
+
+**Files:** `pos_page.dart`, dependency `mobile_scanner` (hoặc tương đương), quyền camera.
+
+- [ ] Chỉ bật trên mobile; Windows giữ bàn phím wedge
+- [ ] Reuse exact-barcode auto-add path
+- [ ] Tests mock / analyze
+- [ ] Commit: `feat(pos): camera barcode scan on mobile`
+
+**Bỏ qua** nếu scanner USB/wedge đủ.
+
+---
+
+## Wave E — Tách quyền kế toán ≠ HĐĐT (P2, optional)
+
+> Plan con bắt buộc nếu đụng schema Role.
+
+**DoD:** Thu ngân = bán; role/permission riêng cho sổ vs xuất HĐĐT (hiện manager gộp cả hai).
+
+**Hướng tối thiểu (chọn 1 trong plan con):**
+1. Thêm role `accountant` + `einvoice_clerk`, hoặc
+2. Flags trên User: `canLedger`, `canEinvoice`
+
+- [ ] Plan con + migration
+- [ ] Guards Nest + ẩn/hiện Flutter nav
+- [ ] e2e role matrix
+- [ ] Seed/docs cập nhật
+
+---
+
+## Wave F — Hardening UX/ops nhỏ (P3)
+
+Làm từng mục khi có complaint thực tế:
+
+| # | Mục | Ghi chú |
+|---|-----|---------|
+| F.1 | Manager vào Ledger UI | API đã cho manager; nav Flutter đang owner-only |
+| F.2 | PO UI nhiều dòng một lần | Hiện tạo/nhận từng dòng |
+| F.3 | Audit `debt_adjust` API | Nếu cần chỉnh số dư ngoài thu nợ |
+| F.4 | Batch HĐĐT idempotent re-call | Trả invoice cũ thay vì lỗi `already_issued` |
+| F.5 | `npm audit` quarterly | Theo `docs/ops/npm-audit.md` |
+
+---
+
+## Ngoài scope (không đưa vào kế hoạch này)
+
+- Nộp CQT; SDK Viettel/MISA (trừ khi HTTP fail compliance)
+- Website / loyalty / HR / chuỗi lớn
+- Đổi WAC → FIFO
+
+---
+
+## Tiêu chí “hoàn thiện tối thiểu” (mở quán)
+
+1. [x] Code design §4/§5 + Phase 3 trên `main` (PR #18)
+2. [ ] Wave A: migrate + JWT + owner + backup restore + POS prod
+3. [ ] Wave A: smoke ≥ 1 máy (khuyến nghị 2 máy)
+4. [ ] HĐĐT: gateway thử **hoặc** chấp nhận stub
+5. [ ] (Khuyến nghị) Wave B: CI xanh trên `main`
+
+**Hoàn thiện 100% plan này** = A+B xong + C/D/E/F đã làm hoặc ghi rõ “won't do” trong CHANGELOG/ops.
+
+---
+
+## Cách chạy
+
+| Wave | Cách |
+|------|------|
+| A | Operator + agent hỗ trợ checklist (Inline) |
+| B | Subagent-Driven hoặc Inline |
+| C–E | Plan con → Subagent-Driven |
+| F | Từng PR nhỏ khi cần |
+
+**Không** bắt Wave C–E trước khi Wave A có backup + owner thật (trừ khi chỉ làm CI Wave B song song).
+
+---
+
+## Self-review (coverage)
+
+| Còn lại sau PR #18 | Wave |
+|--------------------|------|
+| Deploy/secrets/backup/smoke | A |
+| CI + tag/docs | B |
+| Sao kê NCC | C |
+| Camera barcode | D |
+| Tách quyền KT/HĐĐT | E |
+| UX nhỏ (manager ledger, PO multi-line…) | F |
+| CQT / SDK vendor / YAGNI | Ngoài scope |
+)

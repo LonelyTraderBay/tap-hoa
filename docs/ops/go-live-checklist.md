@@ -6,6 +6,23 @@ operator completes these steps on the production host and POS machines.
 
 **Prerequisites:** Task A.1 done (`main` matches `origin/main`).
 
+**Sign-off:** Fill [go-live-signoff.md](go-live-signoff.md) on the host (or internal wiki). Do **not**
+commit completed sign-offs with real URLs or secrets.
+
+## Operator sign-off table (A.1–A.5 + smoke)
+
+| Step | Description | Pass | Fail | Operator | Date | Notes |
+|------|-------------|:----:|:----:|----------|------|-------|
+| A.1 | Repo synced; `prisma migrate deploy` on host | ☐ | ☐ | | | |
+| A.2 | Secrets + real owner; seed `123456` disabled | ☐ | ☐ | | | |
+| A.3 | API healthy; daily backup; restore trial once | ☐ | ☐ | | | |
+| A.4 | HĐĐT: **stub — chưa HĐĐT thật** (default) or gateway verified | ☐ | ☐ | | | |
+| A.5 | POS `API_URL` prod; Windows/Android deployed | ☐ | ☐ | | | |
+| Smoke | Login → CH → mở ca → bán TM → **Đồng bộ** → báo cáo ngày | ☐ | ☐ | | | |
+
+**Default A.4 (no gateway):** keep `EINVOICE_PROVIDER=stub`; document store status as **chưa HĐĐT
+thật** — stub invoice numbers are not valid for CQT or customer tax filing. See [A.4 Branch A](#branch-a--default-stub--chưa-hđđt-thật-recommended-when-no-gateway) below.
+
 | Task | Topic | Runbook |
 |------|-------|---------|
 | A.2 | Secrets + real owner | [production-secrets.md](production-secrets.md) |
