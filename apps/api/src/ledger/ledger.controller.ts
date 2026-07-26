@@ -128,6 +128,7 @@ export class LedgerController {
     @Query('action') action?: string,
     @Query('entityType') entityType?: string,
     @Query('entityId') entityId?: string,
+    @Query('storeId') storeId?: string,
   ) {
     try {
       return await this.ledger.listAudit(req.user, {
@@ -135,6 +136,7 @@ export class LedgerController {
         action,
         entityType,
         entityId,
+        storeId,
       });
     } catch (e) {
       this.mapError(e);

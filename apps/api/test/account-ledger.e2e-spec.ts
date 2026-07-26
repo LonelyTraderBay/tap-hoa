@@ -192,4 +192,130 @@ describe('Wave 4 account ledger e2e', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(403);
   });
+
+  it('scopes journal, trial balance, and audit for ledger managers', async () => {
+    await prisma.journalLine.deleteMany();
+    await prisma.journalEntry.deleteMany();
+    await prisma.auditLog.deleteMany();
+
+    await createJournal({
+      storeId: store1,
+      periodYm: '2026-08',
+      postedAt: '2026-08-05T01:00:00.000Z',
+      debit111: 1000,
+    });
+    await createJournal({
+      storeId: store2,
+      periodYm: '2026-08',
+      postedAt: '2026-08-06T01:00:00.000Z',
+      debit111: 3000,
+    });
+
+    const auditStore1EntityId = randomUUID();
+    const auditStore2EntityId = randomUUID();
+    await prisma.auditLog.create({
+      data: {
+        id: randomUUID(),
+        action: 'product_price_change',
+        entityType: 'product',
+        entityId: auditStore1EntityId,
+        detailJson: JSON.stringify({ storeId: store1, marker: 'store1' }),
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        id: randomUUID(),
+        action: 'product_price_change',
+        entityType: 'product',
+        entityId: auditStore2EntityId,
+        detailJson: JSON.stringify({ storeId: store2, marker: 'store2' }),
+      },
+    });
+
+    const managerJournal = await request(app.getHttpServer())
+      .get('/ledger/journal')
+      .query({
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-31T23:59:59.999Z',
+      })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    expect(
+      managerJournal.body.map((row: { storeId: string | null }) => row.storeId),
+    ).toEqual([store1]);
+
+    const managerJournalOwnStore = await request(app.getHttpServer())
+      .get('/ledger/journal')
+      .query({
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-31T23:59:59.999Z',
+        storeId: store1,
+      })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    expect(managerJournalOwnStore.body).toHaveLength(1);
+    expect(managerJournalOwnStore.body[0].storeId).toBe(store1);
+
+    await request(app.getHttpServer())
+      .get('/ledger/journal')
+      .query({
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-31T23:59:59.999Z',
+        storeId: store2,
+      })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(403);
+
+    const managerTrial = await request(app.getHttpServer())
+      .get('/ledger/trial-balance')
+      .query({ periodYm: '2026-08' })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    const scopedTrialCash = managerTrial.body.rows.find(
+      (row: { accountCode: string }) => row.accountCode === '111',
+    );
+    expect(scopedTrialCash.debitVnd).toBe(1000);
+
+    const managerTrialOwnStore = await request(app.getHttpServer())
+      .get('/ledger/trial-balance')
+      .query({ periodYm: '2026-08', storeId: store1 })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    const ownStoreTrialCash = managerTrialOwnStore.body.rows.find(
+      (row: { accountCode: string }) => row.accountCode === '111',
+    );
+    expect(ownStoreTrialCash.debitVnd).toBe(1000);
+
+    await request(app.getHttpServer())
+      .get('/ledger/trial-balance')
+      .query({ periodYm: '2026-08', storeId: store2 })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(403);
+
+    const managerAudit = await request(app.getHttpServer())
+      .get('/ledger/audit')
+      .query({ action: 'product_price_change' })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    expect(
+      managerAudit.body.map((row: { entityId: string | null }) => row.entityId),
+    ).toEqual([auditStore1EntityId]);
+
+    const managerAuditOwnStore = await request(app.getHttpServer())
+      .get('/ledger/audit')
+      .query({ action: 'product_price_change', storeId: store1 })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    expect(
+      managerAuditOwnStore.body.map(
+        (row: { entityId: string | null }) => row.entityId,
+      ),
+    ).toEqual([auditStore1EntityId]);
+
+    await request(app.getHttpServer())
+      .get('/ledger/audit')
+      .query({ action: 'product_price_change', storeId: store2 })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(403);
+  });
 });
