@@ -1,7 +1,7 @@
 # Hoàn thiện vận hành & đóng vòng còn lại — Kế hoạch theo thứ tự ưu tiên
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) hoặc `superpowers:executing-plans`. Một Wave / Task tại một thời điểm. Epic code lớn → plan con TDD trước khi implement.  
-> **Bối cảnh:** Feature design §4/§5 + Phase 1–3 đã merge (`main` @ `ab65fcc`, PR [#18](https://github.com/LonelyTraderBay/tap-hoa/pull/18)). Kế hoạch này chỉ phần **còn lại để mở quán thật + đóng gap tùy chọn**.
+> **Bối cảnh:** Feature design §4/§5 + Phase 1–3 đã merge (`main` @ `ab65fcc`, PR [#18](https://github.com/LonelyTraderBay/tap-hoa/pull/18)). **Waves A–F in-repo merged** via PR [#19](https://github.com/LonelyTraderBay/tap-hoa/pull/19) (`f9d193d`); **còn operator:** Wave A live (VPS).
 
 **Goal:** Từ “code đủ trên `main`” → **API/POS prod ổn định**, rồi (tuỳ nhu cầu) đối chiếu NCC, camera barcode, tách quyền KT/HĐĐT.
 
@@ -26,6 +26,7 @@
 |----------|--------|
 | Phase 1–3 + hardening | Done trên `main` |
 | Gap design §4/§5 (PR #18) | **Merged** |
+| **Waves A–F in-repo** (plan này) | **Merged** via PR #19 (`f9d193d`) |
 | **Wave A in-repo** (checklist + ops docs handoff) | **Done** (`be892e1`) |
 | **Wave B in-repo** (CI, CHANGELOG, README, tag docs) | **Done** (`61e607c`) |
 | **Wave C in-repo** (AP statement recon) | **Done** (`1a175d3`) |
@@ -33,7 +34,7 @@
 | **Wave E in-repo** (`canLedger` / `canEinvoice`; toolbar fix `21f38ac`) | **Done** |
 | **Wave F in-repo** (manager ledger, PO multi-line, debt adjust, batch HĐĐT idempotent, npm-audit) | **Done** (`a482b8d`) |
 | **Deploy VPS + owner + backup + smoke 2 máy** | **Chưa** (operator — Wave A live) |
-| **100% plan in-repo** | **Done** — còn Wave A live trên VPS |
+| **100% plan in-repo** | **Merged** (PR #19) — còn Wave A live trên VPS (operator) |
 
 ---
 
