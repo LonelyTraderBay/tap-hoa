@@ -1,11 +1,9 @@
-# Start Nest API using apps/api/.env (overrides any shell DATABASE_URL from other projects).
+# Start Nest API using locked tap-hoa Supabase .env (overrides shell DATABASE_URL).
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Api = Join-Path $Root "apps\api"
+& (Join-Path $Root "scripts\write-tap-hoa-env.ps1")
 $EnvFile = Join-Path $Api ".env"
-if (-not (Test-Path $EnvFile)) {
-  Copy-Item (Join-Path $Api ".env.example") $EnvFile
-}
 Get-Content $EnvFile | ForEach-Object {
   if ($_ -match '^\s*#' -or $_ -match '^\s*$') { return }
   $name, $value = $_.Split('=', 2)

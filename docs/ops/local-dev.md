@@ -1,77 +1,45 @@
-# Local development — identity `tap-hoa`
+# Local development — identity `tap-hoa` (Supabase only)
 
-Use this when developing **multiple projects** on one PC. Everything below is
-namespaced to the folder / product name **tap-hoa** so ports, DB, Docker, and
-window titles do not collide with other repos.
+Local PostgreSQL for this repo is **Supabase CLI only**, with `project_id = "tap-hoa"`
+locked in `apps/api/supabase/config.toml` and enforced in Nest by
+`apps/api/src/config/tap-hoa.identity.ts`.
 
-## Quick start (scripts are the entrypoint)
+This avoids colliding with other projects that use default Supabase `:54322` or a
+shared `postgres` database.
 
-From repo root — prefer these wrappers over raw `docker` / `npm` commands:
+## Quick start
 
 ```powershell
 cd C:\Users\C-PC\Documents\Projects\tap-hoa
-.\scripts\dev-up.ps1      # Postgres :55422 (Docker Compose or Supabase fallback)
-.\scripts\dev-setup.ps1   # npm install + migrate + seed (loads apps/api/.env)
-.\scripts\start-api.ps1   # Nest API :3040 (loads apps/api/.env)
+.\scripts\dev-up.ps1      # supabase start + create DB tap_hoa + write .env
+.\scripts\dev-setup.ps1   # migrate + seed
+.\scripts\start-api.ps1   # Nest :3040 (loads .env; rejects foreign DATABASE_URL)
+```
+
+POS:
+
+```powershell
 cd apps\pos_app
 flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 ```
 
-Copy `apps/api/.env.example` → `apps/api/.env` if `dev-setup` has not created it yet.
-IDE debug: `.vscode/launch.json` (API + Flutter with `API_URL` on `:3040`).
+IDE: `.vscode/launch.json` — **API (tap-hoa :3040)** / **Flutter POS (tap-hoa)**.
 
-## Identity map
+## Locked identity map
 
-| Concern | Value |
-|---------|--------|
-| Repo folder | `tap-hoa` |
-| Nest package | `tap-hoa-api` |
-| Postgres database | `tap_hoa` |
-| Postgres user (Docker) | `tap_hoa` / `tap_hoa_dev` |
-| Nest API port | **3040** |
-| Postgres host port | **55422** |
+| Concern | Locked value |
+|---------|----------------|
 | Supabase `project_id` | `tap-hoa` |
-| Supabase Studio | http://127.0.0.1:55423 |
-| POS display name | **Tap Hoa POS** |
+| Postgres database | `tap_hoa` (never bare `postgres`) |
+| Postgres host port | **55422** |
+| Nest API port | **3040** |
+| Schema | `public` |
+| Studio | http://127.0.0.1:55423 |
+| POS title | **Tap Hoa POS** |
 | Local SQLite | `tap_hoa_pos.sqlite` |
-| Docker Compose project | `tap-hoa` (`docker-compose.dev.yml`) |
-| Prod Compose project | `tap-hoa` (`apps/api/docker-compose.prod.yml`) |
+| Nest package | `tap-hoa-api` |
 
-## Docker PATH (Windows)
-
-Docker Desktop often installs `docker.exe` under
-`C:\Program Files\Docker\Docker\resources\bin`, which **may not be on PATH** in
-non-interactive shells (CI, Cursor agents, scheduled tasks). `.\scripts\dev-up.ps1`
-**prepends** that directory before calling `docker compose`. If raw `docker`
-fails with "command not found", use the script or add that folder to your PATH.
-
-## Preferred DB: Docker Compose (when Docker Desktop is installed)
-
-```powershell
-.\scripts\dev-up.ps1
-.\scripts\dev-setup.ps1
-```
-
-`apps/api/.env` (from `.env.example`):
-
-```env
-DATABASE_URL=postgresql://tap_hoa:tap_hoa_dev@127.0.0.1:55422/tap_hoa?schema=public
-JWT_SECRET=dev-change-me-tap-hoa
-PORT=3040
-```
-
-## Alternate DB: Supabase CLI (unique ports for this project)
-
-Config is tracked at `apps/api/supabase/config.toml` (`project_id = "tap-hoa"`).
-Ports are offset from the Supabase defaults so another project can keep `:54322`.
-
-```powershell
-cd apps/api
-npx supabase start
-.\..\..\scripts\ensure-tap-hoa-db.ps1
-```
-
-Then:
+`apps/api/.env` (auto-written by `write-tap-hoa-env.ps1`):
 
 ```env
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55422/tap_hoa?schema=public
@@ -79,38 +47,28 @@ JWT_SECRET=dev-change-me-tap-hoa
 PORT=3040
 ```
 
-Stop: `npx supabase stop` (from `apps/api`).
+## Identity lock in code
 
-## API + POS
+On API boot (when `NODE_ENV` ≠ `production`), Nest calls `assertTapHoaLocalIdentity()`:
+
+- Rejects port `54322` / `5432` (shared defaults)
+- Requires DB name `tap_hoa`, schema `public`, host localhost, port `55422`
+- Requires `PORT=3040`
+
+Override only for special tooling: `TAP_HOA_SKIP_LOCAL_IDENTITY=1`  
+Production: set `NODE_ENV=production` (lock skipped).
+
+## Docker PATH (Windows)
+
+Supabase CLI still needs Docker Desktop. `dev-up.ps1` prepends
+`C:\Program Files\Docker\Docker\resources\bin` when present.
+
+## Stop local stack
 
 ```powershell
-# Prefer wrapper so shell DATABASE_URL from other projects cannot override .env:
-.\scripts\start-api.ps1
-# → http://127.0.0.1:3040/health
-
-cd apps/pos_app
-flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
+cd apps\api
+npx supabase stop
 ```
-
-| Platform | `API_URL` |
-|----------|-----------|
-| Windows / iOS sim | `http://127.0.0.1:3040` |
-| Android emulator | `http://10.0.2.2:3040` |
-
-**Seed login (dev only):** `0900000001` / `123456`
-
-## Minimal POS smoke (local)
-
-After API is healthy and POS is running (`flutter run` above):
-
-1. **Đăng nhập** — seed `0900000001` / `123456`
-2. **Chọn cửa hàng** — CH1 or CH2
-3. **Mở ca** — enter opening cash; selling is blocked until shift is open
-4. **Bán 1 đơn tiền mặt** — add a product (e.g. STING-330 from synced catalog), complete cash (TM) sale
-5. **Đồng bộ** — tap **Đồng bộ** (or wait for auto sync); confirm no sync errors
-
-Quick API checks without POS: `docs/ops/local-smoke.md`. Full multi-device smoke:
-`docs/ops/smoke-multi-device.md`.
 
 ## Port cheat sheet (tap-hoa only)
 
@@ -121,18 +79,16 @@ Quick API checks without POS: `docs/ops/local-smoke.md`. Full multi-device smoke
 | 55421 | Supabase API |
 | 55422 | PostgreSQL (`tap_hoa`) |
 | 55423 | Supabase Studio |
-| 55424 | Supabase Inbucket |
-| 55427 | Supabase analytics |
-| 55429 | Supabase pooler |
+| 55424 | Inbucket |
+| 55427 | Analytics |
+| 55429 | Pooler |
 | 18083 | Edge inspector |
 
 ## Do not
 
-- Point this app at another project's `postgres` DB on `:54322` / `:5432`
-- Commit `apps/api/.env` or real JWT / owner passwords
-- Reuse Compose project name `api` (old default from folder name)
-- Leave a global/shell `DATABASE_URL` from another project — it **overrides** `apps/api/.env` when Prisma/npm read the shell env. Prefer `.\scripts\dev-setup.ps1` and `.\scripts\start-api.ps1` (both load `.env` into the process) or clear the variable first:
+- Use `docker-compose.dev.yml` for local DB (deprecated stub)
+- Point at another project's `:54322` or schema (e.g. `taskd_*`)
+- Leave shell `DATABASE_URL` from another repo — scripts rewrite/load `.env`, and Nest will refuse a mismatch
+- Commit `apps/api/.env`
 
-```powershell
-Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
-```
+Smoke: `docs/ops/local-smoke.md`
