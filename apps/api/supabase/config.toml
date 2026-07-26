@@ -2,6 +2,8 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
+# CANONICAL local DB for this repo. Do not change project_id or ports without
+# updating apps/api/src/config/tap-hoa.identity.ts and scripts/write-tap-hoa-env.ps1.
 # Distinct from other local Supabase projects (folder / product: tap-hoa).
 project_id = "tap-hoa"
 

@@ -1,17 +1,15 @@
-# pos_app
+# Tap Hoa POS (`pos_app`)
 
-A new Flutter project.
+Flutter client for the **tap-hoa** monorepo.
 
-## Getting Started
+Local API (locked): `http://127.0.0.1:3040`  
+DB: Supabase project `tap-hoa` — see repo root [`docs/ops/local-dev.md`](../../docs/ops/local-dev.md).
 
-This project is a starting point for a Flutter application.
+```powershell
+# From repo root first: .\scripts\dev-up.ps1 ; .\scripts\dev-setup.ps1 ; .\scripts\start-api.ps1
+cd apps\pos_app
+flutter pub get
+flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
+```
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Seed login: `0900000001` / `123456` (dev only).

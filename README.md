@@ -17,64 +17,57 @@ Offline-first grocery POS monorepo (Phase 1–2 + Phase 3 VAT track).
 
 - **Node.js** 18+ and npm
 - **Flutter** 3.24+ (`flutter doctor`)
-- **PostgreSQL** via **Docker Desktop** (preferred) or **Supabase CLI** — both use project identity **`tap-hoa`** (DB `tap_hoa`, port **55422**) so this stack does not collide with other repos on `:54322` / `:3000`
+- **Docker Desktop** + **Supabase CLI** — local DB is **Supabase only** with locked identity **`tap-hoa`** (DB `tap_hoa`, port **55422**, Nest **3040**). Nest refuses other projects' `DATABASE_URL` at boot.
 
-Full port / naming map: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
+Full map: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
 
-## Dev setup (tap-hoa identity)
+## Dev setup (tap-hoa + Supabase)
 
-**Entrypoints:** use `scripts/dev-up.ps1`, `dev-setup.ps1`, and `start-api.ps1` from repo root — they handle Docker PATH, `.env` loading, and tap-hoa ports. Details: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
+**Entrypoints:** `scripts/dev-up.ps1`, `dev-setup.ps1`, `start-api.ps1`.
 
 ### Quick start (Windows)
 
 ```powershell
 cd C:\Users\C-PC\Documents\Projects\tap-hoa
-.\scripts\dev-up.ps1      # Postgres :55422 (Docker Compose or Supabase fallback)
-.\scripts\dev-setup.ps1   # npm install + migrate + seed
-.\scripts\start-api.ps1   # API :3040 — loads apps/api/.env
+.\scripts\dev-up.ps1      # supabase start (project_id=tap-hoa) + write locked .env
+.\scripts\dev-setup.ps1   # migrate + seed
+.\scripts\start-api.ps1   # API :3040
 cd apps\pos_app
 flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 ```
 
-Seed login: `0900000001` / `123456`. Health: `GET http://127.0.0.1:3040/health`.
+Seed login: `0900000001` / `123456`. Health: `GET http://127.0.0.1:3040/health`.  
+Studio: http://127.0.0.1:55423
 
-### 1. PostgreSQL (manual fallback)
+### 1. PostgreSQL = Supabase only
 
-| | Value |
+| | Locked value |
 |--|--------|
-| Compose project / container | `tap-hoa` / `tap-hoa-db` |
+| `project_id` | `tap-hoa` (`apps/api/supabase/config.toml`) |
 | Database | `tap_hoa` |
-| Host port | **55422** |
+| Host port | **55422** (not 54322) |
 | Nest API port | **3040** |
+| Code lock | `apps/api/src/config/tap-hoa.identity.ts` |
 
-**Option A — Docker Compose (recommended)**
-
-```powershell
-docker compose -f docker-compose.dev.yml up -d
-# DATABASE_URL=postgresql://tap_hoa:tap_hoa_dev@127.0.0.1:55422/tap_hoa?schema=public
-```
-
-**Option B — Supabase CLI** (`apps/api/supabase/config.toml`, `project_id = "tap-hoa"`)
+Manual:
 
 ```powershell
 cd apps/api
 npx supabase start
 ..\..\scripts\ensure-tap-hoa-db.ps1
-# DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55422/tap_hoa?schema=public
+..\..\scripts\write-tap-hoa-env.ps1
 ```
-
-Copy `apps/api/.env.example` → `apps/api/.env` (already points at `tap_hoa` / `55422` / `PORT=3040`).
 
 ### 2. API (manual fallback)
 
-Prefer `.\scripts\start-api.ps1` from repo root (loads `apps/api/.env` so a shell `DATABASE_URL` from another project does not override tap-hoa). Manual equivalent:
+Prefer `.\scripts\start-api.ps1` (loads locked `.env`). Manual:
 
 ```powershell
 cd apps/api
 npm install
 npx prisma migrate deploy
 npx prisma db seed
-npm run start:dev   # → http://127.0.0.1:3040
+npm run start:dev   # → http://127.0.0.1:3040 — refuses wrong DATABASE_URL
 ```
 
 Run API tests:

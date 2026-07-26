@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Local-dev identity for folder **tap-hoa**: DB `tap_hoa` on host port **55422**, Nest API **3040**, Docker Compose project `tap-hoa`, Supabase `project_id=tap-hoa` (ports 5542x), POS window/labels **Tap Hoa POS**, scripts `scripts/dev-up.ps1` / `dev-setup.ps1`. See `docs/ops/local-dev.md`.
+- Local DB is **Supabase only** (`project_id=tap-hoa`, DB `tap_hoa` `:55422`); Nest `assertTapHoaLocalIdentity()` refuses foreign `DATABASE_URL` / port `54322` / schema mismatches; `docker-compose.dev.yml` deprecated stub; POS **Tap Hoa POS**; scripts `dev-up` / `dev-setup` / `start-api` / `write-tap-hoa-env`. See `docs/ops/local-dev.md`.
 - Wave F: Manager `canLedger` POS access, multi-line PO create/receive, customer debt adjustments with audit/debt ledger entries, idempotent batch HĐĐT retry, and quarterly npm-audit ops reminders.
 - Wave C: AP statement reconciliation for suppliers with CSV import, read-only summaries, match/unmatch/auto-match, zero-variance locking, e2e coverage, and Flutter entry points from Công nợ NCC.
 
