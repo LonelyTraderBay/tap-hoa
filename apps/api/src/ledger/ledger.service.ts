@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, Role, TransferStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { hasLedgerPermission } from '../auth/permission-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   JournalLineDraft,
@@ -99,7 +100,7 @@ export class LedgerService {
         action: 'journal_blocked_period_lock',
         entityType: input.auditSourceType ?? input.sourceType,
         entityId: input.auditSourceId ?? input.sourceId,
-        detail: { periodYm },
+        detail: { periodYm, storeId: input.storeId },
       });
       return 'period_locked';
     }
@@ -535,10 +536,8 @@ export class LedgerService {
     }
     const where: Prisma.JournalEntryWhereInput = {
       postedAt: { gte: fromDate, lte: toDate },
+      ...this.ledgerStoreFilter(user, storeId),
     };
-    if (storeId) {
-      where.storeId = storeId;
-    }
     return this.prisma.journalEntry.findMany({
       where,
       include: { lines: true },
@@ -547,17 +546,14 @@ export class LedgerService {
   }
 
   async trialBalance(user: AuthUser, periodYm: string, storeId?: string) {
-    this.assertLedgerAccess(user);
+    this.assertLedgerAccess(user, storeId);
     if (!/^\d{4}-\d{2}$/.test(periodYm)) {
       throw new Error('invalid_period');
-    }
-    if (storeId && user.role !== Role.owner && !user.storeIds.includes(storeId)) {
-      throw new Error('store_forbidden');
     }
     const entries = await this.prisma.journalEntry.findMany({
       where: {
         periodYm,
-        ...(storeId ? { storeId } : {}),
+        ...this.ledgerStoreFilter(user, storeId),
       },
       include: { lines: true },
     });
@@ -829,9 +825,10 @@ export class LedgerService {
       action?: string;
       entityType?: string;
       entityId?: string;
+      storeId?: string;
     } = {},
   ) {
-    this.assertLedgerAccess(user);
+    this.assertLedgerAccess(user, filters.storeId);
     const limit = filters.limit ?? 50;
     const take = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
     const where: Prisma.AuditLogWhereInput = {
@@ -839,6 +836,15 @@ export class LedgerService {
         ? filters.action
         : { in: this.defaultAuditActions },
     };
+    const auditStoreIds = this.ledgerAuditStoreIds(user, filters.storeId);
+    if (auditStoreIds) {
+      if (auditStoreIds.length === 0) {
+        return [];
+      }
+      where.OR = auditStoreIds.map((storeId) => ({
+        detailJson: { contains: this.auditStoreIdFragment(storeId) },
+      }));
+    }
     if (filters.entityType) {
       where.entityType = filters.entityType;
     }
@@ -852,8 +858,28 @@ export class LedgerService {
     });
   }
 
+  private ledgerAuditStoreIds(
+    user: AuthUser,
+    storeId?: string,
+  ): string[] | null {
+    if (storeId) {
+      return [storeId];
+    }
+    if (user.role === Role.store_manager) {
+      return user.storeIds;
+    }
+    return null;
+  }
+
+  private auditStoreIdFragment(storeId: string): string {
+    return `"storeId":"${storeId}"`;
+  }
+
   private assertLedgerAccess(user: AuthUser, storeId?: string) {
     if (user.role === Role.owner) return;
+    if (!hasLedgerPermission(user)) {
+      throw new Error('forbidden');
+    }
     if (user.role === Role.store_manager) {
       if (storeId && !user.storeIds.includes(storeId)) {
         throw new Error('store_forbidden');

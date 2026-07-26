@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -32,11 +33,14 @@ import '../push/push_service.dart';
 import '../shifts/shift_repository.dart';
 import '../stores/store_management_page.dart';
 import 'cart.dart';
+import 'barcode_scanner_page.dart';
 import 'checkout_service.dart';
 import 'payment_sheet.dart';
 import 'receipt_print_settings_page.dart';
 import 'sale_return_service.dart';
 import 'sale_return_sheet.dart';
+
+typedef OpenBarcodeScanner = Future<String?> Function(BuildContext context);
 
 String _normalizeBarcodeQuery(String value) => value.trim().toLowerCase();
 
@@ -74,6 +78,29 @@ ProductWithStock? posExactBarcodeMatch(
   return match;
 }
 
+bool posCameraBarcodeScannerAvailable(
+  TargetPlatform platform, {
+  bool isWeb = kIsWeb,
+}) {
+  if (isWeb) return false;
+  return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+}
+
+bool posShowStoreManagementAction(String role) => role == 'owner';
+
+bool posShowLedgerHomeAction({required bool canLedger}) => canLedger;
+
+bool posShowCashFundAction(String role) =>
+    role == 'owner' || role == 'store_manager';
+
+bool posShowEInvoiceIssueAction({required bool canEinvoice}) => canEinvoice;
+
+Future<String?> openCameraBarcodeScanner(BuildContext context) {
+  return Navigator.of(context).push<String>(
+    MaterialPageRoute(builder: (_) => const PosBarcodeScannerPage()),
+  );
+}
+
 class PosPage extends StatefulWidget {
   const PosPage({
     super.key,
@@ -93,6 +120,7 @@ class PosPage extends StatefulWidget {
     required this.storeId,
     required this.storeName,
     required this.role,
+    this.openBarcodeScanner,
   });
 
   final ProductRepository productRepository;
@@ -111,6 +139,7 @@ class PosPage extends StatefulWidget {
   final String storeId;
   final String storeName;
   final String role;
+  final OpenBarcodeScanner? openBarcodeScanner;
 
   @override
   State<PosPage> createState() => _PosPageState();
@@ -220,6 +249,24 @@ class _PosPageState extends State<PosPage> {
     setState(() {
       _addProductToCart(product, qty: qty);
       _message = null;
+    });
+  }
+
+  Future<void> _scanBarcode() async {
+    final opener = widget.openBarcodeScanner ?? openCameraBarcodeScanner;
+    final scannedBarcode = await opener(context);
+    if (!mounted) {
+      return;
+    }
+
+    final query = scannedBarcode?.trim();
+    if (query == null || query.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _searchController.text = query;
+      _query = query;
     });
   }
 
@@ -700,7 +747,7 @@ class _PosPageState extends State<PosPage> {
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cấu hình in',
           ),
-          if (widget.role == 'owner')
+          if (posShowStoreManagementAction(widget.role))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -715,7 +762,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.store_mall_directory_outlined),
               tooltip: 'Cửa hàng',
             ),
-          if (widget.role == 'owner')
+          if (posShowLedgerHomeAction(canLedger: widget.user.canLedger))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -724,7 +771,7 @@ class _PosPageState extends State<PosPage> {
                       repository: LedgerRepository(
                         dio: widget.dayReportRepository.dio,
                       ),
-                      isOwner: true,
+                      isOwner: widget.role == 'owner',
                       storeId: widget.storeId,
                     ),
                   ),
@@ -733,7 +780,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.menu_book_outlined),
               tooltip: 'Sổ kế toán',
             ),
-          if (widget.role == 'owner' || widget.role == 'store_manager')
+          if (posShowCashFundAction(widget.role))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -767,7 +814,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.compare_arrows_outlined),
               tooltip: 'Đối chiếu CK',
             ),
-          if (widget.role == 'owner' || widget.role == 'store_manager')
+          if (posShowEInvoiceIssueAction(canEinvoice: widget.user.canEinvoice))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -835,13 +882,28 @@ class _PosPageState extends State<PosPage> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Tìm tên, mã SKU hoặc barcode',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (value) => setState(() => _query = value.trim()),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tìm tên, mã SKU hoặc barcode',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (value) => setState(() => _query = value.trim()),
+                  ),
+                ),
+                if (posCameraBarcodeScannerAvailable(defaultTargetPlatform))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: IconButton.filledTonal(
+                      onPressed: _scanBarcode,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      tooltip: 'Quét barcode bằng camera',
+                    ),
+                  ),
+              ],
             ),
           ),
           SizedBox(

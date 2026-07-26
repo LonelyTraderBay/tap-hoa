@@ -41,9 +41,25 @@ export function computeDebtAging(
 
   type OpenDebt = { remaining: number; at: Date };
   const open: OpenDebt[] = [];
+  const reduceOpenDebt = (amountVnd: number) => {
+    let left = amountVnd;
+    while (left > 0 && open.length > 0) {
+      const head = open[0];
+      const take = Math.min(head.remaining, left);
+      head.remaining -= take;
+      left -= take;
+      if (head.remaining <= 0) {
+        open.shift();
+      }
+    }
+  };
 
   for (const e of sorted) {
-    if (e.type === 'sale_debt' && e.amountVnd > 0) {
+    if (
+      (e.type === 'sale_debt' ||
+        (e.type === 'debt_adjust' && e.amountVnd > 0)) &&
+      e.amountVnd > 0
+    ) {
       open.push({ remaining: e.amountVnd, at: e.clientCreatedAt });
       continue;
     }
@@ -51,16 +67,10 @@ export function computeDebtAging(
       (e.type === 'payment' || e.type === 'sale_return_credit') &&
       e.amountVnd > 0
     ) {
-      let left = e.amountVnd;
-      while (left > 0 && open.length > 0) {
-        const head = open[0];
-        const take = Math.min(head.remaining, left);
-        head.remaining -= take;
-        left -= take;
-        if (head.remaining <= 0) {
-          open.shift();
-        }
-      }
+      reduceOpenDebt(e.amountVnd);
+    }
+    if (e.type === 'debt_adjust' && e.amountVnd < 0) {
+      reduceOpenDebt(Math.abs(e.amountVnd));
     }
   }
 

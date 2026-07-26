@@ -18,7 +18,7 @@ class LedgerRepository {
 
   Map<String, dynamic> _periodQuery(String periodYm, {String? storeId}) => {
     'periodYm': periodYm,
-    if (storeId != null) 'storeId': storeId,
+    'storeId': ?storeId,
   };
 
   Future<List<Map<String, dynamic>>> journal({
@@ -31,7 +31,7 @@ class LedgerRepository {
       queryParameters: {
         'from': from,
         'to': to,
-        if (storeId != null) 'storeId': storeId,
+        'storeId': ?storeId,
       },
     );
     return (res.data ?? []).cast<Map<String, dynamic>>();
@@ -596,7 +596,7 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<String>(
-                  value: _accountCode,
+                  initialValue: _accountCode,
                   decoration: const InputDecoration(labelText: 'Tài khoản'),
                   items: [
                     for (final row in rows)

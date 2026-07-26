@@ -10,7 +10,8 @@ Offline-first grocery POS monorepo (Phase 1–2 + Phase 3 VAT track).
 **Spec:** `docs/superpowers/specs/2026-07-23-tap-hoa-pos-ke-toan-design.md`  
 **Phase 2 closeout:** `docs/superpowers/plans/2026-07-25-phase2-hardening.md`  
 **Phase 3 VAT gate:** `docs/superpowers/plans/2026-07-25-phase3-vat.md`  
-**Phase 3 roadmap:** `docs/superpowers/plans/2026-07-25-phase3-roadmap.md`
+**Phase 3 roadmap:** `docs/superpowers/plans/2026-07-25-phase3-roadmap.md`  
+**Design complete:** §4/§5 feature-complete on `main` via PR #18; go-live now follows Wave A ops in `docs/superpowers/plans/2026-07-25-hoan-thien-van-hanh.md`.
 
 ## Prerequisites
 
@@ -158,15 +159,18 @@ See `docs/superpowers/plans/2026-07-23-phase1-remaining.md` for Phase 1 checklis
 
 ### Wave 1 ops (go-live)
 
+Go-live roadmap (Wave A–F): `docs/superpowers/plans/2026-07-25-hoan-thien-van-hanh.md`.
+
 | Topic | Doc |
 |-------|-----|
 | **Operator checklist (A.2–A.5)** | `docs/ops/go-live-checklist.md` |
+| **Sign-off template (Wave A)** | `docs/ops/go-live-signoff.md` |
 | Deploy, migrate, backup, rollback | `docs/ops/production-deploy.md` |
 | Secrets + real owner account | `docs/ops/production-secrets.md` |
 | HĐĐT HTTP gateway / stub | `docs/ops/einvoice-http.md` |
 | Android release signing + APK | `docs/ops/android-release.md` |
 | Windows prod `API_URL` + smoke | `docs/ops/windows-prod.md` |
-| npm audit tracking (no `--force`) | `docs/ops/npm-audit.md` |
+| npm audit tracking (quarterly calendar reminder; no `--force`) | `docs/ops/npm-audit.md` |
 
 ### Wave B ops (stable day 1–3)
 

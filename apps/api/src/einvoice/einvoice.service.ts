@@ -8,6 +8,7 @@ import {
 import { EInvoiceStatus, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
+import { hasEinvoicePermission } from '../auth/permission-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import { EInvoiceAdapter, IssueEInvoiceResult } from './einvoice.adapter';
 import { EINVOICE_ADAPTER } from './einvoice.tokens';
@@ -19,8 +20,8 @@ export class EInvoiceService {
     @Inject(EINVOICE_ADAPTER) private readonly adapter: EInvoiceAdapter,
   ) {}
 
-  private assertManager(user: AuthUser) {
-    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+  private assertEinvoiceAccess(user: AuthUser) {
+    if (!hasEinvoicePermission(user)) {
       throw new ForbiddenException('forbidden');
     }
   }
@@ -61,6 +62,14 @@ export class EInvoiceService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  private async saleIdsForInvoice(invoice: { id: string; saleId: string }) {
+    const links = await this.prisma.eInvoiceSale.findMany({
+      where: { invoiceId: invoice.id },
+      select: { saleId: true },
+    });
+    return links.length ? links.map((link) => link.saleId) : [invoice.saleId];
   }
 
   private mapStatus(result: IssueEInvoiceResult): EInvoiceStatus {
@@ -144,7 +153,11 @@ export class EInvoiceService {
       orderBy: { createdAt: 'desc' },
     });
     if (existing) {
-      if (saleIds.length === 1 && existing.status === EInvoiceStatus.issued) {
+      const existingSaleIds = await this.saleIdsForInvoice(existing);
+      if (
+        existing.status === EInvoiceStatus.issued &&
+        saleIds.every((saleId) => existingSaleIds.includes(saleId))
+      ) {
         return { sales: ordered, existing };
       }
       throw new BadRequestException('einvoice_sale_already_issued');
@@ -247,7 +260,7 @@ export class EInvoiceService {
       serial?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     if (!body.saleId) {
       throw new BadRequestException('saleId required');
     }
@@ -268,21 +281,22 @@ export class EInvoiceService {
       serial?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const saleIds = this.normalizeSaleIds(body.saleIds);
     if (!body.customerId) {
       throw new BadRequestException('customerId required');
     }
-    const { sales } = await this.loadSalesForIssue(
+    const { sales, existing } = await this.loadSalesForIssue(
       user,
       saleIds,
       body.customerId,
     );
+    if (existing) return this.decorateInvoice(existing);
     return this.persistIssue(saleIds, sales, body);
   }
 
   async getBySale(user: AuthUser, saleId: string) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const sale = await this.prisma.sale.findUnique({
       where: { id: saleId },
     });
@@ -301,7 +315,7 @@ export class EInvoiceService {
       reason?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const reason = body.reason?.trim();
     if (!reason) {
       throw new BadRequestException('reason required');
@@ -350,7 +364,7 @@ export class EInvoiceService {
       reason?: string;
     },
   ) {
-    this.assertManager(user);
+    this.assertEinvoiceAccess(user);
     const reason = body.reason?.trim();
     if (!reason) {
       throw new BadRequestException('reason required');

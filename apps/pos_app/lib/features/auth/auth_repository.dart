@@ -33,14 +33,25 @@ class AuthUser {
     required this.name,
     required this.role,
     required this.storeIds,
+    required this.canLedger,
+    required this.canEinvoice,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
+    final role = json['role'] as String;
+    final canLedgerFlag = json['canLedger'] == true;
+    final canEinvoiceFlag = json['canEinvoice'] == true;
     return AuthUser(
       id: json['id'] as String,
       name: json['name'] as String,
-      role: json['role'] as String,
+      role: role,
       storeIds: List<String>.from(json['storeIds'] as List),
+      canLedger: role == 'owner'
+          ? true
+          : role == 'store_manager' && canLedgerFlag,
+      canEinvoice: role == 'owner'
+          ? true
+          : role == 'store_manager' && canEinvoiceFlag,
     );
   }
 
@@ -48,12 +59,16 @@ class AuthUser {
   final String name;
   final String role;
   final List<String> storeIds;
+  final bool canLedger;
+  final bool canEinvoice;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     'role': role,
     'storeIds': storeIds,
+    'canLedger': canLedger,
+    'canEinvoice': canEinvoice,
   };
 }
 

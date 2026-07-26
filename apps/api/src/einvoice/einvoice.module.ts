@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EInvoicePermissionGuard } from '../auth/einvoice-permission.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EInvoiceAdapter } from './einvoice.adapter';
 import { EInvoiceController } from './einvoice.controller';
@@ -26,6 +27,7 @@ function selectAdapter(
       useFactory: selectAdapter,
       inject: [StubEInvoiceAdapter, HttpEInvoiceAdapter],
     },
+    EInvoicePermissionGuard,
     EInvoiceService,
   ],
   exports: [EInvoiceService],

@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import 'ap_recon_page.dart';
+
 class SuppliersRepository {
   SuppliersRepository({required Dio dio}) : _dio = dio;
 
   final Dio _dio;
+  Dio get dio => _dio;
 
   Future<List<Map<String, dynamic>>> list() async {
     final res = await _dio.get<List<dynamic>>('/suppliers');
@@ -479,6 +482,19 @@ class _SuppliersPageState extends State<SuppliersPage> {
     }
   }
 
+  void _openRecon(Map<String, dynamic> supplier) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ApReconPage(
+          repository: ApReconRepository(dio: widget.repository.dio),
+          storeId: widget.storeId,
+          supplierId: supplier['id'] as String,
+          supplierName: supplier['name']?.toString() ?? 'NCC',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -513,6 +529,10 @@ class _SuppliersPageState extends State<SuppliersPage> {
                             TextButton(
                               onPressed: () => _returnGoods(s),
                               child: const Text('Trả hàng'),
+                            ),
+                            TextButton(
+                              onPressed: () => _openRecon(s),
+                              child: const Text('Đối chiếu'),
                             ),
                             TextButton(
                               onPressed: () => _pay(s),

@@ -3,17 +3,22 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { getJwtSecret } from './jwt.config';
+import { effectivePermissions } from './permission-flags';
 
 export type JwtPayload = {
   sub: string;
   role: string;
   storeIds: string[];
+  canLedger?: boolean;
+  canEinvoice?: boolean;
 };
 
 export type AuthUser = {
   userId: string;
   role: string;
   storeIds: string[];
+  canLedger: boolean;
+  canEinvoice: boolean;
 };
 
 @Injectable()
@@ -34,10 +39,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user?.active) {
       throw new UnauthorizedException('User is inactive');
     }
+    const permissions = effectivePermissions(user);
     return {
       userId: user.id,
       role: user.role,
       storeIds: user.stores.map((store) => store.storeId),
+      ...permissions,
     };
   }
 }

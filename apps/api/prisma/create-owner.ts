@@ -26,6 +26,8 @@ async function main() {
     update: {
       passwordHash,
       role: Role.owner,
+      canLedger: true,
+      canEinvoice: true,
       active: true,
     },
     create: {
@@ -33,6 +35,8 @@ async function main() {
       name: 'Chu quan',
       passwordHash,
       role: Role.owner,
+      canLedger: true,
+      canEinvoice: true,
       active: true,
     },
   });

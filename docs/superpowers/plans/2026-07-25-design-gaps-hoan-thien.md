@@ -27,6 +27,8 @@
 | Wave 8 — Báo cáo | **Done** in-repo |
 | Wave 9.1 Store CRUD / 9.2 push nợ lớn | **Done** in-repo |
 | Wave 9.3 camera / 9.4 tách quyền | **Skipped** |
+| PR #18 | **Merged via #18** vào `main` (`ab65fcc`) |
+| **Kế hoạch tiếp (vận hành)** | `docs/superpowers/plans/2026-07-25-hoan-thien-van-hanh.md` |
 
 ## Global Constraints
 

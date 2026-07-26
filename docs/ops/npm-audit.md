@@ -14,6 +14,7 @@ See also:
 - **Do not** run `npm audit fix --force`. It would downgrade `exceljs` to 3.x (breaking change) and may apply other semver-breaking upgrades without review.
 - Safe `npm audit fix` (non-breaking) may be evaluated case-by-case on a branch with e2e; default stance is **track upstream**, not auto-fix in prod hot paths.
 - Re-check after major dependency bumps (`exceljs`, `firebase-admin`, `@nestjs/*`) or quarterly.
+- Calendar reminder: schedule this quarterly review for the first business week of each quarter.
 
 ## Baseline (2026-07-25)
 

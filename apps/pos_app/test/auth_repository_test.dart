@@ -48,6 +48,8 @@ void main() {
             'name': 'Owner',
             'role': 'owner',
             'storeIds': ['store-1'],
+            'canLedger': false,
+            'canEinvoice': false,
           },
         },
       ),
@@ -57,7 +59,11 @@ void main() {
     final user = await repository.login('0900000001', '123456');
 
     expect(user.role, 'owner');
+    expect(user.canLedger, isTrue);
+    expect(user.canEinvoice, isTrue);
     expect(await storage.read(key: accessTokenKey), 'jwt-token');
+    expect(await db.metaValue('currentUser'), contains('"canLedger":true'));
+    expect(await db.metaValue('currentUser'), contains('"canEinvoice":true'));
     expect(await db.metaValue('currentUser'), contains('"id":"user-1"'));
     expect(await db.metaValue('currentStoreId'), 'store-1');
     verify(
@@ -66,5 +72,51 @@ void main() {
         data: {'phone': '0900000001', 'password': '123456'},
       ),
     ).called(1);
+  });
+
+  test('login stores configurable manager permission flags', () async {
+    when(
+      () => dio.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: any(named: 'data'),
+      ),
+    ).thenAnswer(
+      (_) async => Response(
+        requestOptions: RequestOptions(path: '/auth/login'),
+        data: {
+          'accessToken': 'jwt-token',
+          'user': {
+            'id': 'user-2',
+            'name': 'Manager',
+            'role': 'store_manager',
+            'storeIds': ['store-1'],
+            'canLedger': true,
+            'canEinvoice': false,
+          },
+        },
+      ),
+    );
+
+    final repository = AuthRepository(dio: dio, secureStorage: storage, db: db);
+    final user = await repository.login('0900000002', '123456');
+
+    expect(user.canLedger, isTrue);
+    expect(user.canEinvoice, isFalse);
+    expect(await db.metaValue('currentUser'), contains('"canLedger":true'));
+    expect(await db.metaValue('currentUser'), contains('"canEinvoice":false'));
+  });
+
+  test('cashier cannot enable ledger or e-invoice via raw flags', () {
+    final user = AuthUser.fromJson({
+      'id': 'user-3',
+      'name': 'Cashier',
+      'role': 'cashier',
+      'storeIds': ['store-1'],
+      'canLedger': true,
+      'canEinvoice': true,
+    });
+
+    expect(user.canLedger, isFalse);
+    expect(user.canEinvoice, isFalse);
   });
 }

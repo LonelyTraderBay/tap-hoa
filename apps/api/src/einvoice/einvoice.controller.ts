@@ -7,12 +7,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { EInvoicePermissionGuard } from '../auth/einvoice-permission.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
 import { EInvoiceService } from './einvoice.service';
 
 @Controller('einvoices')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, EInvoicePermissionGuard)
 export class EInvoiceController {
   constructor(private readonly service: EInvoiceService) {}
 
