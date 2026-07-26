@@ -33,5 +33,5 @@ npx prisma migrate deploy
 Write-Host "[tap-hoa] prisma db seed..."
 npx prisma db seed
 
-Write-Host "[tap-hoa] Done. Start API: .\scripts\start-api.ps1  (PORT 3040)"
+Write-Host "[tap-hoa] Done. From repo root: .\scripts\start-api.ps1  (PORT 3040)"
 Write-Host "[tap-hoa] Health: http://127.0.0.1:3040/health"
