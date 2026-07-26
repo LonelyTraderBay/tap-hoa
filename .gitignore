@@ -9,6 +9,11 @@ key.properties
 *.jks
 *.keystore
 apps/api/dist/
-apps/api/supabase/
+# Keep tap-hoa Supabase identity in git; ignore local CLI runtime dumps.
+apps/api/supabase/*
+!apps/api/supabase/config.toml
+!apps/api/supabase/.gitignore
+!apps/api/supabase/README.md
+
 apps/pos_app/build/
 apps/pos_app/.dart_tool/

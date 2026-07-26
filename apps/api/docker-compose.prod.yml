@@ -1,11 +1,14 @@
+name: tap-hoa
+
 services:
   db:
     image: postgres:16-alpine
+    container_name: tap-hoa-prod-db
     restart: unless-stopped
     env_file:
       - .env.production
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - tap_hoa_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -16,6 +19,7 @@ services:
     build:
       context: .
     image: tap-hoa-api:prod
+    container_name: tap-hoa-prod-api
     restart: unless-stopped
     env_file:
       - .env.production
@@ -23,7 +27,8 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "${API_PORT:-3040}:3000"
 
 volumes:
-  postgres-data:
+  tap_hoa_postgres_data:
+    name: tap_hoa_postgres_data

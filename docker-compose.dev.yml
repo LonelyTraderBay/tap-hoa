@@ -1,0 +1,26 @@
+# Local PostgreSQL for folder project tap-hoa (isolates from other repos).
+# Usage (repo root): docker compose -f docker-compose.dev.yml up -d
+name: tap-hoa
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tap-hoa-db
+    restart: unless-stopped
+    ports:
+      - "55422:5432"
+    environment:
+      POSTGRES_DB: tap_hoa
+      POSTGRES_USER: tap_hoa
+      POSTGRES_PASSWORD: tap_hoa_dev
+    volumes:
+      - tap_hoa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tap_hoa -d tap_hoa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tap_hoa_pgdata:
+    name: tap_hoa_pgdata
