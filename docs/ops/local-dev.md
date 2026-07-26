@@ -76,6 +76,19 @@ flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 
 **Seed login (dev only):** `0900000001` / `123456`
 
+## Minimal POS smoke (local)
+
+After API is healthy and POS is running (`flutter run` above):
+
+1. **Đăng nhập** — seed `0900000001` / `123456`
+2. **Chọn cửa hàng** — CH1 or CH2
+3. **Mở ca** — enter opening cash; selling is blocked until shift is open
+4. **Bán 1 đơn tiền mặt** — add a product (e.g. STING-330 from synced catalog), complete cash (TM) sale
+5. **Đồng bộ** — tap **Đồng bộ** (or wait for auto sync); confirm no sync errors
+
+Quick API checks without POS: `docs/ops/local-smoke.md`. Full multi-device smoke:
+`docs/ops/smoke-multi-device.md`.
+
 ## Port cheat sheet (tap-hoa only)
 
 | Port | Service |

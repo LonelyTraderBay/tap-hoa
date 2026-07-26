@@ -15,7 +15,7 @@
 
 | Wave | Mô tả | Status |
 |------|--------|--------|
-| **L1** | Local smoke (health + seed login + 1 POS path) | **Pending** |
+| **L1** | Local smoke (health + seed login + 1 POS path) | **Done** |
 | **L2** | Dev ergonomics (PATH, scripts entrypoints, launch config tuỳ chọn) | **Pending** |
 | **L3** | Release hygiene local (CHANGELOG/tag note) | **Pending** |
 | **A-live** | VPS go-live (operator) | **Blocked** — xem [go-live-signoff.md](../../ops/go-live-signoff.md) |
@@ -40,11 +40,23 @@ A-live  VPS go-live          [P0 thương mại — blocked credentials]
 
 **DoD:** Fresh clone → `dev-up` + `dev-setup` → `GET /health` OK → login seed OK → ≥1 luồng POS (bán hoặc sync) được ghi trong docs và verify.
 
-- [ ] **L1.1** `.\scripts\dev-up.ps1` + `.\scripts\dev-setup.ps1` — migrate + seed thành công trên DB `tap_hoa:55422`
-- [ ] **L1.2** `.\scripts\start-api.ps1` → `GET http://127.0.0.1:3040/health` → `{ "ok": true }`
-- [ ] **L1.3** Login API/POS seed `0900000001` / `123456` (dev only)
-- [ ] **L1.4** Một POS path tối thiểu documented + verified (vd. mở ca → thêm hàng → bán → sync) — cập nhật `docs/ops/local-dev.md` hoặc README nếu thiếu bước
-- [ ] **L1.5** Ghi kết quả smoke (pass/fail + commit SHA) vào bảng trạng thái plan này
+- [x] **L1.1** `.\scripts\dev-up.ps1` + `.\scripts\dev-setup.ps1` — migrate + seed thành công trên DB `tap_hoa:55422`
+- [x] **L1.2** `.\scripts\start-api.ps1` → `GET http://127.0.0.1:3040/health` → `{ "ok": true }`
+- [x] **L1.3** Login API/POS seed `0900000001` / `123456` (dev only)
+- [x] **L1.4** Một POS path tối thiểu documented + verified (vd. mở ca → thêm hàng → bán → sync) — cập nhật `docs/ops/local-dev.md` hoặc README nếu thiếu bước
+- [x] **L1.5** Ghi kết quả smoke (pass/fail + commit SHA) vào bảng trạng thái plan này
+
+### Verified (2026-07-26)
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| L1.1 DB + migrate + seed | **PASS** | `tap-hoa-db` healthy on `:55422`; `prisma migrate status` — 25 migrations, schema up to date |
+| L1.2 API health | **PASS** | `GET http://127.0.0.1:3040/health` → `{ "ok": true }` |
+| L1.3 Seed login (API) | **PASS** | `POST /auth/login` → `accessToken` + owner user `Chu quan` |
+| L1.4 POS path | **PASS (docs)** | Minimal path documented in `docs/ops/local-dev.md`; GUI smoke not automated (no display) |
+| Commit | `d857074` | `docs(ops): Wave L1 local smoke API health + seed login` |
+
+Commands: `docs/ops/local-smoke.md`
 
 **Neo:** `docs/ops/local-dev.md`, `scripts/dev-up.ps1`, `scripts/dev-setup.ps1`, `scripts/start-api.ps1`, `apps/api/.env.example`
 
@@ -99,7 +111,7 @@ A-live  VPS go-live          [P0 thương mại — blocked credentials]
 
 ## Tiêu chí “local đủ dùng”
 
-1. [ ] L1: health + seed + 1 POS path verified
+1. [x] L1: health + seed + 1 POS path verified
 2. [ ] L2: scripts-only onboarding rõ trong docs
 3. [ ] L3: CHANGELOG/tag note confirmed (tag optional)
 4. [ ] A-live: **không chặn** tiêu chí local — theo dõi riêng khi có VPS
