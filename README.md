@@ -28,7 +28,7 @@ Full map: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
 ### Quick start (Windows)
 
 ```powershell
-cd C:\Users\C-PC\Documents\Projects\tap-hoa
+# From repo root (wherever you cloned tap-hoa)
 .\scripts\dev-up.ps1      # supabase start (project_id=tap-hoa) + write locked .env
 .\scripts\dev-setup.ps1   # migrate + seed
 .\scripts\start-api.ps1   # API :3040

@@ -71,7 +71,7 @@ Wave 5  Polish / Phase 4 nhẹ            [P2 — sau ổn định quán]
 - [ ] **Step 1: Xác nhận diff so với `main`**
 
 ```powershell
-cd c:\Users\C-PC\Documents\Projects\tap-hoa
+# From repo root
 git fetch origin
 git log origin/main..origin/hardening/phase3-closeout --oneline
 ```

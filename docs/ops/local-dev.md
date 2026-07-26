@@ -10,7 +10,7 @@ shared `postgres` database.
 ## Quick start
 
 ```powershell
-cd C:\Users\C-PC\Documents\Projects\tap-hoa
+# From repo root
 .\scripts\dev-up.ps1      # supabase start + create DB tap_hoa + write .env
 .\scripts\dev-setup.ps1   # migrate + seed
 .\scripts\start-api.ps1   # Nest :3040 (loads .env; rejects foreign DATABASE_URL)
