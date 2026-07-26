@@ -17,7 +17,7 @@
 |------|--------|--------|
 | **L1** | Local smoke (health + seed login + 1 POS path) | **Done** |
 | **L2** | Dev ergonomics (PATH, scripts entrypoints, launch config tuỳ chọn) | **Done** |
-| **L3** | Release hygiene local (CHANGELOG/tag note) | **Pending** |
+| **L3** | Release hygiene local (CHANGELOG/tag note) | **Done** |
 | **A-live** | VPS go-live (operator) | **Blocked** — xem [go-live-signoff.md](../../ops/go-live-signoff.md) |
 
 ---
@@ -77,9 +77,17 @@ Commands: `docs/ops/local-smoke.md`
 
 **DoD:** CHANGELOG/tag note đã có trên `main`; tag thật chỉ khi user yêu cầu.
 
-- [ ] **L3.1** Xác nhận `CHANGELOG.md` Unreleased + `0.3.0` ghi local-dev identity và tag gợi ý `v0.3.0-design-complete` (docs only, chưa tag)
-- [ ] **L3.2** Khi user yêu cầu: tạo annotated tag trên `main`, không force-push
-- [ ] **L3.3** Tick L3 trong bảng trạng thái
+- [x] **L3.1** Xác nhận `CHANGELOG.md` Unreleased + `0.3.0` ghi local-dev identity và tag gợi ý `v0.3.0-design-complete` (docs only, chưa tag)
+- [ ] **L3.2** Khi user yêu cầu: tạo annotated tag trên `main`, không force-push — **skipped** (user chưa yêu cầu)
+- [x] **L3.3** Tick L3 trong bảng trạng thái
+
+### Verified (2026-07-26)
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| L3.1 CHANGELOG Unreleased local-dev identity | **PASS** | DB `tap_hoa` :55422, API :3040, scripts, POS label |
+| L3.1 `0.3.0` tag note | **PASS** | `v0.3.0-design-complete` documented; tag not created |
+| L3.2 Annotated tag | **SKIP** | On-demand only; not requested |
 
 **Không làm trước L1 pass:** tạo tag release prod.
 
@@ -113,5 +121,5 @@ Commands: `docs/ops/local-smoke.md`
 
 1. [x] L1: health + seed + 1 POS path verified
 2. [x] L2: scripts-only onboarding rõ trong docs
-3. [ ] L3: CHANGELOG/tag note confirmed (tag optional)
-4. [ ] A-live: **không chặn** tiêu chí local — theo dõi riêng khi có VPS
+3. [x] L3: CHANGELOG/tag note confirmed (tag optional)
+4. [ ] A-live: **không chặn** tiêu chí local — **Blocked** (chưa có VPS credentials); theo dõi riêng khi operator unblock
