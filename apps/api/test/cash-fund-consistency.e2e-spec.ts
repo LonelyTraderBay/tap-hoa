@@ -89,10 +89,6 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
       update: { qty: 500, avgCostVnd: 9000 },
     });
 
-    const at = new Date();
-    const nowIso = at.toISOString();
-    const { periodYm, from, to } = ictPeriodRange(at);
-
     // ---- mở ca ----
     const shiftId = randomUUID();
     await request(app.getHttpServer())
@@ -100,6 +96,10 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ storeId, openingCash: 500_000, clientId: shiftId })
       .expect(201);
+
+    const at = new Date();
+    const nowIso = at.toISOString();
+    const { periodYm, from, to } = ictPeriodRange(at);
 
     // ---- khách nợ ----
     const customerId = randomUUID();

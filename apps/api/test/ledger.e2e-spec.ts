@@ -192,5 +192,12 @@ describe('Phase 2 ledger e2e', () => {
       (r: { accountCode: string }) => r.accountCode === '511',
     );
     expect(row511.creditVnd).toBeGreaterThanOrEqual(10000);
+
+    // Dọn khóa kỳ của tháng hiện tại — nếu không, khóa này rò rỉ sang mọi
+    // spec khác chạy sau trong cùng lượt `--runInBand` và có chứng từ
+    // "now" trong cùng kỳ thật, khiến bút toán của chúng bị `safePost`
+    // nuốt lỗi một cách âm thầm (vd. supplier-return.e2e-spec.ts, vốn
+    // assert trực tiếp trên JournalEntry vừa tạo).
+    await prisma.periodLock.deleteMany({ where: { periodYm } });
   });
 });
