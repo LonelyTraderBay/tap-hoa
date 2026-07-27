@@ -14,6 +14,11 @@ import { LedgerService } from '../ledger/ledger.service';
 import { periodYmFromDate } from '../ledger/journal-builders';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeCashFundTotals, sumLedgerMovement } from './cash-fund';
+import {
+  computeInventoryMovement,
+  computeOpeningQty,
+  InventoryMovementRow,
+} from './inventory-movement';
 
 /** TK tiền mặt — nguồn sự thật của sổ quỹ. */
 const CASH_ACCOUNT_CODE = '111';
@@ -67,6 +72,28 @@ export type StockOnHandResponse = {
   storeId: string;
   items: StockOnHandItem[];
   totalEstimatedValueVnd: number;
+};
+
+/** P2.3 — báo cáo nhập–xuất–tồn theo kỳ/điểm, 1 dòng/sản phẩm. */
+export type InventoryMovementItem = {
+  productId: string;
+  sku: string;
+  name: string;
+  unit: string;
+  openingQty: number;
+  inQty: number;
+  outQty: number;
+  closingQty: number;
+  /** Nhập trong kỳ tách theo docType (chỉ docType có phát sinh > 0). */
+  inByDocType: Record<string, number>;
+  /** Xuất trong kỳ tách theo docType (chỉ docType có phát sinh > 0). */
+  outByDocType: Record<string, number>;
+};
+
+export type InventoryMovementResponse = {
+  storeId: string;
+  periodYm: string;
+  items: InventoryMovementItem[];
 };
 
 const ICT_OFFSET_HOURS = 7;
@@ -377,6 +404,184 @@ export class ReportsService {
       0,
     );
     return { storeId, items, totalEstimatedValueVnd };
+  }
+
+  /**
+   * Biên kỳ theo giờ Việt Nam (UTC+7) từ `periodYm` (`YYYY-MM`) — [from, to]
+   * bao trọn ngày 1 tới ngày cuối tháng theo giờ ICT, quy đổi sang UTC.
+   * Toán y hệt `loadBankBook`/`loadApBook` (không có helper dùng chung sẵn
+   * có trong service — 2 nơi đó tự lặp lại phép tính này); tách riêng ở đây
+   * để dùng cho báo cáo mới mà không đụng 2 nơi cũ đã qua review.
+   */
+  private periodBoundsIct(periodYm: string): { from: Date; to: Date } {
+    const [y, m] = periodYm.split('-').map(Number);
+    const from = new Date(Date.UTC(y, m - 1, 1) - 7 * 3600_000);
+    const to = new Date(Date.UTC(y, m, 1) - 7 * 3600_000 - 1);
+    return { from, to };
+  }
+
+  /**
+   * P2.3 — nhập–xuất–tồn theo kỳ/điểm. Nhóm VẬN HÀNH (như `stock-on-hand`):
+   * không đòi `canLedger`, chỉ cần scope cửa hàng.
+   *
+   * Base-set sản phẩm: có dòng `ProductStoreStock` tại điểm này (product còn
+   * active — khớp `stockOnHand`) HỢP với mọi product có ≥1 `StockMovement`
+   * trong kỳ tại điểm này (kể cả product đã ngưng bán) — để một sản phẩm bán
+   * hết veo/ngưng bán trong kỳ không biến mất khỏi báo cáo của chính kỳ đó.
+   */
+  async inventoryMovementReport(
+    user: AuthUser,
+    storeId: string,
+    periodYm: string,
+  ): Promise<InventoryMovementResponse> {
+    this.assertStoreAccess(user, storeId);
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const { from, to } = this.periodBoundsIct(periodYm);
+
+    const stockRows = await this.prisma.productStoreStock.findMany({
+      where: { storeId, product: { active: true } },
+      select: {
+        productId: true,
+        product: { select: { id: true, sku: true, name: true, unit: true } },
+      },
+    });
+    const productInfo = new Map<
+      string,
+      { id: string; sku: string; name: string; unit: string }
+    >();
+    for (const row of stockRows) {
+      productInfo.set(row.productId, row.product);
+    }
+
+    const movedInPeriod = await this.prisma.stockMovement.findMany({
+      where: { storeId, clientCreatedAt: { gte: from, lte: to } },
+      select: { productId: true },
+      distinct: ['productId'],
+    });
+    const productIds = new Set(productInfo.keys());
+    for (const row of movedInPeriod) {
+      productIds.add(row.productId);
+    }
+
+    if (productIds.size === 0) {
+      return { storeId, periodYm, items: [] };
+    }
+
+    const missingIds = [...productIds].filter((id) => !productInfo.has(id));
+    if (missingIds.length > 0) {
+      const extraProducts = await this.prisma.product.findMany({
+        where: { id: { in: missingIds } },
+        select: { id: true, sku: true, name: true, unit: true },
+      });
+      for (const p of extraProducts) {
+        productInfo.set(p.id, p);
+      }
+    }
+
+    const idList = [...productIds];
+
+    // Tồn đầu kỳ: dòng StockMovement gần nhất TRƯỚC periodStart, theo từng
+    // sản phẩm — `distinct` + `orderBy` (Postgres DISTINCT ON) lấy đúng 1
+    // dòng/sản phẩm thay vì phải tải cả lịch sử về rồi lọc tay.
+    const openingRows = await this.prisma.stockMovement.findMany({
+      where: {
+        storeId,
+        productId: { in: idList },
+        clientCreatedAt: { lt: from },
+      },
+      orderBy: [
+        { productId: 'asc' },
+        { clientCreatedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      distinct: ['productId'],
+      select: { productId: true, balanceAfter: true },
+    });
+    const openingByProduct = new Map(
+      openingRows.map((r) => [r.productId, { balanceAfter: Number(r.balanceAfter) }]),
+    );
+
+    // Nhập/xuất trong kỳ: toàn bộ dòng trong [from, to], sắp theo thời gian
+    // tăng dần để breakdown theo docType đúng thứ tự phát sinh thật.
+    const periodRows = await this.prisma.stockMovement.findMany({
+      where: {
+        storeId,
+        productId: { in: idList },
+        clientCreatedAt: { gte: from, lte: to },
+      },
+      orderBy: [{ clientCreatedAt: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        productId: true,
+        qtyDelta: true,
+        balanceAfter: true,
+        docType: true,
+        clientCreatedAt: true,
+      },
+    });
+    const periodByProduct = new Map<string, InventoryMovementRow[]>();
+    for (const m of periodRows) {
+      const list = periodByProduct.get(m.productId) ?? [];
+      list.push({
+        qtyDelta: Number(m.qtyDelta),
+        balanceAfter: Number(m.balanceAfter),
+        docType: m.docType,
+        clientCreatedAt: m.clientCreatedAt,
+      });
+      periodByProduct.set(m.productId, list);
+    }
+
+    const items: InventoryMovementItem[] = idList.map((productId) => {
+      const info = productInfo.get(productId);
+      const openingQty = computeOpeningQty(openingByProduct.get(productId));
+      const totals = computeInventoryMovement(
+        openingQty,
+        periodByProduct.get(productId) ?? [],
+      );
+      return {
+        productId,
+        sku: info?.sku ?? '',
+        name: info?.name ?? '',
+        unit: info?.unit ?? '',
+        ...totals,
+      };
+    });
+    items.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+    return { storeId, periodYm, items };
+  }
+
+  private inventoryMovementCsv(report: InventoryMovementResponse): string {
+    const lines = [
+      'productId,sku,name,unit,openingQty,inQty,outQty,closingQty',
+      ...report.items.map((item) =>
+        [
+          this.csvEscape(item.productId),
+          this.csvEscape(item.sku),
+          this.csvEscape(item.name),
+          this.csvEscape(item.unit),
+          item.openingQty,
+          item.inQty,
+          item.outQty,
+          item.closingQty,
+        ].join(','),
+      ),
+    ];
+    return lines.join('\n');
+  }
+
+  async inventoryMovementExportCsv(
+    user: AuthUser,
+    storeId: string,
+    periodYm: string,
+  ) {
+    const report = await this.inventoryMovementReport(user, storeId, periodYm);
+    return {
+      storeId: report.storeId,
+      periodYm: report.periodYm,
+      csv: this.inventoryMovementCsv(report),
+    };
   }
 
   private async resolveDebtAgingStoreFilter(

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../data/local/database.dart';
 import '../products/product_repository.dart';
+import '../reports/inventory_movement_page.dart';
+import '../reports/inventory_movement_repository.dart';
 import '../reports/stock_on_hand_page.dart';
 import '../reports/stock_on_hand_repository.dart';
 import '../shifts/shift_repository.dart';
@@ -780,6 +782,27 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     );
   }
 
+  Future<void> _openInventoryMovement() async {
+    List<StoreOption>? stores;
+    if (widget.role == 'owner') {
+      final rows = await widget.db.select(widget.db.storesLocal).get();
+      stores = rows
+          .map((s) => StoreOption(id: s.id, code: s.code, name: s.name))
+          .toList();
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InventoryMovementPage(
+          repository: InventoryMovementRepository(dio: widget.dio),
+          storeId: widget.storeId,
+          role: widget.role,
+          stores: stores,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canTransfer =
@@ -791,6 +814,10 @@ class _InventoryHubPageState extends State<InventoryHubPage>
           TextButton(
             onPressed: _openStockOnHand,
             child: const Text('Tồn hiện tại'),
+          ),
+          TextButton(
+            onPressed: _openInventoryMovement,
+            child: const Text('Nhập-xuất-tồn'),
           ),
           if (canTransfer)
             IconButton(
