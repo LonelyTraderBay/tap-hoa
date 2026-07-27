@@ -17,7 +17,7 @@ Offline-first grocery POS monorepo (Phase 1–2 + Phase 3 VAT track).
 
 - **Node.js** 18+ and npm
 - **Flutter** 3.24+ (`flutter doctor`)
-- **Docker Desktop** + **Supabase CLI** — local DB is **Supabase only** with locked identity **`tap-hoa`** (DB `tap_hoa`, port **55422**, Nest **3040**). Nest refuses other projects' `DATABASE_URL` at boot.
+- **Docker Desktop** + **Supabase CLI** — local DB is **Supabase only** with locked identity **`tap-hoa`** (DB `tap_hoa`, port **54422**, Nest **3040**). Nest refuses other projects' `DATABASE_URL` at boot.
 
 Full map: [`docs/ops/local-dev.md`](docs/ops/local-dev.md).
 
@@ -37,7 +37,7 @@ flutter run -d windows --dart-define=API_URL=http://127.0.0.1:3040
 ```
 
 Seed login: `0900000001` / `123456`. Health: `GET http://127.0.0.1:3040/health`.  
-Studio: http://127.0.0.1:55423
+Studio: http://127.0.0.1:54423
 
 ### 1. PostgreSQL = Supabase only
 
@@ -45,7 +45,7 @@ Studio: http://127.0.0.1:55423
 |--|--------|
 | `project_id` | `tap-hoa` (`apps/api/supabase/config.toml`) |
 | Database | `tap_hoa` |
-| Host port | **55422** (not 54322) |
+| Host port | **54422** (not 54322) |
 | Nest API port | **3040** |
 | Code lock | `apps/api/src/config/tap-hoa.identity.ts` |
 

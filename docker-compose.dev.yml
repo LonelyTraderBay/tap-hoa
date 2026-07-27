@@ -1,5 +1,5 @@
 # DEPRECATED — do not use for local tap-hoa.
-# Local database is Supabase CLI only (project_id=tap-hoa, port 55422).
+# Local database is Supabase CLI only (project_id=tap-hoa, port 54422).
 # See docs/ops/local-dev.md and scripts/dev-up.ps1.
 #
 # Kept as a stub so accidental `docker compose -f docker-compose.dev.yml up`
