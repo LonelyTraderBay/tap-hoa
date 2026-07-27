@@ -11,12 +11,25 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
+import { LedgerPermissionGuard } from '../auth/ledger-permission.guard';
 import { ReportsService } from './reports.service';
 
+/**
+ * Tách quyền (spec §5.7): bán hàng ≠ kế toán.
+ *
+ * - Nhóm VẬN HÀNH (day, top-skus, stock-on-hand, debt-aging, ar.csv): chỉ cần
+ *   đăng nhập + scope cửa hàng — thu ngân/quản lý quầy dùng hằng ngày.
+ * - Nhóm KẾ TOÁN (period/*, cash-fund, bank-recon/*, ap-recon/*): bắt buộc
+ *   `canLedger` qua `LedgerPermissionGuard` gắn ở method level.
+ */
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
+
+  // ---------------------------------------------------------------------
+  // Nhóm VẬN HÀNH — KHÔNG gắn LedgerPermissionGuard.
+  // ---------------------------------------------------------------------
 
   @Get('day')
   day(
@@ -80,7 +93,12 @@ export class ReportsController {
     };
   }
 
+  // ---------------------------------------------------------------------
+  // Nhóm KẾ TOÁN — bắt buộc canLedger.
+  // ---------------------------------------------------------------------
+
   @Get('period/trial-balance')
+  @UseGuards(LedgerPermissionGuard)
   periodTrial(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
@@ -93,6 +111,7 @@ export class ReportsController {
   }
 
   @Get('period/pnl')
+  @UseGuards(LedgerPermissionGuard)
   periodPnl(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
@@ -105,6 +124,7 @@ export class ReportsController {
   }
 
   @Get('period/vat')
+  @UseGuards(LedgerPermissionGuard)
   periodVat(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
@@ -117,6 +137,7 @@ export class ReportsController {
   }
 
   @Get('period/export.csv')
+  @UseGuards(LedgerPermissionGuard)
   async periodExport(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
@@ -134,6 +155,7 @@ export class ReportsController {
   }
 
   @Get('period/export.xlsx')
+  @UseGuards(LedgerPermissionGuard)
   async periodExportXlsx(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
@@ -154,6 +176,7 @@ export class ReportsController {
   }
 
   @Get('period/export.pdf')
+  @UseGuards(LedgerPermissionGuard)
   async periodExportPdf(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
@@ -174,6 +197,7 @@ export class ReportsController {
   }
 
   @Get('period/vat-declaration.csv')
+  @UseGuards(LedgerPermissionGuard)
   async vatDeclaration(
     @Req() req: { user: AuthUser },
     @Query('periodYm') periodYm?: string,
@@ -191,6 +215,7 @@ export class ReportsController {
   }
 
   @Get('cash-fund')
+  @UseGuards(LedgerPermissionGuard)
   cashFund(
     @Req() req: { user: AuthUser },
     @Query('storeId') storeId?: string,
@@ -204,6 +229,7 @@ export class ReportsController {
   }
 
   @Post('bank-recon/import')
+  @UseGuards(LedgerPermissionGuard)
   importBankRecon(
     @Req() req: { user: AuthUser },
     @Body()
@@ -227,6 +253,7 @@ export class ReportsController {
   }
 
   @Get('bank-recon')
+  @UseGuards(LedgerPermissionGuard)
   bankRecon(
     @Req() req: { user: AuthUser },
     @Query('storeId') storeId?: string,
@@ -239,6 +266,7 @@ export class ReportsController {
   }
 
   @Post('bank-recon/match')
+  @UseGuards(LedgerPermissionGuard)
   matchBank(
     @Req() req: { user: AuthUser },
     @Body()
@@ -265,6 +293,7 @@ export class ReportsController {
   }
 
   @Post('bank-recon/unmatch')
+  @UseGuards(LedgerPermissionGuard)
   unmatchBank(
     @Req() req: { user: AuthUser },
     @Body()
@@ -289,6 +318,7 @@ export class ReportsController {
   }
 
   @Post('bank-recon/auto-match')
+  @UseGuards(LedgerPermissionGuard)
   autoMatchBank(
     @Req() req: { user: AuthUser },
     @Body() body: { storeId?: string; periodYm?: string },
@@ -304,6 +334,7 @@ export class ReportsController {
   }
 
   @Post('bank-recon/lock')
+  @UseGuards(LedgerPermissionGuard)
   lockBankRecon(
     @Req() req: { user: AuthUser },
     @Body() body: { storeId?: string; periodYm?: string },
@@ -319,6 +350,7 @@ export class ReportsController {
   }
 
   @Post('ap-recon/import')
+  @UseGuards(LedgerPermissionGuard)
   importApRecon(
     @Req() req: { user: AuthUser },
     @Body()
@@ -342,6 +374,7 @@ export class ReportsController {
   }
 
   @Get('ap-recon')
+  @UseGuards(LedgerPermissionGuard)
   apRecon(
     @Req() req: { user: AuthUser },
     @Query('storeId') storeId?: string,
@@ -360,6 +393,7 @@ export class ReportsController {
   }
 
   @Post('ap-recon/match')
+  @UseGuards(LedgerPermissionGuard)
   matchAp(
     @Req() req: { user: AuthUser },
     @Body()
@@ -394,6 +428,7 @@ export class ReportsController {
   }
 
   @Post('ap-recon/unmatch')
+  @UseGuards(LedgerPermissionGuard)
   unmatchAp(
     @Req() req: { user: AuthUser },
     @Body()
@@ -420,6 +455,7 @@ export class ReportsController {
   }
 
   @Post('ap-recon/auto-match')
+  @UseGuards(LedgerPermissionGuard)
   autoMatchAp(
     @Req() req: { user: AuthUser },
     @Body() body: { storeId?: string; supplierId?: string; periodYm?: string },
@@ -436,6 +472,7 @@ export class ReportsController {
   }
 
   @Post('ap-recon/lock')
+  @UseGuards(LedgerPermissionGuard)
   lockApRecon(
     @Req() req: { user: AuthUser },
     @Body() body: { storeId?: string; supplierId?: string; periodYm?: string },

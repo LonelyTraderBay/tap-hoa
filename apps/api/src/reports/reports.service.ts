@@ -12,6 +12,10 @@ import PDFDocument from 'pdfkit';
 import { AuthUser } from '../auth/jwt.strategy';
 import { periodYmFromDate } from '../ledger/journal-builders';
 import { PrismaService } from '../prisma/prisma.service';
+import { computeCashFundTotals, sumLedgerMovement } from './cash-fund';
+
+/** TK tiền mặt — nguồn sự thật của sổ quỹ. */
+const CASH_ACCOUNT_CODE = '111';
 
 export type StoreDayReport = {
   storeId: string;
@@ -800,6 +804,14 @@ export class ReportsService {
     return lines.join('\n');
   }
 
+  /**
+   * Sổ quỹ tiền mặt theo chứng từ, đối chiếu thẳng với TK 111 trong sổ cái.
+   *
+   * Danh sách chứng từ dưới đây phải phủ hết mọi builder chạm 111 — xem
+   * `reports/cash-fund.ts`. `ledgerNetCashVnd` là phát sinh ròng TK 111 thật
+   * trong sổ cái; `ledgerDiffVnd` ≠ 0 nghĩa là có chứng từ chưa lên sổ
+   * (bị khoá kỳ, post journal lỗi) — cần rà lại, không được lặng lẽ bỏ qua.
+   */
   async cashFundSummary(
     user: AuthUser,
     storeId: string,
@@ -812,35 +824,60 @@ export class ReportsService {
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
       throw new BadRequestException('invalid from/to');
     }
-    const vouchers = await this.prisma.cashVoucher.findMany({
-      where: {
-        storeId,
-        clientCreatedAt: { gte: fromDate, lte: toDate },
-      },
+    const range = { gte: fromDate, lte: toDate };
+    const [
+      sales,
+      saleReturns,
+      vouchers,
+      debtPayments,
+      supplierPayments,
+      ledgerCashLines,
+    ] = await Promise.all([
+      this.prisma.sale.findMany({
+        where: { storeId, clientCreatedAt: range },
+        select: { cashAmount: true, transferAmount: true },
+      }),
+      this.prisma.saleReturn.findMany({
+        where: { storeId, clientCreatedAt: range },
+        select: { cashRefundVnd: true, transferRefundVnd: true },
+      }),
+      this.prisma.cashVoucher.findMany({
+        where: { storeId, clientCreatedAt: range },
+        select: { direction: true, channel: true, amountVnd: true },
+      }),
+      this.prisma.debtLedgerEntry.findMany({
+        where: { storeId, type: 'payment', clientCreatedAt: range },
+        select: { paymentMethod: true, amountVnd: true },
+      }),
+      this.prisma.supplierPayment.findMany({
+        where: { storeId, clientCreatedAt: range },
+        select: { channel: true, amountVnd: true },
+      }),
+      this.prisma.journalLine.findMany({
+        where: {
+          accountCode: CASH_ACCOUNT_CODE,
+          entry: { storeId, postedAt: range },
+        },
+        select: { debitVnd: true, creditVnd: true },
+      }),
+    ]);
+
+    const totals = computeCashFundTotals({
+      sales,
+      saleReturns,
+      vouchers,
+      debtPayments,
+      supplierPayments,
     });
-    const sales = await this.prisma.sale.findMany({
-      where: {
-        storeId,
-        clientCreatedAt: { gte: fromDate, lte: toDate },
-      },
-    });
-    let voucherIn = 0;
-    let voucherOut = 0;
-    for (const v of vouchers) {
-      if (v.direction === 'in') voucherIn += v.amountVnd;
-      else voucherOut += v.amountVnd;
-    }
-    const saleCash = sales.reduce((s, x) => s + x.cashAmount, 0);
-    const saleTransfer = sales.reduce((s, x) => s + x.transferAmount, 0);
+    const ledgerNetCashVnd = sumLedgerMovement(ledgerCashLines);
     return {
       storeId,
       from,
       to,
-      saleCashVnd: saleCash,
-      saleTransferVnd: saleTransfer,
-      voucherInVnd: voucherIn,
-      voucherOutVnd: voucherOut,
-      netCashVnd: saleCash + voucherIn - voucherOut,
+      ...totals,
+      ledgerAccountCode: CASH_ACCOUNT_CODE,
+      ledgerNetCashVnd,
+      ledgerDiffVnd: totals.netCashVnd - ledgerNetCashVnd,
     };
   }
 

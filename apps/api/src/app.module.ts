@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { StoresModule } from './stores/stores.module';
+import { UsersModule } from './users/users.module';
 import { CustomersModule } from './customers/customers.module';
 import { ReportsModule } from './reports/reports.module';
 import { SyncModule } from './sync/sync.module';
@@ -18,6 +19,7 @@ import { EInvoiceModule } from './einvoice/einvoice.module';
     PrismaModule,
     AuthModule,
     StoresModule,
+    UsersModule,
     ShiftsModule,
     ProductsModule,
     CustomersModule,
