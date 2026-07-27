@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Local DB is **Supabase only** (`project_id=tap-hoa`, DB `tap_hoa` `:55422`); Nest `assertTapHoaLocalIdentity()` refuses foreign `DATABASE_URL` / port `54322` / schema mismatches; `docker-compose.dev.yml` deprecated stub; POS **Tap Hoa POS**; scripts `dev-up` / `dev-setup` / `start-api` / `write-tap-hoa-env`. See `docs/ops/local-dev.md`.
+- Local DB is **Supabase only** (`project_id=tap-hoa`, DB `tap_hoa` `:54422`); Nest `assertTapHoaLocalIdentity()` refuses foreign `DATABASE_URL` / port `54322` / schema mismatches; `docker-compose.dev.yml` deprecated stub; POS **Tap Hoa POS**; scripts `dev-up` / `dev-setup` / `start-api` / `write-tap-hoa-env`. See `docs/ops/local-dev.md`.
+- Local Supabase port block moved `5542x` → `5442x`: Windows/Hyper-V dynamic port exclusions (`55325–55424`) fully covered the old block, leaving Docker unable to publish those container ports.
 - Wave F: Manager `canLedger` POS access, multi-line PO create/receive, customer debt adjustments with audit/debt ledger entries, idempotent batch HĐĐT retry, and quarterly npm-audit ops reminders.
 - Wave C: AP statement reconciliation for suppliers with CSV import, read-only summaries, match/unmatch/auto-match, zero-variance locking, e2e coverage, and Flutter entry points from Công nợ NCC.
 

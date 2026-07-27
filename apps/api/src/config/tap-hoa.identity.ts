@@ -8,7 +8,7 @@
 
 export const TAP_HOA_PROJECT_ID = 'tap-hoa';
 export const TAP_HOA_DATABASE_NAME = 'tap_hoa';
-export const TAP_HOA_LOCAL_DB_PORT = 55422;
+export const TAP_HOA_LOCAL_DB_PORT = 54422;
 export const TAP_HOA_LOCAL_API_PORT = 3040;
 /** Default Nest listen port inside Docker prod image (host maps API_PORT). */
 export const TAP_HOA_CONTAINER_API_PORT = 3000;
