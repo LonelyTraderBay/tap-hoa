@@ -626,7 +626,11 @@ export class SyncService {
     ) {
       return { accepted: false, reason: 'invalid_payment' };
     }
-    this.assertStoreAccess(user, payment.storeId);
+    try {
+      this.assertStoreAccess(user, payment.storeId);
+    } catch {
+      return { accepted: false, reason: 'store_forbidden' };
+    }
 
     const existing = await this.prisma.debtLedgerEntry.findUnique({
       where: { id: payment.id },
