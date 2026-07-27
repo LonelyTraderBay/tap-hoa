@@ -246,6 +246,11 @@ describe('P0.4 reports accounting permission split e2e', () => {
       ['/reports/stock-on-hand', { storeId: ctx.storeId }],
       ['/reports/debt-aging', { storeId: ctx.storeId }],
       ['/reports/ar.csv', { storeId: ctx.storeId }],
+      // P2.3 — cùng nhóm vận hành với stock-on-hand (không đòi canLedger).
+      [
+        '/reports/inventory-movement',
+        { storeId: ctx.storeId, periodYm },
+      ],
     ];
 
     it('cả 4 vai đều đọc được báo cáo vận hành của cửa hàng mình', async () => {

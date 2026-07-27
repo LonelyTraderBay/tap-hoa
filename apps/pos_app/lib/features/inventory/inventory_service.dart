@@ -76,7 +76,10 @@ class InventoryService {
     required bool requireNonNegative,
     Decimal? setAbsolute,
   }) async {
-    final allowNegative = (await _db.metaValue('allowNegativeStock')) == 'true';
+    final storeRow = await (_db.select(_db.storesLocal)
+          ..where((t) => t.id.equals(storeId)))
+        .getSingleOrNull();
+    final allowNegative = storeRow?.allowNegativeStock ?? false;
     var row =
         await (_db.select(_db.productStocks)..where(
               (s) => s.productId.equals(productId) & s.storeId.equals(storeId),

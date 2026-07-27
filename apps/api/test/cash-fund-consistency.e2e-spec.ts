@@ -26,6 +26,7 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
   let token: string;
   let userId: string;
   let storeId: string;
+  let storeId2: string;
   let productId: string;
 
   beforeAll(async () => {
@@ -44,6 +45,7 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
     token = login.body.accessToken;
     userId = login.body.user.id;
     storeId = (await prisma.store.findFirst({ where: { code: 'CH1' } }))!.id;
+    storeId2 = (await prisma.store.findFirst({ where: { code: 'CH2' } }))!.id;
     productId = (await prisma.product.findUnique({
       where: { sku: 'STING-330' },
     }))!.id;
@@ -468,5 +470,146 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
     expect(fund.body.ledgerDiffVnd).toBe(70_000);
 
     await prisma.periodLock.deleteMany({ where: { periodYm } });
+  });
+
+  it('P2.2: GET /reports/cash-fund không kèm storeId gộp theo scope role — owner thấy mọi điểm bán kèm byStore, store_manager chỉ thấy điểm của mình', async () => {
+    const at = new Date();
+    const nowIso = at.toISOString();
+    const { from, to } = ictPeriodRange(at);
+
+    await prisma.shift.updateMany({
+      where: { storeId: { in: [storeId, storeId2] }, closedAt: null },
+      data: { closedAt: new Date(), closingCash: 0 },
+    });
+    const shift1Id = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ storeId, openingCash: 0, clientId: shift1Id })
+      .expect(201);
+    const shift2Id = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ storeId: storeId2, openingCash: 0, clientId: shift2Id })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        deviceId: 'cash-fund-aggregate',
+        sales: [],
+        cashVouchers: [
+          {
+            id: randomUUID(),
+            storeId,
+            shiftId: shift1Id,
+            categoryId: CATEGORY_OTHER_IN,
+            direction: 'in',
+            channel: 'cash',
+            amountVnd: 77_000,
+            clientCreatedAt: nowIso,
+          },
+          {
+            id: randomUUID(),
+            storeId: storeId2,
+            shiftId: shift2Id,
+            categoryId: CATEGORY_OTHER_IN,
+            direction: 'in',
+            channel: 'cash',
+            amountVnd: 33_000,
+            clientCreatedAt: nowIso,
+          },
+        ],
+      })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.rejectedCashVouchers ?? []).toHaveLength(0);
+      });
+
+    const store1Only = await request(app.getHttpServer())
+      .get('/reports/cash-fund')
+      .query({ storeId, from, to })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const store2Only = await request(app.getHttpServer())
+      .get('/reports/cash-fund')
+      .query({ storeId: storeId2, from, to })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    // Backward-compat: storeId truyền vào vẫn trả shape cũ, chỉ thêm byStore.
+    expect(store1Only.body.storeId).toBe(storeId);
+    expect(store1Only.body.byStore).toHaveLength(1);
+    expect(store1Only.body.byStore[0]).toMatchObject({
+      storeId,
+      netCashVnd: store1Only.body.netCashVnd,
+    });
+
+    // ---- owner: không truyền storeId ⇒ gộp mọi điểm bán active ----
+    const aggregate = await request(app.getHttpServer())
+      .get('/reports/cash-fund')
+      .query({ from, to })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(aggregate.body.storeId).toBeNull();
+    expect(aggregate.body.scope).toBe('aggregate');
+    expect([...aggregate.body.storeIds].sort()).toEqual(
+      [storeId, storeId2].sort(),
+    );
+    expect(aggregate.body.netCashVnd).toBe(
+      store1Only.body.netCashVnd + store2Only.body.netCashVnd,
+    );
+    const byStoreMap: Record<string, { netCashVnd: number }> =
+      Object.fromEntries(
+        aggregate.body.byStore.map((s: { storeId: string }) => [
+          s.storeId,
+          s,
+        ]),
+      );
+    expect(byStoreMap[storeId].netCashVnd).toBe(store1Only.body.netCashVnd);
+    expect(byStoreMap[storeId2].netCashVnd).toBe(store2Only.body.netCashVnd);
+
+    // ---- store_manager chỉ gán CH1: không truyền storeId ⇒ chỉ thấy CH1 ----
+    const managerPhone = '0950200001';
+    await request(app.getHttpServer())
+      .post('/users')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        phone: managerPhone,
+        name: 'QL so quy tong',
+        password: '123456',
+        role: 'store_manager',
+        storeIds: [storeId],
+        canLedger: true,
+      })
+      .expect(201);
+    const managerLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ phone: managerPhone, password: '123456' })
+      .expect(201);
+    const managerToken = managerLogin.body.accessToken as string;
+    const managerUserId = managerLogin.body.user.id as string;
+
+    const managerAggregate = await request(app.getHttpServer())
+      .get('/reports/cash-fund')
+      .query({ from, to })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    expect(managerAggregate.body.scope).toBe('aggregate');
+    expect(managerAggregate.body.storeIds).toEqual([storeId]);
+    expect(managerAggregate.body.netCashVnd).toBe(store1Only.body.netCashVnd);
+    expect(managerAggregate.body.byStore).toHaveLength(1);
+    expect(managerAggregate.body.byStore[0].storeId).toBe(storeId);
+
+    // store_manager không được thấy điểm bán mình không thuộc.
+    await request(app.getHttpServer())
+      .get('/reports/cash-fund')
+      .query({ storeId: storeId2, from, to })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(403);
+
+    await prisma.userStore.deleteMany({ where: { userId: managerUserId } });
+    await prisma.user.deleteMany({ where: { id: managerUserId } });
   });
 });

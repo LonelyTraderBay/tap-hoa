@@ -12,12 +12,14 @@ import { hasEinvoicePermission } from '../auth/permission-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import { EInvoiceAdapter, IssueEInvoiceResult } from './einvoice.adapter';
 import { EINVOICE_ADAPTER } from './einvoice.tokens';
+import { HttpEInvoiceAdapter } from './http-einvoice.adapter';
 
 @Injectable()
 export class EInvoiceService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(EINVOICE_ADAPTER) private readonly adapter: EInvoiceAdapter,
+    private readonly httpAdapter: HttpEInvoiceAdapter,
   ) {}
 
   private assertEinvoiceAccess(user: AuthUser) {
@@ -30,6 +32,50 @@ export class EInvoiceService {
     if (user.role !== Role.owner && !user.storeIds.includes(storeId)) {
       throw new ForbiddenException('store_forbidden');
     }
+  }
+
+  /** P2.4 lifecycle audit — `storeId` is included in `detailJson` (unlike the
+   * P1.7 user-management actions) so LedgerService's store-scoped audit
+   * filter (`ledgerAuditStoreIds`/`auditStoreIdFragment`, string-matches
+   * `"storeId":"<id>"`) also surfaces these rows to a scoped store_manager,
+   * not just owner. */
+  private async writeEinvoiceAudit(
+    tx: Prisma.TransactionClient | PrismaService,
+    input: {
+      actorUserId: string;
+      action: 'einvoice_issue' | 'einvoice_cancel' | 'einvoice_adjust';
+      entityId: string;
+      storeId: string;
+      invoiceNumber: string | null;
+      provider: string;
+      saleIds: string[];
+      reason?: string;
+      originalInvoiceId?: string;
+      originalInvoiceNumber?: string | null;
+    },
+  ) {
+    await tx.auditLog.create({
+      data: {
+        id: randomUUID(),
+        actorUserId: input.actorUserId,
+        action: input.action,
+        entityType: 'einvoice',
+        entityId: input.entityId,
+        detailJson: JSON.stringify({
+          storeId: input.storeId,
+          invoiceNumber: input.invoiceNumber,
+          provider: input.provider,
+          saleIds: input.saleIds,
+          ...(input.reason !== undefined ? { reason: input.reason } : {}),
+          ...(input.originalInvoiceId !== undefined
+            ? { originalInvoiceId: input.originalInvoiceId }
+            : {}),
+          ...(input.originalInvoiceNumber !== undefined
+            ? { originalInvoiceNumber: input.originalInvoiceNumber }
+            : {}),
+        }),
+      },
+    });
   }
 
   private normalizeSaleIds(saleIds: string[] | undefined): string[] {
@@ -78,6 +124,16 @@ export class EInvoiceService {
       : EInvoiceStatus.pending_sign;
   }
 
+  /** Node's `Buffer` types as `Uint8Array<ArrayBufferLike>` while Prisma 6's
+   * generated `Bytes` input types are pinned to `Uint8Array<ArrayBuffer>` —
+   * cast at the boundary rather than loosening either side. Buffers we build
+   * ourselves (pdfkit output, our XML string) are always backed by a real
+   * ArrayBuffer, never a SharedArrayBuffer, so this is safe in practice. */
+  private toBytes(buf: Buffer | undefined | null): Uint8Array<ArrayBuffer> | null {
+    if (!buf) return null;
+    return new Uint8Array(buf) as Uint8Array<ArrayBuffer>;
+  }
+
   private isUniqueViolation(error: unknown): boolean {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -90,6 +146,7 @@ export class EInvoiceService {
       id: string;
       lines: {
         productId: string;
+        product?: { name: string } | null;
         qty: unknown;
         unitPrice: number;
         lineTotal: number;
@@ -100,6 +157,7 @@ export class EInvoiceService {
       sale.lines.map((l) => ({
         saleId: sale.id,
         productId: l.productId,
+        productName: l.product?.name ?? null,
         qty: Number(l.qty),
         unitPrice: l.unitPrice,
         lineTotal: l.lineTotal,
@@ -114,7 +172,7 @@ export class EInvoiceService {
   ) {
     const sales = await this.prisma.sale.findMany({
       where: { id: { in: saleIds } },
-      include: { lines: true },
+      include: { lines: { include: { product: true } }, customer: true },
     });
     if (sales.length !== saleIds.length) {
       throw new NotFoundException('sale_not_found');
@@ -167,6 +225,7 @@ export class EInvoiceService {
   }
 
   private async persistIssue(
+    user: AuthUser,
     saleIds: string[],
     sales: Awaited<ReturnType<EInvoiceService['loadSalesForIssue']>>['sales'],
     body: {
@@ -213,6 +272,7 @@ export class EInvoiceService {
         saleIds,
         totalVnd: sales.reduce((sum, sale) => sum + sale.totalVnd, 0),
         buyerTaxCode: body.buyerTaxCode,
+        buyerName: primarySale.customer?.name ?? null,
         templateCode: body.templateCode,
         serial: body.serial,
         lines: this.invoiceLines(sales),
@@ -244,9 +304,20 @@ export class EInvoiceService {
         providerRef: result.providerRef,
         xmlPath: result.xmlPath ?? null,
         pdfPath: result.pdfPath ?? null,
+        xmlContent: this.toBytes(result.xmlContent),
+        pdfContent: this.toBytes(result.pdfContent),
         issuedAt: status === EInvoiceStatus.issued ? new Date() : null,
         errorMessage: null,
       },
+    });
+    await this.writeEinvoiceAudit(this.prisma, {
+      actorUserId: user.userId,
+      action: 'einvoice_issue',
+      entityId: invoice.id,
+      storeId: primarySale.storeId,
+      invoiceNumber: invoice.invoiceNumber,
+      provider: invoice.provider,
+      saleIds,
     });
     return this.decorateInvoice(invoice);
   }
@@ -268,7 +339,7 @@ export class EInvoiceService {
     const saleIds = [body.saleId];
     const { sales, existing } = await this.loadSalesForIssue(user, saleIds);
     if (existing) return this.decorateInvoice(existing);
-    return this.persistIssue(saleIds, sales, body);
+    return this.persistIssue(user, saleIds, sales, body);
   }
 
   async issueBatch(
@@ -292,7 +363,7 @@ export class EInvoiceService {
       body.customerId,
     );
     if (existing) return this.decorateInvoice(existing);
-    return this.persistIssue(saleIds, sales, body);
+    return this.persistIssue(user, saleIds, sales, body);
   }
 
   async getBySale(user: AuthUser, saleId: string) {
@@ -354,6 +425,17 @@ export class EInvoiceService {
         errorMessage: null,
       },
     });
+    const cancelledSaleIds = await this.saleIdsForInvoice(cancelled);
+    await this.writeEinvoiceAudit(this.prisma, {
+      actorUserId: user.userId,
+      action: 'einvoice_cancel',
+      entityId: cancelled.id,
+      storeId: invoice.sale.storeId,
+      invoiceNumber: cancelled.invoiceNumber,
+      provider: cancelled.provider,
+      saleIds: cancelledSaleIds,
+      reason,
+    });
     return this.decorateInvoice(cancelled);
   }
 
@@ -373,8 +455,14 @@ export class EInvoiceService {
     const invoice = await this.prisma.eInvoice.findUnique({
       where: { id },
       include: {
-        sale: { include: { lines: true } },
-        saleLinks: { include: { sale: { include: { lines: true } } } },
+        sale: { include: { lines: { include: { product: true } }, customer: true } },
+        saleLinks: {
+          include: {
+            sale: {
+              include: { lines: { include: { product: true } }, customer: true },
+            },
+          },
+        },
       },
     });
     if (!invoice) {
@@ -399,6 +487,10 @@ export class EInvoiceService {
         invoiceId: invoice.id,
         providerRef: invoice.providerRef,
         originalInvoiceNumber: invoice.invoiceNumber,
+        buyerTaxCode: invoice.buyerTaxCode,
+        buyerName: linkedSales[0]?.customer?.name ?? null,
+        templateCode: invoice.templateCode,
+        serial: invoice.serial,
         saleIds,
         totalVnd: linkedSales.reduce((sum, sale) => sum + sale.totalVnd, 0),
         reason,
@@ -426,7 +518,7 @@ export class EInvoiceService {
           errorMessage: null,
         },
       });
-      return tx.eInvoice.create({
+      const created = await tx.eInvoice.create({
         data: {
           id: randomUUID(),
           saleId: invoice.saleId,
@@ -436,6 +528,8 @@ export class EInvoiceService {
           invoiceNumber: result.invoiceNumber,
           xmlPath: result.xmlPath ?? null,
           pdfPath: result.pdfPath ?? null,
+          xmlContent: this.toBytes(result.xmlContent),
+          pdfContent: this.toBytes(result.pdfContent),
           issuedAt: status === EInvoiceStatus.issued ? new Date() : null,
           adjustmentForId: invoice.id,
           adjustmentReason: reason,
@@ -454,7 +548,85 @@ export class EInvoiceService {
           },
         },
       });
+      await this.writeEinvoiceAudit(tx, {
+        actorUserId: user.userId,
+        action: 'einvoice_adjust',
+        entityId: created.id,
+        storeId: invoice.sale.storeId,
+        invoiceNumber: created.invoiceNumber,
+        provider: created.provider,
+        saleIds,
+        reason,
+        originalInvoiceId: invoice.id,
+        originalInvoiceNumber: invoice.invoiceNumber,
+      });
+      return created;
     });
     return this.decorateInvoice(adjusted);
+  }
+
+  /**
+   * P2.4 download endpoint backing. `kind` picks xml vs pdf.
+   * - Stub-issued invoices: DB-stored bytes (xmlContent/pdfContent) served
+   *   directly.
+   * - Http-provider-issued invoices: xmlPath/pdfPath are real https:// vendor
+   *   URLs (validated at issue time by HttpEInvoiceAdapter.parseIssueBody) —
+   *   proxy-fetched server-side (auth header, timeout, SSRF re-check) and
+   *   streamed back rather than redirecting the client to the raw vendor URL.
+   */
+  async downloadDocument(
+    user: AuthUser,
+    id: string,
+    kind: 'xml' | 'pdf',
+  ): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+    this.assertEinvoiceAccess(user);
+    const invoice = await this.prisma.eInvoice.findUnique({
+      where: { id },
+      include: { sale: true },
+    });
+    if (!invoice) {
+      throw new NotFoundException('einvoice_not_found');
+    }
+    this.assertStoreAccess(user, invoice.sale.storeId);
+
+    const defaultContentType =
+      kind === 'xml' ? 'application/xml' : 'application/pdf';
+    // invoiceNumber for http-provider invoices comes from the vendor's HTTP
+    // response body (parseIssueBody only checks it's non-empty) — strip it to
+    // a safe charset before it lands in the Content-Disposition header, since
+    // it's external input by the time it reaches here.
+    const safeInvoiceNumber = (invoice.invoiceNumber ?? invoice.id).replace(
+      /[^a-zA-Z0-9_-]/g,
+      '_',
+    );
+    const filename = `${safeInvoiceNumber}.${kind}`;
+    const content = kind === 'xml' ? invoice.xmlContent : invoice.pdfContent;
+    if (content) {
+      return {
+        buffer: Buffer.from(content),
+        contentType: defaultContentType,
+        filename,
+      };
+    }
+
+    const path = kind === 'xml' ? invoice.xmlPath : invoice.pdfPath;
+    if (path) {
+      const { buffer, contentType } = await this.httpAdapter.fetchDocument(
+        path,
+        `einvoice ${kind} download`,
+      );
+      return {
+        buffer,
+        contentType:
+          contentType && contentType !== 'application/octet-stream'
+            ? contentType
+            : defaultContentType,
+        filename,
+      };
+    }
+
+    throw new NotFoundException(
+      kind === 'xml' ? 'einvoice_xml_not_available' : 'einvoice_pdf_not_available',
+    );
   }
 }

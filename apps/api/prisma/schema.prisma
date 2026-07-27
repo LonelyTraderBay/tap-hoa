@@ -98,6 +98,7 @@ model Store {
   largeDebtThresholdVnd Int?
   vatEnabled        Boolean  @default(false)
   defaultVatRateBps Int      @default(1000)
+  allowNegativeStock Boolean @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   users            UserStore[]
@@ -388,18 +389,28 @@ model DevicePushToken {
 }
 
 model CashCategory {
-  id        String        @id @default(uuid())
-  code      String        @unique
-  name      String
-  direction CashDirection
-  sortOrder Int           @default(0)
-  vouchers  CashVoucher[]
+  id          String        @id @default(uuid())
+  code        String        @unique
+  name        String
+  direction   CashDirection
+  sortOrder   Int           @default(0)
+  /// Map danh mục chi/thu → TK sổ cái (P2.2). null = dùng fallback cứng cũ
+  /// (711 khi thu / 642 khi chi) trong buildCashVoucherJournal — không có FK
+  /// DB tới Account, tính hợp lệ (tồn tại + active) được kiểm ở tầng service
+  /// lúc set mapping (LedgerService.setCashCategoryAccount).
+  accountCode String?
+  vouchers    CashVoucher[]
 }
 
 model CashVoucher {
   id              String        @id @default(uuid())
   storeId         String
-  shiftId         String
+  /// Nullable (P2.2): bút toán tạo từ đối chiếu ngân hàng (channel=transfer)
+  /// không gắn với ca cụ thể nào — xem ReportsService.createBankReconEntry.
+  /// Mọi truy vấn theo shiftId (loadShiftCashInputsWithClient...) dùng
+  /// equality match nên tự động loại các dòng shiftId=null, không cần lọc
+  /// thêm ở nơi gọi.
+  shiftId         String?
   categoryId      String
   direction       CashDirection
   channel         CashChannel
@@ -410,7 +421,7 @@ model CashVoucher {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   store           Store         @relation(fields: [storeId], references: [id])
-  shift           Shift         @relation(fields: [shiftId], references: [id])
+  shift           Shift?        @relation(fields: [shiftId], references: [id])
   category        CashCategory  @relation(fields: [categoryId], references: [id])
   recordedBy      User          @relation(fields: [recordedById], references: [id])
   @@index([storeId, clientCreatedAt])
@@ -836,6 +847,12 @@ model EInvoice {
   providerRef     String?
   xmlPath         String?
   pdfPath         String?
+  /** P2.4 stub-mode payload: real PDF/XML bytes stored in DB (no local-disk
+   * dependency for VPS redeploy/backup). Provider-hosted invoices (http
+   * adapter) keep using xmlPath/pdfPath (real https:// vendor URLs) and leave
+   * these columns null; download endpoint proxies those URLs instead. */
+  xmlContent      Bytes?
+  pdfContent      Bytes?
   errorMessage    String?
   retryCount      Int            @default(0)
   lastAttemptAt   DateTime?

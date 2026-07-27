@@ -5,6 +5,7 @@ import {
   Param,
   Post,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { EInvoicePermissionGuard } from '../auth/einvoice-permission.guard';
@@ -49,6 +50,32 @@ export class EInvoiceController {
   @Get('by-sale/:saleId')
   bySale(@Req() req: { user: AuthUser }, @Param('saleId') saleId: string) {
     return this.service.getBySale(req.user, saleId);
+  }
+
+  @Get(':id/xml')
+  async downloadXml(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+  ) {
+    const { buffer, contentType, filename } =
+      await this.service.downloadDocument(req.user, id, 'xml');
+    return new StreamableFile(buffer, {
+      type: contentType,
+      disposition: `attachment; filename="${filename}"`,
+    });
+  }
+
+  @Get(':id/pdf')
+  async downloadPdf(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+  ) {
+    const { buffer, contentType, filename } =
+      await this.service.downloadDocument(req.user, id, 'pdf');
+    return new StreamableFile(buffer, {
+      type: contentType,
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Post(':id/cancel')

@@ -13,6 +13,7 @@ describe('ReportsService period PDF font', () => {
   it('registers the bundled NotoSans Regular font', () => {
     const service = new ReportsService(
       {} as ConstructorParameters<typeof ReportsService>[0],
+      {} as ConstructorParameters<typeof ReportsService>[1],
     ) as unknown as PeriodPdfFontHarness;
     const fontPath = service.resolvePeriodPdfFontPath();
     if (!fontPath) {

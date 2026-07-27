@@ -238,6 +238,55 @@ class RejectedSale {
   final String reason;
 }
 
+// --- Backoff cho lỗi hạ tầng (P2.1) --------------------------------------
+//
+// Áp dụng khi `/sync/push` ném lỗi hạ tầng (mất mạng, server sập, timeout —
+// bắt ở `on DioException` trong `tick()`), KHÔNG áp dụng khi server trả về
+// 2xx nhưng từ chối một entry cụ thể vì lý do nghiệp vụ (`rejected*` — nhánh
+// đó dùng `markOutboxError`, đã đúng từ trước, không đổi).
+//
+// Base = 15s, khớp đúng chu kỳ `Timer.periodic(const Duration(seconds: 15))`
+// đẩy `tick()` trong `sync_scheduler.dart` (không import hằng số đó ở đây để
+// tránh phụ thuộc ngược data/sync -> data/sync; 15s là "sự thật" duy nhất
+// hiện sống ở `sync_scheduler.dart`, hằng số dưới đây chỉ NEO theo nó bằng
+// giá trị, có ghi chú tại đây và tại đó). Chọn base = đúng chu kỳ tick hiện
+// tại để lần backoff đầu tiên (retryCount=1, 15s) không khác gì hành vi cũ —
+// chỉ từ lần lỗi hạ tầng THỨ HAI liên tiếp trở đi mới thực sự giãn ra.
+const outboxBackoffBase = Duration(seconds: 15);
+
+// Trần backoff. Chọn 8 phút — nằm giữa khoảng 5-10 phút hợp lý cho một hàng
+// đợi outbox chứa chứng từ nghiệp vụ (bán hàng, thu nợ...): đủ dài để giảm
+// mạnh tải lên server khi outage kéo dài (8 phút/lần so với 15s/lần cố định
+// trước đây = giảm >97% số request trong 1 giờ mất mạng), đủ ngắn để khi
+// mạng/server hồi phục, máy không "im lặng" quá lâu trước khi đồng bộ lại.
+const outboxBackoffCap = Duration(minutes: 8);
+
+// Số lần retry hạ tầng liên tiếp tối đa trước khi coi một entry là "hỏng
+// bền" và chuyển sang `dead_letter` (loại khỏi vòng lặp tự động, cần người
+// xem qua trong màn "Đồng bộ lỗi"). Với base=15s nhân đôi mỗi lần, trần 8
+// phút (đạt trần đúng ở lần thử thứ 6: 15*2^5 = 480s = 8 phút), 10 lần retry
+// cộng dồn ~ 15+30+60+120+240 + 480*5 = 465 + 2400 = 2865s (~48 phút) trước
+// khi entry #10 hết hạn chờ và (nếu lỗi tiếp lần #11) mới thực sự
+// dead-letter — tổng cộng dưới 1 giờ. Chọn 10 (giữa khoảng 8-15 hợp lý):
+// thấp hơn sẽ dead-letter nhầm một đợt mất mạng vài-chục-phút (rất thường
+// gặp với mạng 3G/4G ở cửa hàng nhỏ) dù nó sẽ tự khỏi; cao hơn sẽ để một
+// entry hỏng THẬT (vd. server đổi API breaking, lỗi không bao giờ tự hết)
+// nằm im nhiều giờ mà không ai biết cần vào sửa/báo.
+const outboxMaxRetries = 10;
+
+/// Backoff cấp số nhân: base * 2^(retryCount-1), trần ở [outboxBackoffCap].
+/// [retryCount] là số lần lỗi hạ tầng liên tiếp SAU KHI đã tăng (1-based —
+/// lần lỗi đầu tiên truyền vào đây là 1, không phải 0).
+Duration outboxBackoffDuration(int retryCount) {
+  // Chặn exponent để tránh shift-overflow lý thuyết nếu retryCount bất
+  // thường lớn (không nên xảy ra trong thực tế vì entry đã dead-letter và
+  // rời khỏi `pendingOutbox()` trước khi retryCount vượt [outboxMaxRetries]
+  // rất nhiều, nhưng hàm này vẫn nên an toàn độc lập với caller).
+  final exponent = (retryCount - 1).clamp(0, 20);
+  final scaled = outboxBackoffBase * (1 << exponent);
+  return scaled > outboxBackoffCap ? outboxBackoffCap : scaled;
+}
+
 class OutboxWorker {
   OutboxWorker({required AppDatabase db, required Dio dio})
     : _db = db,
@@ -519,7 +568,18 @@ class OutboxWorker {
       );
       await markRejected(result.rejectedWastages, entityType: 'wastage');
     } on DioException {
-      // stay pending; do not throw to UI
+      // Lỗi hạ tầng (mất mạng, server sập, timeout) — KHÔNG throw ra UI
+      // (giữ hành vi cũ), nhưng giờ backoff thay vì để `pending` mãi mãi ở
+      // trạng thái "sẵn sàng retry ngay" (tick 15s sau lại gửi y hệt batch
+      // này, dội server vô thời hạn nếu outage kéo dài). `pending` ở đây
+      // vẫn đúng là batch VỪA gửi thất bại — không có gì khác ghi/đọc xen
+      // vào giữa lúc fetch nó ở đầu `tick()` và catch này trong cùng một
+      // lượt gọi đồng bộ.
+      await _db.recordOutboxInfraFailure(
+        pending,
+        backoffFor: outboxBackoffDuration,
+        maxRetries: outboxMaxRetries,
+      );
     }
   }
 

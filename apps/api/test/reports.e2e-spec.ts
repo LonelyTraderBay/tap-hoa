@@ -225,6 +225,7 @@ describe('Reports day', () => {
         storeId: ch1.id,
         userId: login.user.id,
         openedAt: new Date(`${reportDate}T01:00:00.000Z`),
+        closedAt: new Date(`${reportDate}T07:00:00.000Z`),
         openingCash: 100000,
       },
     });

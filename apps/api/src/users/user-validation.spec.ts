@@ -3,7 +3,7 @@ import { Role } from '@prisma/client';
 import {
   assertCashierPermissionFlags,
   parseCreateUserBody,
-  parsePasswordBody,
+  parseSetPasswordBody,
   parseStoreIds,
   parseUpdateUserBody,
 } from './user-validation';
@@ -147,15 +147,32 @@ describe('assertCashierPermissionFlags', () => {
   });
 });
 
-describe('parsePasswordBody', () => {
-  it('accepts 6 characters or more', () => {
-    expect(parsePasswordBody({ password: 'abcdef' })).toBe('abcdef');
+describe('parseSetPasswordBody', () => {
+  it('accepts 6 characters or more and no currentPassword', () => {
+    expect(parseSetPasswordBody({ password: 'abcdef' })).toEqual({
+      password: 'abcdef',
+    });
   });
 
   it('rejects short or missing passwords', () => {
-    expect(() => parsePasswordBody({ password: 'abc' })).toThrow(
+    expect(() => parseSetPasswordBody({ password: 'abc' })).toThrow(
       BadRequestException,
     );
-    expect(() => parsePasswordBody({})).toThrow(BadRequestException);
+    expect(() => parseSetPasswordBody({})).toThrow(BadRequestException);
+  });
+
+  it('passes through a valid currentPassword', () => {
+    expect(
+      parseSetPasswordBody({ password: 'abcdef', currentPassword: 'ghijkl' }),
+    ).toEqual({ password: 'abcdef', currentPassword: 'ghijkl' });
+  });
+
+  it('rejects a non-string or empty currentPassword', () => {
+    expect(() =>
+      parseSetPasswordBody({ password: 'abcdef', currentPassword: 123 }),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      parseSetPasswordBody({ password: 'abcdef', currentPassword: '' }),
+    ).toThrow(BadRequestException);
   });
 });

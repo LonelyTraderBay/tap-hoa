@@ -17,6 +17,13 @@ String? labelOutboxReason(String? code) {
     'store_forbidden' || 'role_forbidden' => 'Không có quyền / cửa hàng',
     'shift_not_open' || 'shift_not_found' => 'Ca chưa mở / không tìm thấy ca',
     'invalid_payload' || 'invalid_qty' => 'Dữ liệu không hợp lệ',
+    // Phải khớp `outboxSyncRetryExhaustedReason` trong
+    // `data/local/database.dart` — entry đã tự retry (backoff cấp số nhân)
+    // nhiều lần do lỗi hạ tầng (mất mạng, server sập) và bị chuyển sang
+    // `status = 'dead_letter'`. Payload không có gì sai — chỉ cần chờ mạng
+    // ổn rồi bấm thử lại, khác hẳn các nhãn phía trên vốn cần SỬA dữ liệu.
+    'sync_retry_exhausted' =>
+      'Không đồng bộ được sau nhiều lần thử — kiểm tra kết nối rồi thử lại',
     _ => code,
   };
 }

@@ -10,9 +10,15 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import PDFDocument from 'pdfkit';
 import { AuthUser } from '../auth/jwt.strategy';
+import { LedgerService } from '../ledger/ledger.service';
 import { periodYmFromDate } from '../ledger/journal-builders';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeCashFundTotals, sumLedgerMovement } from './cash-fund';
+import {
+  computeInventoryMovement,
+  computeOpeningQty,
+  InventoryMovementRow,
+} from './inventory-movement';
 
 /** TK tiền mặt — nguồn sự thật của sổ quỹ. */
 const CASH_ACCOUNT_CODE = '111';
@@ -68,6 +74,28 @@ export type StockOnHandResponse = {
   totalEstimatedValueVnd: number;
 };
 
+/** P2.3 — báo cáo nhập–xuất–tồn theo kỳ/điểm, 1 dòng/sản phẩm. */
+export type InventoryMovementItem = {
+  productId: string;
+  sku: string;
+  name: string;
+  unit: string;
+  openingQty: number;
+  inQty: number;
+  outQty: number;
+  closingQty: number;
+  /** Nhập trong kỳ tách theo docType (chỉ docType có phát sinh > 0). */
+  inByDocType: Record<string, number>;
+  /** Xuất trong kỳ tách theo docType (chỉ docType có phát sinh > 0). */
+  outByDocType: Record<string, number>;
+};
+
+export type InventoryMovementResponse = {
+  storeId: string;
+  periodYm: string;
+  items: InventoryMovementItem[];
+};
+
 const ICT_OFFSET_HOURS = 7;
 const PERIOD_PDF_FONT_NAME = 'NotoSans';
 const PERIOD_PDF_FONT_FILE = 'NotoSans-Regular.ttf';
@@ -76,7 +104,10 @@ import { computeDebtAging } from './debt-aging';
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   private assertStoreAccess(user: AuthUser, storeId: string) {
     if (user.role === Role.owner) {
@@ -373,6 +404,184 @@ export class ReportsService {
       0,
     );
     return { storeId, items, totalEstimatedValueVnd };
+  }
+
+  /**
+   * Biên kỳ theo giờ Việt Nam (UTC+7) từ `periodYm` (`YYYY-MM`) — [from, to]
+   * bao trọn ngày 1 tới ngày cuối tháng theo giờ ICT, quy đổi sang UTC.
+   * Toán y hệt `loadBankBook`/`loadApBook` (không có helper dùng chung sẵn
+   * có trong service — 2 nơi đó tự lặp lại phép tính này); tách riêng ở đây
+   * để dùng cho báo cáo mới mà không đụng 2 nơi cũ đã qua review.
+   */
+  private periodBoundsIct(periodYm: string): { from: Date; to: Date } {
+    const [y, m] = periodYm.split('-').map(Number);
+    const from = new Date(Date.UTC(y, m - 1, 1) - 7 * 3600_000);
+    const to = new Date(Date.UTC(y, m, 1) - 7 * 3600_000 - 1);
+    return { from, to };
+  }
+
+  /**
+   * P2.3 — nhập–xuất–tồn theo kỳ/điểm. Nhóm VẬN HÀNH (như `stock-on-hand`):
+   * không đòi `canLedger`, chỉ cần scope cửa hàng.
+   *
+   * Base-set sản phẩm: có dòng `ProductStoreStock` tại điểm này (product còn
+   * active — khớp `stockOnHand`) HỢP với mọi product có ≥1 `StockMovement`
+   * trong kỳ tại điểm này (kể cả product đã ngưng bán) — để một sản phẩm bán
+   * hết veo/ngưng bán trong kỳ không biến mất khỏi báo cáo của chính kỳ đó.
+   */
+  async inventoryMovementReport(
+    user: AuthUser,
+    storeId: string,
+    periodYm: string,
+  ): Promise<InventoryMovementResponse> {
+    this.assertStoreAccess(user, storeId);
+    if (!/^\d{4}-\d{2}$/.test(periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const { from, to } = this.periodBoundsIct(periodYm);
+
+    const stockRows = await this.prisma.productStoreStock.findMany({
+      where: { storeId, product: { active: true } },
+      select: {
+        productId: true,
+        product: { select: { id: true, sku: true, name: true, unit: true } },
+      },
+    });
+    const productInfo = new Map<
+      string,
+      { id: string; sku: string; name: string; unit: string }
+    >();
+    for (const row of stockRows) {
+      productInfo.set(row.productId, row.product);
+    }
+
+    const movedInPeriod = await this.prisma.stockMovement.findMany({
+      where: { storeId, clientCreatedAt: { gte: from, lte: to } },
+      select: { productId: true },
+      distinct: ['productId'],
+    });
+    const productIds = new Set(productInfo.keys());
+    for (const row of movedInPeriod) {
+      productIds.add(row.productId);
+    }
+
+    if (productIds.size === 0) {
+      return { storeId, periodYm, items: [] };
+    }
+
+    const missingIds = [...productIds].filter((id) => !productInfo.has(id));
+    if (missingIds.length > 0) {
+      const extraProducts = await this.prisma.product.findMany({
+        where: { id: { in: missingIds } },
+        select: { id: true, sku: true, name: true, unit: true },
+      });
+      for (const p of extraProducts) {
+        productInfo.set(p.id, p);
+      }
+    }
+
+    const idList = [...productIds];
+
+    // Tồn đầu kỳ: dòng StockMovement gần nhất TRƯỚC periodStart, theo từng
+    // sản phẩm — `distinct` + `orderBy` (Postgres DISTINCT ON) lấy đúng 1
+    // dòng/sản phẩm thay vì phải tải cả lịch sử về rồi lọc tay.
+    const openingRows = await this.prisma.stockMovement.findMany({
+      where: {
+        storeId,
+        productId: { in: idList },
+        clientCreatedAt: { lt: from },
+      },
+      orderBy: [
+        { productId: 'asc' },
+        { clientCreatedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      distinct: ['productId'],
+      select: { productId: true, balanceAfter: true },
+    });
+    const openingByProduct = new Map(
+      openingRows.map((r) => [r.productId, { balanceAfter: Number(r.balanceAfter) }]),
+    );
+
+    // Nhập/xuất trong kỳ: toàn bộ dòng trong [from, to], sắp theo thời gian
+    // tăng dần để breakdown theo docType đúng thứ tự phát sinh thật.
+    const periodRows = await this.prisma.stockMovement.findMany({
+      where: {
+        storeId,
+        productId: { in: idList },
+        clientCreatedAt: { gte: from, lte: to },
+      },
+      orderBy: [{ clientCreatedAt: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        productId: true,
+        qtyDelta: true,
+        balanceAfter: true,
+        docType: true,
+        clientCreatedAt: true,
+      },
+    });
+    const periodByProduct = new Map<string, InventoryMovementRow[]>();
+    for (const m of periodRows) {
+      const list = periodByProduct.get(m.productId) ?? [];
+      list.push({
+        qtyDelta: Number(m.qtyDelta),
+        balanceAfter: Number(m.balanceAfter),
+        docType: m.docType,
+        clientCreatedAt: m.clientCreatedAt,
+      });
+      periodByProduct.set(m.productId, list);
+    }
+
+    const items: InventoryMovementItem[] = idList.map((productId) => {
+      const info = productInfo.get(productId);
+      const openingQty = computeOpeningQty(openingByProduct.get(productId));
+      const totals = computeInventoryMovement(
+        openingQty,
+        periodByProduct.get(productId) ?? [],
+      );
+      return {
+        productId,
+        sku: info?.sku ?? '',
+        name: info?.name ?? '',
+        unit: info?.unit ?? '',
+        ...totals,
+      };
+    });
+    items.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+    return { storeId, periodYm, items };
+  }
+
+  private inventoryMovementCsv(report: InventoryMovementResponse): string {
+    const lines = [
+      'productId,sku,name,unit,openingQty,inQty,outQty,closingQty',
+      ...report.items.map((item) =>
+        [
+          this.csvEscape(item.productId),
+          this.csvEscape(item.sku),
+          this.csvEscape(item.name),
+          this.csvEscape(item.unit),
+          item.openingQty,
+          item.inQty,
+          item.outQty,
+          item.closingQty,
+        ].join(','),
+      ),
+    ];
+    return lines.join('\n');
+  }
+
+  async inventoryMovementExportCsv(
+    user: AuthUser,
+    storeId: string,
+    periodYm: string,
+  ) {
+    const report = await this.inventoryMovementReport(user, storeId, periodYm);
+    return {
+      storeId: report.storeId,
+      periodYm: report.periodYm,
+      csv: this.inventoryMovementCsv(report),
+    };
   }
 
   private async resolveDebtAgingStoreFilter(
@@ -811,20 +1020,51 @@ export class ReportsService {
    * `reports/cash-fund.ts`. `ledgerNetCashVnd` là phát sinh ròng TK 111 thật
    * trong sổ cái; `ledgerDiffVnd` ≠ 0 nghĩa là có chứng từ chưa lên sổ
    * (bị khoá kỳ, post journal lỗi) — cần rà lại, không được lặng lẽ bỏ qua.
+   *
+   * `storeId` optional (P2.2 — sổ quỹ tổng): bỏ trống ⇒ dùng `resolveStoreIds`
+   * (owner → mọi điểm bán active; store_manager → đúng scope của họ), giống
+   * hệt pattern `dayReport`/`debtAging`. Luôn trả kèm `byStore` — breakdown
+   * theo từng điểm bán — cùng với tổng gộp ở top-level; khi `storeId` được
+   * truyền, `byStore` chỉ có đúng 1 phần tử khớp top-level (giữ nguyên hành
+   * vi/field cũ, chỉ thêm field mới nên không phá test hiện có).
    */
   async cashFundSummary(
     user: AuthUser,
-    storeId: string,
+    storeId: string | undefined,
     from: string,
     to: string,
   ) {
-    this.assertStoreAccess(user, storeId);
+    const storeIds = await this.resolveStoreIds(user, storeId);
     const fromDate = new Date(from);
     const toDate = new Date(to);
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
       throw new BadRequestException('invalid from/to');
     }
+    const scope: 'store' | 'aggregate' = storeId ? 'store' : 'aggregate';
     const range = { gte: fromDate, lte: toDate };
+
+    if (storeIds.length === 0) {
+      const emptyTotals = computeCashFundTotals({
+        sales: [],
+        saleReturns: [],
+        vouchers: [],
+        debtPayments: [],
+        supplierPayments: [],
+      });
+      return {
+        storeId: storeId ?? null,
+        scope,
+        storeIds,
+        from,
+        to,
+        ...emptyTotals,
+        ledgerAccountCode: CASH_ACCOUNT_CODE,
+        ledgerNetCashVnd: 0,
+        ledgerDiffVnd: 0,
+        byStore: [],
+      };
+    }
+
     const [
       sales,
       saleReturns,
@@ -834,31 +1074,48 @@ export class ReportsService {
       ledgerCashLines,
     ] = await Promise.all([
       this.prisma.sale.findMany({
-        where: { storeId, clientCreatedAt: range },
-        select: { cashAmount: true, transferAmount: true },
+        where: { storeId: { in: storeIds }, clientCreatedAt: range },
+        select: { storeId: true, cashAmount: true, transferAmount: true },
       }),
       this.prisma.saleReturn.findMany({
-        where: { storeId, clientCreatedAt: range },
-        select: { cashRefundVnd: true, transferRefundVnd: true },
+        where: { storeId: { in: storeIds }, clientCreatedAt: range },
+        select: {
+          storeId: true,
+          cashRefundVnd: true,
+          transferRefundVnd: true,
+        },
       }),
       this.prisma.cashVoucher.findMany({
-        where: { storeId, clientCreatedAt: range },
-        select: { direction: true, channel: true, amountVnd: true },
+        where: { storeId: { in: storeIds }, clientCreatedAt: range },
+        select: {
+          storeId: true,
+          direction: true,
+          channel: true,
+          amountVnd: true,
+        },
       }),
       this.prisma.debtLedgerEntry.findMany({
-        where: { storeId, type: 'payment', clientCreatedAt: range },
-        select: { paymentMethod: true, amountVnd: true },
+        where: {
+          storeId: { in: storeIds },
+          type: 'payment',
+          clientCreatedAt: range,
+        },
+        select: { storeId: true, paymentMethod: true, amountVnd: true },
       }),
       this.prisma.supplierPayment.findMany({
-        where: { storeId, clientCreatedAt: range },
-        select: { channel: true, amountVnd: true },
+        where: { storeId: { in: storeIds }, clientCreatedAt: range },
+        select: { storeId: true, channel: true, amountVnd: true },
       }),
       this.prisma.journalLine.findMany({
         where: {
           accountCode: CASH_ACCOUNT_CODE,
-          entry: { storeId, postedAt: range },
+          entry: { storeId: { in: storeIds }, postedAt: range },
         },
-        select: { debitVnd: true, creditVnd: true },
+        select: {
+          debitVnd: true,
+          creditVnd: true,
+          entry: { select: { storeId: true } },
+        },
       }),
     ]);
 
@@ -870,14 +1127,39 @@ export class ReportsService {
       supplierPayments,
     });
     const ledgerNetCashVnd = sumLedgerMovement(ledgerCashLines);
+
+    const byStore = [...storeIds]
+      .sort((a, b) => a.localeCompare(b))
+      .map((sid) => {
+        const storeTotals = computeCashFundTotals({
+          sales: sales.filter((s) => s.storeId === sid),
+          saleReturns: saleReturns.filter((r) => r.storeId === sid),
+          vouchers: vouchers.filter((v) => v.storeId === sid),
+          debtPayments: debtPayments.filter((p) => p.storeId === sid),
+          supplierPayments: supplierPayments.filter((p) => p.storeId === sid),
+        });
+        const storeLedgerNetCashVnd = sumLedgerMovement(
+          ledgerCashLines.filter((l) => l.entry.storeId === sid),
+        );
+        return {
+          storeId: sid,
+          ...storeTotals,
+          ledgerNetCashVnd: storeLedgerNetCashVnd,
+          ledgerDiffVnd: storeTotals.netCashVnd - storeLedgerNetCashVnd,
+        };
+      });
+
     return {
-      storeId,
+      storeId: storeId ?? null,
+      scope,
+      storeIds,
       from,
       to,
       ...totals,
       ledgerAccountCode: CASH_ACCOUNT_CODE,
       ledgerNetCashVnd,
       ledgerDiffVnd: totals.netCashVnd - ledgerNetCashVnd,
+      byStore,
     };
   }
 
@@ -1285,6 +1567,101 @@ export class ReportsService {
         matchVersion: { increment: 1 },
       },
     });
+  }
+
+  /**
+   * Bút toán bank recon (P2.2): tạo một `CashVoucher` (channel='transfer',
+   * `shiftId: null` — không gắn ca cụ thể, xem ghi chú schema) trực tiếp từ
+   * một dòng sao kê CHƯA khớp, post sổ qua `LedgerService.postFromCashVoucher`
+   * (tự áp map danh mục→TK của P2.2, fallback 711/642 nếu danh mục chưa map),
+   * rồi khớp nó với dòng sao kê bằng đúng `matchBankLine` sẵn có — tái dùng
+   * toàn bộ máy match/unmatch/auto-match/lock, không cần đổi gì ở đó vì
+   * `loadBankBook` vốn đã gom mọi `CashVoucher` kênh transfer vào "book".
+   *
+   * Dùng cho trường hợp bank báo một khoản (thường là phí NH) chưa từng được
+   * ghi ở bất kỳ đâu trong app — nếu không có lối này, kỳ đó không bao giờ
+   * khớp/khoá được vì phía sổ (book) mãi thiếu dòng tương ứng.
+   */
+  async createBankReconEntry(
+    user: AuthUser,
+    input: {
+      storeId: string;
+      periodYm: string;
+      statementId: string;
+      categoryId: string;
+      note?: string;
+    },
+  ) {
+    this.assertStoreAccess(user, input.storeId);
+    if (user.role !== Role.owner && user.role !== Role.store_manager) {
+      throw new ForbiddenException('forbidden');
+    }
+    if (!/^\d{4}-\d{2}$/.test(input.periodYm)) {
+      throw new BadRequestException('periodYm must be YYYY-MM');
+    }
+    const lock = await this.prisma.bankReconLock.findUnique({
+      where: {
+        storeId_periodYm: {
+          storeId: input.storeId,
+          periodYm: input.periodYm,
+        },
+      },
+    });
+    if (lock) throw new BadRequestException('bank_recon_locked');
+
+    const st = await this.prisma.bankStatementLine.findUnique({
+      where: { id: input.statementId },
+    });
+    if (
+      !st ||
+      st.storeId !== input.storeId ||
+      st.periodYm !== input.periodYm
+    ) {
+      throw new BadRequestException('statement_not_found');
+    }
+    if (st.matchedRef) {
+      throw new BadRequestException('statement_already_matched');
+    }
+    if (st.amountVnd === 0) {
+      throw new BadRequestException('invalid_statement_amount');
+    }
+
+    const category = await this.prisma.cashCategory.findUnique({
+      where: { id: input.categoryId },
+    });
+    if (!category) {
+      throw new BadRequestException('invalid_category');
+    }
+    const direction: 'in' | 'out' = st.amountVnd > 0 ? 'in' : 'out';
+    if (category.direction !== direction) {
+      throw new BadRequestException('category_direction_mismatch');
+    }
+
+    const voucherId = randomUUID();
+    await this.prisma.cashVoucher.create({
+      data: {
+        id: voucherId,
+        storeId: input.storeId,
+        shiftId: null,
+        categoryId: input.categoryId,
+        direction,
+        channel: 'transfer',
+        amountVnd: Math.abs(st.amountVnd),
+        note: input.note?.trim() || null,
+        recordedById: user.userId,
+        clientCreatedAt: st.bookedAt,
+      },
+    });
+    await this.ledger.postFromCashVoucher(voucherId, user.userId);
+
+    const matched = await this.matchBankLine(user, {
+      storeId: input.storeId,
+      periodYm: input.periodYm,
+      statementId: input.statementId,
+      bookRef: `voucher:${voucherId}`,
+    });
+
+    return { voucherId, statement: matched };
   }
 
   async unmatchBankLine(

@@ -7,10 +7,12 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateUserData,
+  SetPasswordData,
   UpdateUserData,
   assertCashierPermissionFlags,
 } from './user-validation';
@@ -97,19 +99,38 @@ export class UsersService {
     await this.assertStoresExist(data.storeIds);
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
     try {
-      const created = await this.prisma.user.create({
-        data: {
-          phone: data.phone,
-          name: data.name,
-          passwordHash,
-          role: data.role,
-          canLedger: data.canLedger,
-          canEinvoice: data.canEinvoice,
-          stores: {
-            create: data.storeIds.map((storeId) => ({ storeId })),
+      const created = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            phone: data.phone,
+            name: data.name,
+            passwordHash,
+            role: data.role,
+            canLedger: data.canLedger,
+            canEinvoice: data.canEinvoice,
+            stores: {
+              create: data.storeIds.map((storeId) => ({ storeId })),
+            },
           },
-        },
-        select: this.userSelect,
+          select: this.userSelect,
+        });
+        // Không log password/passwordHash — chỉ những gì cần cho việc kiểm toán ai
+        // tạo tài khoản nào với vai trò/điểm bán gì.
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: actor.userId,
+            action: 'user_create',
+            entityType: 'user',
+            entityId: user.id,
+            detailJson: JSON.stringify({
+              phone: user.phone,
+              role: user.role,
+              storeIds: user.stores.map((s) => s.storeId),
+            }),
+          },
+        });
+        return user;
       });
       return toPublicUser(created);
     } catch (error) {
@@ -172,6 +193,7 @@ export class UsersService {
       await this.assertStoresExist(data.storeIds);
     }
 
+    const roleChanged = data.role !== undefined && data.role !== target.role;
     const storeIds = data.storeIds;
     const updated = await this.prisma.$transaction(async (tx) => {
       if (storeIds) {
@@ -180,7 +202,7 @@ export class UsersService {
           data: storeIds.map((storeId) => ({ userId, storeId })),
         });
       }
-      return tx.user.update({
+      const user = await tx.user.update({
         where: { id: userId },
         data: {
           ...(data.name !== undefined ? { name: data.name } : {}),
@@ -191,6 +213,24 @@ export class UsersService {
         },
         select: this.userSelect,
       });
+      // Chỉ log khi vai trò thực sự đổi — sửa tên/cờ quyền/điểm bán/active không
+      // phải là mục tiêu của task này, tránh nhiễu nhật ký kiểm toán.
+      if (roleChanged) {
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: actor.userId,
+            action: 'user_role_change',
+            entityType: 'user',
+            entityId: userId,
+            detailJson: JSON.stringify({
+              fromRole: target.role,
+              toRole: data.role,
+            }),
+          },
+        });
+      }
+      return user;
     });
     return toPublicUser(updated);
   }
@@ -198,17 +238,54 @@ export class UsersService {
   async setPassword(
     actor: AuthUser,
     userId: string,
-    password: string,
+    data: SetPasswordData,
   ): Promise<PublicUser> {
     if (actor.role !== Role.owner && actor.userId !== userId) {
       throw new ForbiddenException('Only owner can change other passwords');
     }
-    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    try {
-      const updated = await this.prisma.user.update({
+
+    if (actor.userId === userId) {
+      // Tự đổi mật khẩu của chính mình (kể cả owner) phải chứng minh biết mật khẩu
+      // hiện tại — nếu không, một phiên đăng nhập bị bỏ quên/chiếm dụng có thể khóa
+      // vĩnh viễn tài khoản thật bằng cách đặt mật khẩu mới mà chủ tài khoản không biết.
+      // `userSelect` không kèm passwordHash (không bao giờ lộ ra response công khai)
+      // nên phải truy vấn riêng ở đây.
+      const current = await this.prisma.user.findUnique({
         where: { id: userId },
-        data: { passwordHash },
-        select: this.userSelect,
+        select: { passwordHash: true },
+      });
+      if (!current) {
+        throw new NotFoundException('User not found');
+      }
+      const matches =
+        data.currentPassword !== undefined &&
+        (await bcrypt.compare(data.currentPassword, current.passwordHash));
+      if (!matches) {
+        throw new BadRequestException('current_password_incorrect');
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({
+          where: { id: userId },
+          data: { passwordHash },
+          select: this.userSelect,
+        });
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: actor.userId,
+            action: 'user_password_reset',
+            entityType: 'user',
+            entityId: userId,
+            detailJson: JSON.stringify({
+              selfChange: actor.userId === userId,
+            }),
+          },
+        });
+        return user;
       });
       return toPublicUser(updated);
     } catch (error) {

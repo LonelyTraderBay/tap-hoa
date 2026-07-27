@@ -499,6 +499,31 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
             lines.add('SKU: ${detail['sku']}');
           }
         }
+        if (row['action'] == 'user_role_change') {
+          final fromRole = detail['fromRole'];
+          final toRole = detail['toRole'];
+          if (fromRole != null && toRole != null) {
+            lines.add('Vai trò: $fromRole -> $toRole');
+          }
+        }
+        if (row['action'] == 'user_create') {
+          if (detail['role'] != null) {
+            lines.add('Vai trò: ${detail['role']}');
+          }
+          if (detail['phone'] != null) {
+            lines.add('SĐT: ${detail['phone']}');
+          }
+        }
+        if (row['action'] == 'einvoice_issue' ||
+            row['action'] == 'einvoice_cancel' ||
+            row['action'] == 'einvoice_adjust') {
+          if (detail['invoiceNumber'] != null) {
+            lines.add('Số HĐ: ${detail['invoiceNumber']}');
+          }
+          if (detail['provider'] != null) {
+            lines.add('NCC: ${detail['provider']}');
+          }
+        }
         return lines;
       }
     } catch (_) {
@@ -517,6 +542,18 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
         return 'Chặn ghi sổ';
       case 'product_price_change':
         return 'Đổi giá SP';
+      case 'user_create':
+        return 'Tạo nhân viên';
+      case 'user_role_change':
+        return 'Đổi vai trò NV';
+      case 'user_password_reset':
+        return 'Đổi mật khẩu NV';
+      case 'einvoice_issue':
+        return 'Xuất HĐĐT';
+      case 'einvoice_cancel':
+        return 'Hủy HĐĐT';
+      case 'einvoice_adjust':
+        return 'Điều chỉnh HĐĐT';
       default:
         return action;
     }

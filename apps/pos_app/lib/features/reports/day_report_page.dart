@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'day_report_csv.dart';
 import 'day_report_repository.dart';
 import 'ict_date.dart';
+import 'inventory_movement_page.dart';
+import 'inventory_movement_repository.dart';
 import 'stock_on_hand_page.dart';
 import 'stock_on_hand_repository.dart';
 import '../pos/sale_return_service.dart';
@@ -149,6 +151,20 @@ class _DayReportPageState extends State<DayReportPage> {
       MaterialPageRoute<void>(
         builder: (_) => StockOnHandPage(
           repository: widget.stockOnHandRepository,
+          storeId: widget.storeId,
+          role: widget.role,
+        ),
+      ),
+    );
+  }
+
+  void _openInventoryMovement() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InventoryMovementPage(
+          repository: InventoryMovementRepository(
+            dio: widget.repository.dio,
+          ),
           storeId: widget.storeId,
           role: widget.role,
         ),
@@ -390,6 +406,12 @@ class _DayReportPageState extends State<DayReportPage> {
                     child: TextButton(
                       onPressed: _openStockOnHand,
                       child: const Text('Xem tồn hiện tại'),
+                    ),
+                  ),
+                  Center(
+                    child: TextButton(
+                      onPressed: _openInventoryMovement,
+                      child: const Text('Xem nhập-xuất-tồn theo kỳ'),
                     ),
                   ),
                   if (widget.database != null && widget.shiftRepository != null)

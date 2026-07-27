@@ -190,5 +190,18 @@ describe('Wave C AP recon e2e', () => {
         csv: `${day},1000,x`,
       })
       .expect(400);
+
+    // Dọn `SupplierPayment`/`SupplierPayable` (tạo thẳng qua prisma, channel
+    // 'transfer', clientCreatedAt = ngày 15 tháng hiện tại) — nếu không,
+    // `reports.service.ts::loadBankBook` (dùng chung storeId CH1 + khoảng
+    // ngày cả tháng) sẽ cộng dư -40.000đ vào `bookTotalVnd` của bất kỳ spec
+    // nào chạy sau trong cùng lượt `--runInBand` mà đọc sổ quỹ NH của CH1
+    // trong tháng hiện tại (vd. bank-recon.e2e-spec.ts).
+    await prisma.supplierPayment.deleteMany({
+      where: { supplierId: supplier.id },
+    });
+    await prisma.supplierPayable.deleteMany({
+      where: { supplierId: supplier.id },
+    });
   });
 });

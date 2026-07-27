@@ -1,17 +1,54 @@
 import 'package:decimal/decimal.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/local/database.dart';
+import '../pos/barcode_scanner_page.dart';
 import '../products/product_repository.dart';
+import '../reports/inventory_movement_page.dart';
+import '../reports/inventory_movement_repository.dart';
 import '../reports/stock_on_hand_page.dart';
 import '../reports/stock_on_hand_repository.dart';
 import '../shifts/shift_repository.dart';
+import 'allow_negative_stock_sheet.dart';
 import 'inventory_service.dart';
+
+String _normalizeStockScanBarcode(String value) => value.trim().toLowerCase();
+
+/// §4.8 "kiểm kho / quét mã xem tồn" — mirrors
+/// `pos_page.dart::posExactBarcodeMatch`'s matching semantics exactly
+/// (normalize via trim+lowercase, require a UNIQUE exact barcode match) so a
+/// scanned code behaves the same whether it's being added to the checkout
+/// cart or just looked up here: zero or multiple matches both mean "not
+/// found", never a silent wrong pick.
+ProductWithStock? inventoryScanExactBarcodeMatch(
+  Iterable<ProductWithStock> products,
+  String rawQuery,
+) {
+  final q = _normalizeStockScanBarcode(rawQuery);
+  if (q.isEmpty) {
+    return null;
+  }
+  ProductWithStock? match;
+  for (final product in products) {
+    final barcode = product.barcode;
+    if (barcode == null || _normalizeStockScanBarcode(barcode) != q) {
+      continue;
+    }
+    if (match != null) {
+      return null;
+    }
+    match = product;
+  }
+  return match;
+}
 
 class InventoryHubPage extends StatefulWidget {
   const InventoryHubPage({
     super.key,
     required this.db,
+    required this.dio,
     required this.inventoryService,
     required this.productRepository,
     required this.stockOnHandRepository,
@@ -20,6 +57,7 @@ class InventoryHubPage extends StatefulWidget {
   });
 
   final AppDatabase db;
+  final Dio dio;
   final InventoryService inventoryService;
   final ProductRepository productRepository;
   final StockOnHandRepository stockOnHandRepository;
@@ -49,6 +87,18 @@ class _PurchaseLineDraft {
   void dispose() {
     qtyCtrl.dispose();
     costCtrl.dispose();
+  }
+}
+
+class _StocktakeLineDraft {
+  _StocktakeLineDraft({required this.productId, String counted = ''})
+    : countedCtrl = TextEditingController(text: counted);
+
+  String productId;
+  final TextEditingController countedCtrl;
+
+  void dispose() {
+    countedCtrl.dispose();
   }
 }
 
@@ -285,6 +335,165 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     }
   }
 
+  Future<List<InventoryLineInput>?> _showStocktakeLinesDialog({
+    required String title,
+    required List<ProductWithStock> products,
+    required List<_StocktakeLineDraft> drafts,
+    Widget? header,
+  }) async {
+    if (products.isEmpty) {
+      await _snack('Chưa có sản phẩm');
+      return null;
+    }
+    final productById = {for (final product in products) product.id: product};
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(title),
+          content: StatefulBuilder(
+            builder: (ctx, setDialogState) => SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (header != null) ...[header, const SizedBox(height: 12)],
+                    for (var i = 0; i < drafts.length; i++)
+                      Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            children: [
+                              DropdownButtonFormField<String>(
+                                initialValue: drafts[i].productId,
+                                decoration: const InputDecoration(
+                                  labelText: 'Sản phẩm',
+                                ),
+                                items: [
+                                  for (final p in products)
+                                    DropdownMenuItem(
+                                      value: p.id,
+                                      child: Text('${p.name} (${p.qty})'),
+                                    ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setDialogState(() {
+                                    drafts[i].productId = value;
+                                  });
+                                },
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Hệ thống: '
+                                      '${productById[drafts[i].productId]?.qty ?? '0'}',
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: drafts[i].countedCtrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Đếm thực tế',
+                                      ),
+                                    ),
+                                  ),
+                                  if (drafts.length > 1)
+                                    IconButton(
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          drafts.removeAt(i).dispose();
+                                        });
+                                      },
+                                      icon: const Icon(Icons.delete_outline),
+                                      tooltip: 'Xóa dòng',
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          setDialogState(() {
+                            drafts.add(
+                              _StocktakeLineDraft(
+                                productId: products.first.id,
+                                counted: products.first.qty,
+                              ),
+                            );
+                          });
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Thêm dòng'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Lưu'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return null;
+
+      final seen = <String>{};
+      final parsed = <InventoryLineInput>[];
+      for (final draft in drafts) {
+        final countedText = draft.countedCtrl.text.trim();
+        if (countedText.isEmpty) {
+          throw const FormatException('invalid_qty');
+        }
+        final countedQty = Decimal.parse(countedText);
+        if (countedQty < Decimal.zero) {
+          throw const FormatException('invalid_qty');
+        }
+        if (!seen.add(draft.productId)) {
+          throw StateError('duplicate_product');
+        }
+        final systemQty = Decimal.parse(
+          productById[draft.productId]?.qty ?? '0',
+        );
+        parsed.add(
+          InventoryLineInput(
+            productId: draft.productId,
+            qty: countedQty,
+            systemQty: systemQty,
+            countedQty: countedQty,
+          ),
+        );
+      }
+      if (parsed.isEmpty) {
+        throw StateError('empty_lines');
+      }
+      return parsed;
+    } catch (_) {
+      await _snack('Dòng hàng không hợp lệ');
+      return null;
+    } finally {
+      for (final draft in drafts) {
+        draft.dispose();
+      }
+    }
+  }
+
   Future<void> _createPurchase() async {
     final product = await _pickProduct();
     if (product == null || !mounted) return;
@@ -422,46 +631,52 @@ class _InventoryHubPageState extends State<InventoryHubPage>
   }
 
   Future<void> _createWastage() async {
-    final product = await _pickProduct();
-    if (product == null || !mounted) return;
-    final qtyCtrl = TextEditingController(text: '1');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Xuất hủy'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(product.name),
-            TextField(
-              controller: qtyCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Số lượng'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
+    final products = await widget.productRepository.listWithStock(
+      widget.storeId,
+    );
+    if (!mounted) return;
+    if (products.isEmpty) {
+      await _snack('Chưa có sản phẩm');
+      return;
+    }
+    var reasonCode = 'spoilage';
+    final noteCtrl = TextEditingController();
+    final lines = await _showPurchaseLinesDialog(
+      title: 'Xuất hủy / hao hụt',
+      products: products,
+      drafts: [_PurchaseLineDraft(productId: products.first.id)],
+      header: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: reasonCode,
+            decoration: const InputDecoration(labelText: 'Lý do hủy'),
+            items: const [
+              DropdownMenuItem(value: 'spoilage', child: Text('Hư hỏng')),
+              DropdownMenuItem(value: 'damage', child: Text('Hỏng do va chạm')),
+              DropdownMenuItem(value: 'other', child: Text('Khác')),
+            ],
+            onChanged: (value) {
+              if (value != null) reasonCode = value;
+            },
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Lưu'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: noteCtrl,
+            decoration: const InputDecoration(labelText: 'Ghi chú (tùy chọn)'),
           ),
         ],
       ),
+      canAddLines: true,
     );
-    if (ok != true) return;
+    final note = noteCtrl.text.trim();
+    noteCtrl.dispose();
+    if (lines == null) return;
     try {
       await widget.inventoryService.recordWastage(
-        reasonCode: 'spoilage',
-        lines: [
-          InventoryLineInput(
-            productId: product.id,
-            qty: Decimal.parse(qtyCtrl.text.trim()),
-          ),
-        ],
+        reasonCode: reasonCode,
+        note: note.isEmpty ? null : note,
+        lines: lines,
       );
       await _snack('Đã ghi xuất hủy');
     } catch (e) {
@@ -470,49 +685,38 @@ class _InventoryHubPageState extends State<InventoryHubPage>
   }
 
   Future<void> _createStocktake() async {
-    final product = await _pickProduct();
-    if (product == null || !mounted) return;
-    final countedCtrl = TextEditingController(text: product.qty);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Kiểm kê'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('${product.name} — hệ thống: ${product.qty}'),
-            TextField(
-              controller: countedCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Đếm thực tế'),
-            ),
-          ],
+    final products = await widget.productRepository.listWithStock(
+      widget.storeId,
+    );
+    if (!mounted) return;
+    if (products.isEmpty) {
+      await _snack('Chưa có sản phẩm');
+      return;
+    }
+    final noteCtrl = TextEditingController();
+    final lines = await _showStocktakeLinesDialog(
+      title: 'Kiểm kê',
+      products: products,
+      drafts: [
+        _StocktakeLineDraft(
+          productId: products.first.id,
+          counted: products.first.qty,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Lưu'),
-          ),
-        ],
+      ],
+      header: TextField(
+        controller: noteCtrl,
+        decoration: const InputDecoration(
+          labelText: 'Ghi chú kiểm kê (tùy chọn)',
+        ),
       ),
     );
-    if (ok != true) return;
+    final note = noteCtrl.text.trim();
+    noteCtrl.dispose();
+    if (lines == null) return;
     try {
-      final systemQty = Decimal.parse(product.qty);
-      final countedQty = Decimal.parse(countedCtrl.text.trim());
       await widget.inventoryService.recordStocktake(
-        lines: [
-          InventoryLineInput(
-            productId: product.id,
-            qty: countedQty,
-            systemQty: systemQty,
-            countedQty: countedQty,
-          ),
-        ],
+        note: note.isEmpty ? null : note,
+        lines: lines,
       );
       await _snack('Đã ghi kiểm kê');
     } catch (e) {
@@ -586,6 +790,50 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     }
   }
 
+  Future<void> _scanCheckStock() async {
+    final scanned = await openCameraBarcodeScanner(context);
+    if (!mounted) return;
+    final query = scanned?.trim();
+    if (query == null || query.isEmpty) {
+      return;
+    }
+    final products = await widget.productRepository.listWithStock(
+      widget.storeId,
+    );
+    if (!mounted) return;
+    final product = inventoryScanExactBarcodeMatch(products, query);
+    await _showStockScanResult(product: product, scannedQuery: query);
+  }
+
+  Future<void> _showStockScanResult({
+    required ProductWithStock? product,
+    required String scannedQuery,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(product == null ? 'Không tìm thấy' : product.name),
+        content: product == null
+            ? Text('Không tìm thấy sản phẩm khớp mã "$scannedQuery".')
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SKU: ${product.sku}'),
+                  Text('Tồn hiện tại: ${product.qty} ${product.displayUnit}'),
+                ],
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openStockOnHand() async {
     List<StoreOption>? stores;
     if (widget.role == 'owner') {
@@ -607,6 +855,27 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     );
   }
 
+  Future<void> _openInventoryMovement() async {
+    List<StoreOption>? stores;
+    if (widget.role == 'owner') {
+      final rows = await widget.db.select(widget.db.storesLocal).get();
+      stores = rows
+          .map((s) => StoreOption(id: s.id, code: s.code, name: s.name))
+          .toList();
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InventoryMovementPage(
+          repository: InventoryMovementRepository(dio: widget.dio),
+          storeId: widget.storeId,
+          role: widget.role,
+          stores: stores,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canTransfer =
@@ -619,6 +888,28 @@ class _InventoryHubPageState extends State<InventoryHubPage>
             onPressed: _openStockOnHand,
             child: const Text('Tồn hiện tại'),
           ),
+          TextButton(
+            onPressed: _openInventoryMovement,
+            child: const Text('Nhập-xuất-tồn'),
+          ),
+          if (posCameraBarcodeScannerAvailable(defaultTargetPlatform))
+            IconButton(
+              tooltip: 'Quét mã xem tồn',
+              icon: const Icon(Icons.qr_code_scanner),
+              onPressed: _scanCheckStock,
+            ),
+          if (canTransfer)
+            IconButton(
+              tooltip: 'Cho phép âm tồn',
+              icon: const Icon(Icons.exposure_outlined),
+              onPressed: () => showAllowNegativeStockSheet(
+                context,
+                db: widget.db,
+                dio: widget.dio,
+                storeId: widget.storeId,
+                role: widget.role,
+              ),
+            ),
         ],
         bottom: TabBar(
           controller: _tabs,

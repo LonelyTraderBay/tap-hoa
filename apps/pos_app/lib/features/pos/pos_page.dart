@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../data/local/database.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
+import '../../data/sync/sync_scheduler.dart';
 import '../auth/auth_repository.dart';
 import '../cash/cash_ledger_page.dart';
 import '../cash/cash_voucher_service.dart';
@@ -79,14 +80,6 @@ ProductWithStock? posExactBarcodeMatch(
   return match;
 }
 
-bool posCameraBarcodeScannerAvailable(
-  TargetPlatform platform, {
-  bool isWeb = kIsWeb,
-}) {
-  if (isWeb) return false;
-  return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-}
-
 bool posShowStoreManagementAction(String role) => role == 'owner';
 
 bool posShowUserManagementAction(String role) => role == 'owner';
@@ -101,12 +94,6 @@ bool posShowCashFundAction({required bool canLedger}) => canLedger;
 bool posShowBankReconAction({required bool canLedger}) => canLedger;
 
 bool posShowEInvoiceIssueAction({required bool canEinvoice}) => canEinvoice;
-
-Future<String?> openCameraBarcodeScanner(BuildContext context) {
-  return Navigator.of(context).push<String>(
-    MaterialPageRoute(builder: (_) => const PosBarcodeScannerPage()),
-  );
-}
 
 class PosPage extends StatefulWidget {
   const PosPage({
@@ -128,6 +115,7 @@ class PosPage extends StatefulWidget {
     required this.storeName,
     required this.role,
     this.openBarcodeScanner,
+    this.syncSchedulerKey,
   });
 
   final ProductRepository productRepository;
@@ -147,6 +135,7 @@ class PosPage extends StatefulWidget {
   final String storeName;
   final String role;
   final OpenBarcodeScanner? openBarcodeScanner;
+  final GlobalKey<SyncSchedulerState>? syncSchedulerKey;
 
   @override
   State<PosPage> createState() => _PosPageState();
@@ -162,6 +151,15 @@ class _PosPageState extends State<PosPage> {
   bool _isSyncing = false;
   String? _groupFilterId;
   String? _pendingAutoAddBarcodeQuery;
+
+  @override
+  void initState() {
+    super.initState();
+    // Register this store with the root SyncScheduler so it starts pulling
+    // catalog updates in the background (periodic timer + on app resume),
+    // not just when the user manually taps "Đồng bộ" or reloads a page.
+    widget.syncSchedulerKey?.currentState?.setActiveStore(widget.storeId);
+  }
 
   @override
   void dispose() {
@@ -688,6 +686,7 @@ class _PosPageState extends State<PosPage> {
                     pullCatalog: widget.pullCatalog,
                     checkoutService: widget.checkoutService,
                     outboxWorker: widget.outboxWorker,
+                    syncSchedulerKey: widget.syncSchedulerKey,
                   ),
                 ),
               );
@@ -724,6 +723,7 @@ class _PosPageState extends State<PosPage> {
                   builder: (_) => SyncDiagnosticsPage(
                     dio: widget.dayReportRepository.dio,
                     db: widget.database,
+                    role: widget.role,
                   ),
                 ),
               );
@@ -737,6 +737,7 @@ class _PosPageState extends State<PosPage> {
                 MaterialPageRoute<void>(
                   builder: (_) => InventoryHubPage(
                     db: widget.database,
+                    dio: widget.dayReportRepository.dio,
                     inventoryService: InventoryService(db: widget.database),
                     productRepository: widget.productRepository,
                     stockOnHandRepository: widget.stockOnHandRepository,
@@ -776,6 +777,7 @@ class _PosPageState extends State<PosPage> {
                   MaterialPageRoute<void>(
                     builder: (_) => UserManagementPage(
                       dio: widget.dayReportRepository.dio,
+                      currentUserId: widget.user.id,
                     ),
                   ),
                 );

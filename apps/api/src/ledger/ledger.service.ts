@@ -32,6 +32,12 @@ export class LedgerService {
     'period_unlock',
     'journal_blocked_period_lock',
     'product_price_change',
+    'user_create',
+    'user_role_change',
+    'user_password_reset',
+    'einvoice_issue',
+    'einvoice_cancel',
+    'einvoice_adjust',
   ];
 
   constructor(private readonly prisma: PrismaService) {}
@@ -249,12 +255,14 @@ export class LedgerService {
   async postFromCashVoucher(voucherId: string, actorUserId?: string) {
     const row = await this.prisma.cashVoucher.findUnique({
       where: { id: voucherId },
+      include: { category: { select: { accountCode: true } } },
     });
     if (!row) return;
     const lines = buildCashVoucherJournal({
       direction: row.direction,
       channel: row.channel,
       amountVnd: row.amountVnd,
+      categoryAccountCode: row.category?.accountCode ?? null,
     });
     await this.postEntry({
       storeId: row.storeId,
@@ -816,6 +824,67 @@ export class LedgerService {
       default:
         return false;
     }
+  }
+
+  /**
+   * Danh sách danh mục thu/chi kèm map TK hiện tại (P2.2) — dùng cho màn hình
+   * cấu hình kế toán và picker khi tạo bút toán từ đối chiếu ngân hàng.
+   */
+  async listCashCategories(user: AuthUser) {
+    this.assertLedgerAccess(user);
+    return this.prisma.cashCategory.findMany({
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        direction: true,
+        sortOrder: true,
+        accountCode: true,
+      },
+    });
+  }
+
+  /**
+   * Gán/gỡ TK cho một danh mục thu/chi (P2.2). Owner-only — cấu hình kế toán
+   * áp dụng cho mọi bút toán tương lai của danh mục này, không phải điều
+   * store_manager nên tự đổi. `accountCode: null` gỡ map, quay lại fallback
+   * cứng cũ (711/642) trong `buildCashVoucherJournal`.
+   */
+  async setCashCategoryAccount(
+    user: AuthUser,
+    categoryId: string,
+    accountCode: string | null,
+  ) {
+    if (user.role !== Role.owner) {
+      throw new Error('owner_required');
+    }
+    const category = await this.prisma.cashCategory.findUnique({
+      where: { id: categoryId },
+    });
+    if (!category) {
+      throw new Error('category_not_found');
+    }
+    if (accountCode != null) {
+      const account = await this.prisma.account.findUnique({
+        where: { code: accountCode },
+      });
+      if (!account || !account.active) {
+        throw new Error('account_not_found');
+      }
+    }
+    return this.prisma.cashCategory.update({
+      where: { id: categoryId },
+      data: { accountCode },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        direction: true,
+        sortOrder: true,
+        accountCode: true,
+      },
+    });
   }
 
   async listAudit(

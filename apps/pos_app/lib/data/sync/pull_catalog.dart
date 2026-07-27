@@ -76,6 +76,9 @@ class PullCatalog {
               largeDebtThresholdVnd: Value(
                 store['largeDebtThresholdVnd'] as int?,
               ),
+              allowNegativeStock: Value(
+                store['allowNegativeStock'] as bool? ?? false,
+              ),
               updatedAt: DateTime.parse(store['updatedAt'] as String),
             ),
           );

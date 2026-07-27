@@ -1960,8 +1960,9 @@ class $OutboxEntriesTable extends OutboxEntries
     'status',
     aliasedName,
     false,
-    check: () =>
-        const CustomExpression<bool>("status IN ('pending', 'error', 'done')"),
+    check: () => const CustomExpression<bool>(
+      "status IN ('pending', 'error', 'done', 'dead_letter')",
+    ),
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultValue: const Constant('pending'),
@@ -1977,6 +1978,29 @@ class $OutboxEntriesTable extends OutboxEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _retryCountMeta = const VerificationMeta(
+    'retryCount',
+  );
+  @override
+  late final GeneratedColumn<int> retryCount = GeneratedColumn<int>(
+    'retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextRetryAtMeta = const VerificationMeta(
+    'nextRetryAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextRetryAt = GeneratedColumn<DateTime>(
+    'next_retry_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1985,6 +2009,8 @@ class $OutboxEntriesTable extends OutboxEntries
     createdAt,
     status,
     lastError,
+    retryCount,
+    nextRetryAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2042,6 +2068,21 @@ class $OutboxEntriesTable extends OutboxEntries
         lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
       );
     }
+    if (data.containsKey('retry_count')) {
+      context.handle(
+        _retryCountMeta,
+        retryCount.isAcceptableOrUnknown(data['retry_count']!, _retryCountMeta),
+      );
+    }
+    if (data.containsKey('next_retry_at')) {
+      context.handle(
+        _nextRetryAtMeta,
+        nextRetryAt.isAcceptableOrUnknown(
+          data['next_retry_at']!,
+          _nextRetryAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2075,6 +2116,14 @@ class $OutboxEntriesTable extends OutboxEntries
         DriftSqlType.string,
         data['${effectivePrefix}last_error'],
       ),
+      retryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}retry_count'],
+      )!,
+      nextRetryAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_retry_at'],
+      ),
     );
   }
 
@@ -2091,6 +2140,8 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
   final DateTime createdAt;
   final String status;
   final String? lastError;
+  final int retryCount;
+  final DateTime? nextRetryAt;
   const OutboxEntry({
     required this.id,
     required this.entityType,
@@ -2098,6 +2149,8 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
     required this.createdAt,
     required this.status,
     this.lastError,
+    required this.retryCount,
+    this.nextRetryAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2109,6 +2162,10 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
     map['status'] = Variable<String>(status);
     if (!nullToAbsent || lastError != null) {
       map['last_error'] = Variable<String>(lastError);
+    }
+    map['retry_count'] = Variable<int>(retryCount);
+    if (!nullToAbsent || nextRetryAt != null) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt);
     }
     return map;
   }
@@ -2123,6 +2180,10 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
       lastError: lastError == null && nullToAbsent
           ? const Value.absent()
           : Value(lastError),
+      retryCount: Value(retryCount),
+      nextRetryAt: nextRetryAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextRetryAt),
     );
   }
 
@@ -2138,6 +2199,8 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       status: serializer.fromJson<String>(json['status']),
       lastError: serializer.fromJson<String?>(json['lastError']),
+      retryCount: serializer.fromJson<int>(json['retryCount']),
+      nextRetryAt: serializer.fromJson<DateTime?>(json['nextRetryAt']),
     );
   }
   @override
@@ -2150,6 +2213,8 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'status': serializer.toJson<String>(status),
       'lastError': serializer.toJson<String?>(lastError),
+      'retryCount': serializer.toJson<int>(retryCount),
+      'nextRetryAt': serializer.toJson<DateTime?>(nextRetryAt),
     };
   }
 
@@ -2160,6 +2225,8 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
     DateTime? createdAt,
     String? status,
     Value<String?> lastError = const Value.absent(),
+    int? retryCount,
+    Value<DateTime?> nextRetryAt = const Value.absent(),
   }) => OutboxEntry(
     id: id ?? this.id,
     entityType: entityType ?? this.entityType,
@@ -2167,6 +2234,8 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
     createdAt: createdAt ?? this.createdAt,
     status: status ?? this.status,
     lastError: lastError.present ? lastError.value : this.lastError,
+    retryCount: retryCount ?? this.retryCount,
+    nextRetryAt: nextRetryAt.present ? nextRetryAt.value : this.nextRetryAt,
   );
   OutboxEntry copyWithCompanion(OutboxEntriesCompanion data) {
     return OutboxEntry(
@@ -2180,6 +2249,12 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       status: data.status.present ? data.status.value : this.status,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      retryCount: data.retryCount.present
+          ? data.retryCount.value
+          : this.retryCount,
+      nextRetryAt: data.nextRetryAt.present
+          ? data.nextRetryAt.value
+          : this.nextRetryAt,
     );
   }
 
@@ -2191,14 +2266,24 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
           ..write('payloadJson: $payloadJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('status: $status, ')
-          ..write('lastError: $lastError')
+          ..write('lastError: $lastError, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('nextRetryAt: $nextRetryAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, entityType, payloadJson, createdAt, status, lastError);
+  int get hashCode => Object.hash(
+    id,
+    entityType,
+    payloadJson,
+    createdAt,
+    status,
+    lastError,
+    retryCount,
+    nextRetryAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2208,7 +2293,9 @@ class OutboxEntry extends DataClass implements Insertable<OutboxEntry> {
           other.payloadJson == this.payloadJson &&
           other.createdAt == this.createdAt &&
           other.status == this.status &&
-          other.lastError == this.lastError);
+          other.lastError == this.lastError &&
+          other.retryCount == this.retryCount &&
+          other.nextRetryAt == this.nextRetryAt);
 }
 
 class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
@@ -2218,6 +2305,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
   final Value<DateTime> createdAt;
   final Value<String> status;
   final Value<String?> lastError;
+  final Value<int> retryCount;
+  final Value<DateTime?> nextRetryAt;
   final Value<int> rowid;
   const OutboxEntriesCompanion({
     this.id = const Value.absent(),
@@ -2226,6 +2315,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
     this.createdAt = const Value.absent(),
     this.status = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OutboxEntriesCompanion.insert({
@@ -2235,6 +2326,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
     required DateTime createdAt,
     this.status = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        entityType = Value(entityType),
@@ -2247,6 +2340,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
     Expression<DateTime>? createdAt,
     Expression<String>? status,
     Expression<String>? lastError,
+    Expression<int>? retryCount,
+    Expression<DateTime>? nextRetryAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2256,6 +2351,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
       if (createdAt != null) 'created_at': createdAt,
       if (status != null) 'status': status,
       if (lastError != null) 'last_error': lastError,
+      if (retryCount != null) 'retry_count': retryCount,
+      if (nextRetryAt != null) 'next_retry_at': nextRetryAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2267,6 +2364,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
     Value<DateTime>? createdAt,
     Value<String>? status,
     Value<String?>? lastError,
+    Value<int>? retryCount,
+    Value<DateTime?>? nextRetryAt,
     Value<int>? rowid,
   }) {
     return OutboxEntriesCompanion(
@@ -2276,6 +2375,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
       createdAt: createdAt ?? this.createdAt,
       status: status ?? this.status,
       lastError: lastError ?? this.lastError,
+      retryCount: retryCount ?? this.retryCount,
+      nextRetryAt: nextRetryAt ?? this.nextRetryAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2301,6 +2402,12 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
+    if (retryCount.present) {
+      map['retry_count'] = Variable<int>(retryCount.value);
+    }
+    if (nextRetryAt.present) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2316,6 +2423,8 @@ class OutboxEntriesCompanion extends UpdateCompanion<OutboxEntry> {
           ..write('createdAt: $createdAt, ')
           ..write('status: $status, ')
           ..write('lastError: $lastError, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5427,6 +5536,20 @@ class $StoresLocalTable extends StoresLocal
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _allowNegativeStockMeta =
+      const VerificationMeta('allowNegativeStock');
+  @override
+  late final GeneratedColumn<bool> allowNegativeStock = GeneratedColumn<bool>(
+    'allow_negative_stock',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("allow_negative_stock" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -5446,6 +5569,7 @@ class $StoresLocalTable extends StoresLocal
     active,
     debtOverdueDays,
     largeDebtThresholdVnd,
+    allowNegativeStock,
     updatedAt,
   ];
   @override
@@ -5505,6 +5629,15 @@ class $StoresLocalTable extends StoresLocal
         ),
       );
     }
+    if (data.containsKey('allow_negative_stock')) {
+      context.handle(
+        _allowNegativeStockMeta,
+        allowNegativeStock.isAcceptableOrUnknown(
+          data['allow_negative_stock']!,
+          _allowNegativeStockMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -5546,6 +5679,10 @@ class $StoresLocalTable extends StoresLocal
         DriftSqlType.int,
         data['${effectivePrefix}large_debt_threshold_vnd'],
       ),
+      allowNegativeStock: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}allow_negative_stock'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -5566,6 +5703,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
   final bool active;
   final int debtOverdueDays;
   final int? largeDebtThresholdVnd;
+  final bool allowNegativeStock;
   final DateTime updatedAt;
   const StoresLocalData({
     required this.id,
@@ -5574,6 +5712,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     required this.active,
     required this.debtOverdueDays,
     this.largeDebtThresholdVnd,
+    required this.allowNegativeStock,
     required this.updatedAt,
   });
   @override
@@ -5587,6 +5726,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     if (!nullToAbsent || largeDebtThresholdVnd != null) {
       map['large_debt_threshold_vnd'] = Variable<int>(largeDebtThresholdVnd);
     }
+    map['allow_negative_stock'] = Variable<bool>(allowNegativeStock);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -5601,6 +5741,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       largeDebtThresholdVnd: largeDebtThresholdVnd == null && nullToAbsent
           ? const Value.absent()
           : Value(largeDebtThresholdVnd),
+      allowNegativeStock: Value(allowNegativeStock),
       updatedAt: Value(updatedAt),
     );
   }
@@ -5619,6 +5760,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       largeDebtThresholdVnd: serializer.fromJson<int?>(
         json['largeDebtThresholdVnd'],
       ),
+      allowNegativeStock: serializer.fromJson<bool>(json['allowNegativeStock']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -5632,6 +5774,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       'active': serializer.toJson<bool>(active),
       'debtOverdueDays': serializer.toJson<int>(debtOverdueDays),
       'largeDebtThresholdVnd': serializer.toJson<int?>(largeDebtThresholdVnd),
+      'allowNegativeStock': serializer.toJson<bool>(allowNegativeStock),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -5643,6 +5786,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     bool? active,
     int? debtOverdueDays,
     Value<int?> largeDebtThresholdVnd = const Value.absent(),
+    bool? allowNegativeStock,
     DateTime? updatedAt,
   }) => StoresLocalData(
     id: id ?? this.id,
@@ -5653,6 +5797,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     largeDebtThresholdVnd: largeDebtThresholdVnd.present
         ? largeDebtThresholdVnd.value
         : this.largeDebtThresholdVnd,
+    allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   StoresLocalData copyWithCompanion(StoresLocalCompanion data) {
@@ -5667,6 +5812,9 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       largeDebtThresholdVnd: data.largeDebtThresholdVnd.present
           ? data.largeDebtThresholdVnd.value
           : this.largeDebtThresholdVnd,
+      allowNegativeStock: data.allowNegativeStock.present
+          ? data.allowNegativeStock.value
+          : this.allowNegativeStock,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -5680,6 +5828,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
           ..write('active: $active, ')
           ..write('debtOverdueDays: $debtOverdueDays, ')
           ..write('largeDebtThresholdVnd: $largeDebtThresholdVnd, ')
+          ..write('allowNegativeStock: $allowNegativeStock, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -5693,6 +5842,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     active,
     debtOverdueDays,
     largeDebtThresholdVnd,
+    allowNegativeStock,
     updatedAt,
   );
   @override
@@ -5705,6 +5855,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
           other.active == this.active &&
           other.debtOverdueDays == this.debtOverdueDays &&
           other.largeDebtThresholdVnd == this.largeDebtThresholdVnd &&
+          other.allowNegativeStock == this.allowNegativeStock &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -5715,6 +5866,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
   final Value<bool> active;
   final Value<int> debtOverdueDays;
   final Value<int?> largeDebtThresholdVnd;
+  final Value<bool> allowNegativeStock;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const StoresLocalCompanion({
@@ -5724,6 +5876,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     this.active = const Value.absent(),
     this.debtOverdueDays = const Value.absent(),
     this.largeDebtThresholdVnd = const Value.absent(),
+    this.allowNegativeStock = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -5734,6 +5887,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     this.active = const Value.absent(),
     this.debtOverdueDays = const Value.absent(),
     this.largeDebtThresholdVnd = const Value.absent(),
+    this.allowNegativeStock = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -5747,6 +5901,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     Expression<bool>? active,
     Expression<int>? debtOverdueDays,
     Expression<int>? largeDebtThresholdVnd,
+    Expression<bool>? allowNegativeStock,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -5758,6 +5913,8 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
       if (debtOverdueDays != null) 'debt_overdue_days': debtOverdueDays,
       if (largeDebtThresholdVnd != null)
         'large_debt_threshold_vnd': largeDebtThresholdVnd,
+      if (allowNegativeStock != null)
+        'allow_negative_stock': allowNegativeStock,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -5770,6 +5927,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     Value<bool>? active,
     Value<int>? debtOverdueDays,
     Value<int?>? largeDebtThresholdVnd,
+    Value<bool>? allowNegativeStock,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -5781,6 +5939,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
       debtOverdueDays: debtOverdueDays ?? this.debtOverdueDays,
       largeDebtThresholdVnd:
           largeDebtThresholdVnd ?? this.largeDebtThresholdVnd,
+      allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -5809,6 +5968,9 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
         largeDebtThresholdVnd.value,
       );
     }
+    if (allowNegativeStock.present) {
+      map['allow_negative_stock'] = Variable<bool>(allowNegativeStock.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -5827,6 +5989,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
           ..write('active: $active, ')
           ..write('debtOverdueDays: $debtOverdueDays, ')
           ..write('largeDebtThresholdVnd: $largeDebtThresholdVnd, ')
+          ..write('allowNegativeStock: $allowNegativeStock, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -7673,9 +7836,9 @@ class $CashVouchersLocalTable extends CashVouchersLocal
   late final GeneratedColumn<String> shiftId = GeneratedColumn<String>(
     'shift_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _categoryIdMeta = const VerificationMeta(
     'categoryId',
@@ -7808,8 +7971,6 @@ class $CashVouchersLocalTable extends CashVouchersLocal
         _shiftIdMeta,
         shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
       );
-    } else if (isInserting) {
-      context.missing(_shiftIdMeta);
     }
     if (data.containsKey('category_id')) {
       context.handle(
@@ -7899,7 +8060,7 @@ class $CashVouchersLocalTable extends CashVouchersLocal
       shiftId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}shift_id'],
-      )!,
+      ),
       categoryId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}category_id'],
@@ -7945,7 +8106,7 @@ class CashVouchersLocalData extends DataClass
     implements Insertable<CashVouchersLocalData> {
   final String id;
   final String storeId;
-  final String shiftId;
+  final String? shiftId;
   final String categoryId;
   final String direction;
   final String channel;
@@ -7957,7 +8118,7 @@ class CashVouchersLocalData extends DataClass
   const CashVouchersLocalData({
     required this.id,
     required this.storeId,
-    required this.shiftId,
+    this.shiftId,
     required this.categoryId,
     required this.direction,
     required this.channel,
@@ -7972,7 +8133,9 @@ class CashVouchersLocalData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['store_id'] = Variable<String>(storeId);
-    map['shift_id'] = Variable<String>(shiftId);
+    if (!nullToAbsent || shiftId != null) {
+      map['shift_id'] = Variable<String>(shiftId);
+    }
     map['category_id'] = Variable<String>(categoryId);
     map['direction'] = Variable<String>(direction);
     map['channel'] = Variable<String>(channel);
@@ -7990,7 +8153,9 @@ class CashVouchersLocalData extends DataClass
     return CashVouchersLocalCompanion(
       id: Value(id),
       storeId: Value(storeId),
-      shiftId: Value(shiftId),
+      shiftId: shiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shiftId),
       categoryId: Value(categoryId),
       direction: Value(direction),
       channel: Value(channel),
@@ -8010,7 +8175,7 @@ class CashVouchersLocalData extends DataClass
     return CashVouchersLocalData(
       id: serializer.fromJson<String>(json['id']),
       storeId: serializer.fromJson<String>(json['storeId']),
-      shiftId: serializer.fromJson<String>(json['shiftId']),
+      shiftId: serializer.fromJson<String?>(json['shiftId']),
       categoryId: serializer.fromJson<String>(json['categoryId']),
       direction: serializer.fromJson<String>(json['direction']),
       channel: serializer.fromJson<String>(json['channel']),
@@ -8027,7 +8192,7 @@ class CashVouchersLocalData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'storeId': serializer.toJson<String>(storeId),
-      'shiftId': serializer.toJson<String>(shiftId),
+      'shiftId': serializer.toJson<String?>(shiftId),
       'categoryId': serializer.toJson<String>(categoryId),
       'direction': serializer.toJson<String>(direction),
       'channel': serializer.toJson<String>(channel),
@@ -8042,7 +8207,7 @@ class CashVouchersLocalData extends DataClass
   CashVouchersLocalData copyWith({
     String? id,
     String? storeId,
-    String? shiftId,
+    Value<String?> shiftId = const Value.absent(),
     String? categoryId,
     String? direction,
     String? channel,
@@ -8054,7 +8219,7 @@ class CashVouchersLocalData extends DataClass
   }) => CashVouchersLocalData(
     id: id ?? this.id,
     storeId: storeId ?? this.storeId,
-    shiftId: shiftId ?? this.shiftId,
+    shiftId: shiftId.present ? shiftId.value : this.shiftId,
     categoryId: categoryId ?? this.categoryId,
     direction: direction ?? this.direction,
     channel: channel ?? this.channel,
@@ -8139,7 +8304,7 @@ class CashVouchersLocalCompanion
     extends UpdateCompanion<CashVouchersLocalData> {
   final Value<String> id;
   final Value<String> storeId;
-  final Value<String> shiftId;
+  final Value<String?> shiftId;
   final Value<String> categoryId;
   final Value<String> direction;
   final Value<String> channel;
@@ -8166,7 +8331,7 @@ class CashVouchersLocalCompanion
   CashVouchersLocalCompanion.insert({
     required String id,
     required String storeId,
-    required String shiftId,
+    this.shiftId = const Value.absent(),
     required String categoryId,
     required String direction,
     required String channel,
@@ -8178,7 +8343,6 @@ class CashVouchersLocalCompanion
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        storeId = Value(storeId),
-       shiftId = Value(shiftId),
        categoryId = Value(categoryId),
        direction = Value(direction),
        channel = Value(channel),
@@ -8219,7 +8383,7 @@ class CashVouchersLocalCompanion
   CashVouchersLocalCompanion copyWith({
     Value<String>? id,
     Value<String>? storeId,
-    Value<String>? shiftId,
+    Value<String?>? shiftId,
     Value<String>? categoryId,
     Value<String>? direction,
     Value<String>? channel,
@@ -15067,6 +15231,8 @@ typedef $$OutboxEntriesTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<String> status,
       Value<String?> lastError,
+      Value<int> retryCount,
+      Value<DateTime?> nextRetryAt,
       Value<int> rowid,
     });
 typedef $$OutboxEntriesTableUpdateCompanionBuilder =
@@ -15077,6 +15243,8 @@ typedef $$OutboxEntriesTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<String> status,
       Value<String?> lastError,
+      Value<int> retryCount,
+      Value<DateTime?> nextRetryAt,
       Value<int> rowid,
     });
 
@@ -15116,6 +15284,16 @@ class $$OutboxEntriesTableFilterComposer
 
   ColumnFilters<String> get lastError => $composableBuilder(
     column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextRetryAt => $composableBuilder(
+    column: $table.nextRetryAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -15158,6 +15336,16 @@ class $$OutboxEntriesTableOrderingComposer
     column: $table.lastError,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextRetryAt => $composableBuilder(
+    column: $table.nextRetryAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$OutboxEntriesTableAnnotationComposer
@@ -15190,6 +15378,16 @@ class $$OutboxEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextRetryAt => $composableBuilder(
+    column: $table.nextRetryAt,
+    builder: (column) => column,
+  );
 }
 
 class $$OutboxEntriesTableTableManager
@@ -15229,6 +15427,8 @@ class $$OutboxEntriesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> nextRetryAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxEntriesCompanion(
                 id: id,
@@ -15237,6 +15437,8 @@ class $$OutboxEntriesTableTableManager
                 createdAt: createdAt,
                 status: status,
                 lastError: lastError,
+                retryCount: retryCount,
+                nextRetryAt: nextRetryAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -15247,6 +15449,8 @@ class $$OutboxEntriesTableTableManager
                 required DateTime createdAt,
                 Value<String> status = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> nextRetryAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxEntriesCompanion.insert(
                 id: id,
@@ -15255,6 +15459,8 @@ class $$OutboxEntriesTableTableManager
                 createdAt: createdAt,
                 status: status,
                 lastError: lastError,
+                retryCount: retryCount,
+                nextRetryAt: nextRetryAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16801,6 +17007,7 @@ typedef $$StoresLocalTableCreateCompanionBuilder =
       Value<bool> active,
       Value<int> debtOverdueDays,
       Value<int?> largeDebtThresholdVnd,
+      Value<bool> allowNegativeStock,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -16812,6 +17019,7 @@ typedef $$StoresLocalTableUpdateCompanionBuilder =
       Value<bool> active,
       Value<int> debtOverdueDays,
       Value<int?> largeDebtThresholdVnd,
+      Value<bool> allowNegativeStock,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -16852,6 +17060,11 @@ class $$StoresLocalTableFilterComposer
 
   ColumnFilters<int> get largeDebtThresholdVnd => $composableBuilder(
     column: $table.largeDebtThresholdVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get allowNegativeStock => $composableBuilder(
+    column: $table.allowNegativeStock,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16900,6 +17113,11 @@ class $$StoresLocalTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get allowNegativeStock => $composableBuilder(
+    column: $table.allowNegativeStock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -16934,6 +17152,11 @@ class $$StoresLocalTableAnnotationComposer
 
   GeneratedColumn<int> get largeDebtThresholdVnd => $composableBuilder(
     column: $table.largeDebtThresholdVnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get allowNegativeStock => $composableBuilder(
+    column: $table.allowNegativeStock,
     builder: (column) => column,
   );
 
@@ -16978,6 +17201,7 @@ class $$StoresLocalTableTableManager
                 Value<bool> active = const Value.absent(),
                 Value<int> debtOverdueDays = const Value.absent(),
                 Value<int?> largeDebtThresholdVnd = const Value.absent(),
+                Value<bool> allowNegativeStock = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => StoresLocalCompanion(
@@ -16987,6 +17211,7 @@ class $$StoresLocalTableTableManager
                 active: active,
                 debtOverdueDays: debtOverdueDays,
                 largeDebtThresholdVnd: largeDebtThresholdVnd,
+                allowNegativeStock: allowNegativeStock,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -16998,6 +17223,7 @@ class $$StoresLocalTableTableManager
                 Value<bool> active = const Value.absent(),
                 Value<int> debtOverdueDays = const Value.absent(),
                 Value<int?> largeDebtThresholdVnd = const Value.absent(),
+                Value<bool> allowNegativeStock = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => StoresLocalCompanion.insert(
@@ -17007,6 +17233,7 @@ class $$StoresLocalTableTableManager
                 active: active,
                 debtOverdueDays: debtOverdueDays,
                 largeDebtThresholdVnd: largeDebtThresholdVnd,
+                allowNegativeStock: allowNegativeStock,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -18018,7 +18245,7 @@ typedef $$CashVouchersLocalTableCreateCompanionBuilder =
     CashVouchersLocalCompanion Function({
       required String id,
       required String storeId,
-      required String shiftId,
+      Value<String?> shiftId,
       required String categoryId,
       required String direction,
       required String channel,
@@ -18033,7 +18260,7 @@ typedef $$CashVouchersLocalTableUpdateCompanionBuilder =
     CashVouchersLocalCompanion Function({
       Value<String> id,
       Value<String> storeId,
-      Value<String> shiftId,
+      Value<String?> shiftId,
       Value<String> categoryId,
       Value<String> direction,
       Value<String> channel,
@@ -18266,7 +18493,7 @@ class $$CashVouchersLocalTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
-                Value<String> shiftId = const Value.absent(),
+                Value<String?> shiftId = const Value.absent(),
                 Value<String> categoryId = const Value.absent(),
                 Value<String> direction = const Value.absent(),
                 Value<String> channel = const Value.absent(),
@@ -18294,7 +18521,7 @@ class $$CashVouchersLocalTableTableManager
               ({
                 required String id,
                 required String storeId,
-                required String shiftId,
+                Value<String?> shiftId = const Value.absent(),
                 required String categoryId,
                 required String direction,
                 required String channel,

@@ -157,6 +157,7 @@ export class SyncService {
             active: store.active,
             debtOverdueDays: store.debtOverdueDays,
             largeDebtThresholdVnd: store.largeDebtThresholdVnd,
+            allowNegativeStock: store.allowNegativeStock,
             updatedAt: store.updatedAt.toISOString(),
           }
         : null,
@@ -626,7 +627,11 @@ export class SyncService {
     ) {
       return { accepted: false, reason: 'invalid_payment' };
     }
-    this.assertStoreAccess(user, payment.storeId);
+    try {
+      this.assertStoreAccess(user, payment.storeId);
+    } catch {
+      return { accepted: false, reason: 'store_forbidden' };
+    }
 
     const existing = await this.prisma.debtLedgerEntry.findUnique({
       where: { id: payment.id },

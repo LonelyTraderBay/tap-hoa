@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../data/local/database.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
+import '../../data/sync/sync_scheduler.dart';
 import '../auth/auth_repository.dart';
 import '../cash/cash_voucher_service.dart';
 import '../customers/customer_repository.dart';
@@ -34,6 +35,7 @@ class CloseShiftPage extends StatefulWidget {
     required this.pullCatalog,
     required this.checkoutService,
     required this.outboxWorker,
+    this.syncSchedulerKey,
   });
 
   final ShiftRepository shiftRepository;
@@ -50,6 +52,7 @@ class CloseShiftPage extends StatefulWidget {
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
   final OutboxWorker outboxWorker;
+  final GlobalKey<SyncSchedulerState>? syncSchedulerKey;
 
   @override
   State<CloseShiftPage> createState() => _CloseShiftPageState();
@@ -156,6 +159,7 @@ class _CloseShiftPageState extends State<CloseShiftPage> {
             pullCatalog: widget.pullCatalog,
             checkoutService: widget.checkoutService,
             outboxWorker: widget.outboxWorker,
+            syncSchedulerKey: widget.syncSchedulerKey,
           ),
         ),
         (_) => false,

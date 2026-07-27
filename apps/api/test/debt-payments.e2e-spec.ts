@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -270,5 +271,94 @@ describe('Debt payments ledger', () => {
     expect(
       pull.body.debtLedger.some((e: { id: string }) => e.id === paymentId),
     ).toBe(true);
+  });
+
+  it('rejects a store-forbidden debt payment as a per-item entry without failing the rest of the batch', async () => {
+    const store1Id = (await prisma.store.findFirst({ where: { code: 'CH1' } }))!
+      .id;
+    const store2Id = (await prisma.store.findFirst({ where: { code: 'CH2' } }))!
+      .id;
+
+    // Manager scoped to CH2 only — has no access to CH1.
+    const managerPhone = '0900000197';
+    const passwordHash = await bcrypt.hash('123456', 10);
+    const manager = await prisma.user.upsert({
+      where: { phone: managerPhone },
+      update: { active: true, role: 'store_manager', passwordHash },
+      create: {
+        phone: managerPhone,
+        name: 'QL CH2 sync forbidden',
+        passwordHash,
+        role: 'store_manager',
+      },
+    });
+    await prisma.userStore.upsert({
+      where: { userId_storeId: { userId: manager.id, storeId: store2Id } },
+      update: {},
+      create: { userId: manager.id, storeId: store2Id },
+    });
+    await prisma.userStore.deleteMany({
+      where: { userId: manager.id, storeId: { not: store2Id } },
+    });
+    const managerLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ phone: managerPhone, password: '123456' })
+      .expect(201);
+    const managerToken = managerLogin.body.accessToken as string;
+
+    // Customer in the manager's own store (CH2), with a balance the manager CAN pay against.
+    const allowedCustomerId = randomUUID();
+    await prisma.customer.create({
+      data: {
+        id: allowedCustomerId,
+        storeId: store2Id,
+        name: 'Khach CH2 hop le',
+        balanceVnd: 20000,
+      },
+    });
+
+    const forbiddenPaymentId = randomUUID();
+    const allowedPaymentId = randomUUID();
+
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        deviceId: 'dev-store-forbidden',
+        sales: [],
+        debtPayments: [
+          {
+            id: forbiddenPaymentId,
+            storeId: store1Id,
+            customerId: randomUUID(),
+            amountVnd: 5000,
+            paymentMethod: 'cash',
+            clientCreatedAt: new Date().toISOString(),
+          },
+          {
+            id: allowedPaymentId,
+            storeId: store2Id,
+            customerId: allowedCustomerId,
+            amountVnd: 5000,
+            paymentMethod: 'cash',
+            clientCreatedAt: new Date().toISOString(),
+          },
+        ],
+      });
+
+    // The whole batch must still succeed (not the 403 the un-caught
+    // assertStoreAccess used to raise for the entire /sync/push request).
+    expect(res.status).toBeLessThan(300);
+    expect(res.body.rejectedDebtPayments).toEqual(
+      expect.arrayContaining([
+        { id: forbiddenPaymentId, reason: 'store_forbidden' },
+      ]),
+    );
+    expect(res.body.acceptedDebtPaymentIds).toContain(allowedPaymentId);
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: allowedCustomerId },
+    });
+    expect(customer?.balanceVnd).toBe(15000);
   });
 });

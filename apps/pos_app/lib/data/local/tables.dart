@@ -58,12 +58,26 @@ class OutboxEntries extends Table {
   TextColumn get entityType => text()();
   TextColumn get payloadJson => text()();
   DateTimeColumn get createdAt => dateTime()();
+  // 'dead_letter': entry hết lượt retry hạ tầng tự động (xem
+  // `outbox_worker.dart::outboxMaxRetries`) — khác `'error'` (server từ chối
+  // nghiệp vụ, người dùng phải sửa dữ liệu); dead_letter chỉ cần thử lại khi
+  // hạ tầng (mạng/server) đã ổn, không cần sửa payload.
   TextColumn get status => text()
       .check(
-        const CustomExpression<bool>("status IN ('pending', 'error', 'done')"),
+        const CustomExpression<bool>(
+          "status IN ('pending', 'error', 'done', 'dead_letter')",
+        ),
       )
       .withDefault(const Constant('pending'))();
   TextColumn get lastError => text().nullable()();
+  // Số lần push thất bại do lỗi HẠ TẦNG liên tiếp (mất mạng, server sập) —
+  // KHÔNG tăng khi bị server từ chối nghiệp vụ (status='error', xem
+  // `markOutboxError`). Reset về 0 khi requeue (`requeueOutbox`).
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+  // Mốc thời gian sớm nhất `pendingOutbox()` mới lấy lại entry này để retry
+  // — null nghĩa là sẵn sàng ngay (trường hợp thường gặp: entry mới tạo,
+  // hoặc chưa từng lỗi hạ tầng lần nào).
+  DateTimeColumn get nextRetryAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -124,6 +138,8 @@ class StoresLocal extends Table {
   BoolColumn get active => boolean().withDefault(const Constant(true))();
   IntColumn get debtOverdueDays => integer().withDefault(const Constant(30))();
   IntColumn get largeDebtThresholdVnd => integer().nullable()();
+  BoolColumn get allowNegativeStock =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -184,7 +200,11 @@ class CashCategoriesLocal extends Table {
 class CashVouchersLocal extends Table {
   TextColumn get id => text()();
   TextColumn get storeId => text()();
-  TextColumn get shiftId => text()();
+  // Nullable (P2.2): phiếu tạo từ đối chiếu ngân hàng trên server (channel
+  // transfer) không gắn với ca nào — kéo về qua pull. Mọi truy vấn lọc theo
+  // shiftId cụ thể (equals) tự loại các dòng null này, không cần đổi gì
+  // thêm (xem shift_repository.dart, cash_ledger_page.dart).
+  TextColumn get shiftId => text().nullable()();
   TextColumn get categoryId => text()();
   TextColumn get direction => text()();
   TextColumn get channel => text()(); // cash | transfer

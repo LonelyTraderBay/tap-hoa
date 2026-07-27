@@ -148,10 +148,18 @@ void main() {
     );
   });
 
-  test('checkout allows negative stock when meta enabled', () async {
+  test('checkout allows negative stock when store setting enabled', () async {
     await seedProductStock(db, qty: '1');
     await seedSession(db);
-    await db.setMetaValue('allowNegativeStock', 'true');
+    await db.into(db.storesLocal).insert(
+      StoresLocalCompanion.insert(
+        id: 'store-1',
+        code: 'CH1',
+        name: 'Cua hang 1',
+        allowNegativeStock: const Value(true),
+        updatedAt: DateTime(2026),
+      ),
+    );
     await openShift(shiftRepository);
 
     await checkout.complete(

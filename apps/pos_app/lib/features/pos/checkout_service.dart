@@ -101,8 +101,10 @@ class CheckoutService {
     final saleId = _uuid.v4();
     final outboxId = _uuid.v4();
     final clientCreatedAt = DateTime.now();
-    final allowNegativeStock =
-        (await _db.metaValue('allowNegativeStock')) == 'true';
+    final storeRow = await (_db.select(_db.storesLocal)
+          ..where((t) => t.id.equals(storeId)))
+        .getSingleOrNull();
+    final allowNegativeStock = storeRow?.allowNegativeStock ?? false;
 
     await _db.transaction(() async {
       await _db.into(_db.salesLocal).insert(

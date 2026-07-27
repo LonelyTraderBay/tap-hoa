@@ -167,6 +167,28 @@ export function parseUpdateUserBody(body: UpdateUserBody): UpdateUserData {
   return data;
 }
 
-export function parsePasswordBody(body: { password?: unknown }): string {
-  return parsePassword(body.password);
+export type SetPasswordBody = {
+  password?: unknown;
+  currentPassword?: unknown;
+};
+
+export type SetPasswordData = {
+  password: string;
+  currentPassword?: string;
+};
+
+/**
+ * `currentPassword` chỉ bắt buộc khi actor tự đổi mật khẩu của chính mình
+ * (kiểm tra ở UsersService.setPassword) — ở đây chỉ parse nếu có mặt, không ép buộc,
+ * vì owner reset mật khẩu người khác thì không cần trường này.
+ */
+export function parseSetPasswordBody(body: SetPasswordBody): SetPasswordData {
+  const password = parsePassword(body.password);
+  if (body.currentPassword === undefined) {
+    return { password };
+  }
+  if (typeof body.currentPassword !== 'string' || !body.currentPassword) {
+    throw new BadRequestException('currentPassword must be a string');
+  }
+  return { password, currentPassword: body.currentPassword };
 }

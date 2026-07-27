@@ -17,8 +17,11 @@ import { ReportsService } from './reports.service';
 /**
  * Tách quyền (spec §5.7): bán hàng ≠ kế toán.
  *
- * - Nhóm VẬN HÀNH (day, top-skus, stock-on-hand, debt-aging, ar.csv): chỉ cần
- *   đăng nhập + scope cửa hàng — thu ngân/quản lý quầy dùng hằng ngày.
+ * - Nhóm VẬN HÀNH (day, top-skus, stock-on-hand, debt-aging, ar.csv,
+ *   inventory-movement[.csv]): chỉ cần đăng nhập + scope cửa hàng — thu
+ *   ngân/quản lý quầy dùng hằng ngày. `inventory-movement` (P2.3, báo cáo
+ *   nhập-xuất-tồn theo kỳ) cùng nhóm với `stock-on-hand` vì cùng lý do: đọc
+ *   tồn kho là vận hành, không phải kế toán.
  * - Nhóm KẾ TOÁN (period/*, cash-fund, bank-recon/*, ap-recon/*): bắt buộc
  *   `canLedger` qua `LedgerPermissionGuard` gắn ở method level.
  */
@@ -91,6 +94,40 @@ export class ReportsController {
       storeIds: result.storeIds,
       csv: result.csv,
     };
+  }
+
+  /** P2.3 — nhập-xuất-tồn theo kỳ/điểm. Luôn scope 1 điểm bán (không có chế
+   * độ gộp nhiều điểm — tồn kho vốn là khái niệm theo từng điểm bán). */
+  @Get('inventory-movement')
+  inventoryMovement(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!storeId || !periodYm) {
+      throw new BadRequestException('storeId and periodYm required');
+    }
+    return this.reportsService.inventoryMovementReport(
+      req.user,
+      storeId,
+      periodYm,
+    );
+  }
+
+  @Get('inventory-movement.csv')
+  async inventoryMovementExportCsv(
+    @Req() req: { user: AuthUser },
+    @Query('storeId') storeId?: string,
+    @Query('periodYm') periodYm?: string,
+  ) {
+    if (!storeId || !periodYm) {
+      throw new BadRequestException('storeId and periodYm required');
+    }
+    return this.reportsService.inventoryMovementExportCsv(
+      req.user,
+      storeId,
+      periodYm,
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -222,9 +259,11 @@ export class ReportsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    if (!storeId || !from || !to) {
-      throw new BadRequestException('storeId, from, to required');
+    if (!from || !to) {
+      throw new BadRequestException('from, to required');
     }
+    // storeId optional (P2.2 — sổ quỹ tổng): bỏ trống ⇒ gộp mọi điểm bán
+    // trong scope của user (xem ReportsService.cashFundSummary/resolveStoreIds).
     return this.reportsService.cashFundSummary(req.user, storeId, from, to);
   }
 
@@ -347,6 +386,38 @@ export class ReportsController {
       body.storeId,
       body.periodYm,
     );
+  }
+
+  @Post('bank-recon/create-entry')
+  @UseGuards(LedgerPermissionGuard)
+  createBankReconEntry(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      periodYm?: string;
+      statementId?: string;
+      categoryId?: string;
+      note?: string;
+    },
+  ) {
+    if (
+      !body.storeId ||
+      !body.periodYm ||
+      !body.statementId ||
+      !body.categoryId
+    ) {
+      throw new BadRequestException(
+        'storeId, periodYm, statementId, categoryId required',
+      );
+    }
+    return this.reportsService.createBankReconEntry(req.user, {
+      storeId: body.storeId,
+      periodYm: body.periodYm,
+      statementId: body.statementId,
+      categoryId: body.categoryId,
+      note: body.note,
+    });
   }
 
   @Post('ap-recon/import')

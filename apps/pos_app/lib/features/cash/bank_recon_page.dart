@@ -83,6 +83,37 @@ class BankReconRepository {
       data: {'storeId': storeId, 'periodYm': periodYm},
     );
   }
+
+  /// P2.2: danh mục thu/chi (kèm map TK hiện tại) — dùng cho picker khi tạo
+  /// bút toán trực tiếp từ một dòng sao kê chưa khớp.
+  Future<List<Map<String, dynamic>>> listCategories() async {
+    final res = await _dio.get<List<dynamic>>('/ledger/cash-categories');
+    return (res.data ?? []).cast<Map<String, dynamic>>();
+  }
+
+  /// P2.2: tạo một CashVoucher (channel=transfer, không gắn ca) trực tiếp
+  /// từ dòng sao kê [statementId] chưa khớp, post sổ, rồi khớp luôn — dùng
+  /// khi bank báo một khoản (thường là phí NH) chưa từng được ghi ở đâu
+  /// trong app, nếu không kỳ đó sẽ không bao giờ khoá được.
+  Future<Map<String, dynamic>> createEntry({
+    required String storeId,
+    required String periodYm,
+    required String statementId,
+    required String categoryId,
+    String? note,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/reports/bank-recon/create-entry',
+      data: {
+        'storeId': storeId,
+        'periodYm': periodYm,
+        'statementId': statementId,
+        'categoryId': categoryId,
+        'note': ?note,
+      },
+    );
+    return res.data ?? {};
+  }
 }
 
 class BankReconPage extends StatefulWidget {
@@ -214,6 +245,102 @@ class _BankReconPageState extends State<BankReconPage> {
     }
   }
 
+  /// P2.2: tạo bút toán book-side trực tiếp cho một dòng sao kê [statement]
+  /// chưa khớp (khoản bank báo mà app chưa từng ghi ở đâu, vd. phí NH) —
+  /// chọn danh mục rồi gọi endpoint tạo+khớp, tái dùng máy match/lock sẵn có.
+  Future<void> _createEntry(Map<String, dynamic> statement) async {
+    List<Map<String, dynamic>> categories;
+    try {
+      categories = await widget.repository.listCategories();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Không tải được danh mục: $e')));
+      return;
+    }
+    final amount = (statement['amountVnd'] as num).toInt();
+    final direction = amount >= 0 ? 'in' : 'out';
+    final options = categories
+        .where((c) => c['direction'] == direction)
+        .toList();
+    if (!mounted) return;
+    if (options.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa có danh mục phù hợp chiều này')),
+      );
+      return;
+    }
+    String? categoryId = options.first['id'] as String?;
+    final noteCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Tạo bút toán từ dòng sao kê'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('${statement['amountVnd']} · ${statement['memo'] ?? ''}'),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: categoryId,
+                decoration: const InputDecoration(labelText: 'Danh mục'),
+                items: options
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c['id'] as String,
+                        child: Text(c['name'] as String),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setLocal(() => categoryId = v),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Ghi chú (tuỳ chọn)',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Tạo'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || categoryId == null) return;
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.repository.createEntry(
+        storeId: widget.storeId,
+        periodYm: _periodYm,
+        statementId: statement['id'] as String,
+        categoryId: categoryId!,
+        note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+      );
+      await _reload();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Đã tạo bút toán và khớp dòng sao kê')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Tạo bút toán thất bại: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final statements =
@@ -335,8 +462,9 @@ class _BankReconPageState extends State<BankReconPage> {
                     }),
                     const Divider(),
                     const ListTile(title: Text('Sao kê')),
-                    ...statements.map(
-                      (s) => ListTile(
+                    ...statements.map((s) {
+                      final unmatched = s['matchedRef'] == null;
+                      return ListTile(
                         dense: true,
                         title: Text(
                           '${s['amountVnd']} · ${s['memo'] ?? ''}',
@@ -344,8 +472,19 @@ class _BankReconPageState extends State<BankReconPage> {
                         subtitle: Text(
                           '${s['bookedAt']} · ${s['matchedRef'] ?? 'chưa khớp'}',
                         ),
-                      ),
-                    ),
+                        // P2.2: dòng sao kê chưa khớp không có phía "book"
+                        // tương ứng (vd. phí NH chưa từng ghi ở đâu) — cho
+                        // tạo thẳng một bút toán rồi khớp luôn, thay vì phải
+                        // sang màn Sổ thu chi tạo phiếu rồi quay lại khớp tay.
+                        trailing: (!locked && unmatched)
+                            ? IconButton(
+                                tooltip: 'Tạo bút toán từ dòng này',
+                                icon: const Icon(Icons.post_add),
+                                onPressed: () => _createEntry(s),
+                              )
+                            : null,
+                      );
+                    }),
                     const Divider(),
                     const ListTile(title: Text('Book chưa khớp')),
                     ...unmatchedBook.map(

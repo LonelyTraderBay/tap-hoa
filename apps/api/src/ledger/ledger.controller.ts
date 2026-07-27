@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Post,
   Query,
@@ -121,6 +122,38 @@ export class LedgerController {
     }
   }
 
+  @Get('cash-categories')
+  async cashCategories(@Req() req: { user: AuthUser }) {
+    try {
+      return await this.ledger.listCashCategories(req.user);
+    } catch (e) {
+      this.mapError(e);
+    }
+  }
+
+  @Post('cash-categories/:id/account')
+  @HttpCode(200)
+  async setCashCategoryAccount(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Body() body: { accountCode?: string | null },
+  ) {
+    if (body.accountCode !== null && !body.accountCode) {
+      throw new BadRequestException(
+        'accountCode is required (or null to clear the mapping)',
+      );
+    }
+    try {
+      return await this.ledger.setCashCategoryAccount(
+        req.user,
+        id,
+        body.accountCode ?? null,
+      );
+    } catch (e) {
+      this.mapError(e);
+    }
+  }
+
   @Get('audit')
   async audit(
     @Req() req: { user: AuthUser },
@@ -156,9 +189,13 @@ export class LedgerController {
       msg === 'invalid_date' ||
       msg === 'invalid_period' ||
       msg === 'invalid_account' ||
-      msg === 'invalid_reason'
+      msg === 'invalid_reason' ||
+      msg === 'account_not_found'
     ) {
       throw new BadRequestException(msg);
+    }
+    if (msg === 'category_not_found') {
+      throw new NotFoundException(msg);
     }
     throw e;
   }
