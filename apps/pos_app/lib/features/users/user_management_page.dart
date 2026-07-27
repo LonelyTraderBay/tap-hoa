@@ -42,9 +42,18 @@ String userApiErrorMessage(Object error, String fallback) {
 }
 
 class UserManagementPage extends StatefulWidget {
-  const UserManagementPage({super.key, required this.dio});
+  const UserManagementPage({
+    super.key,
+    required this.dio,
+    required this.currentUserId,
+  });
 
   final Dio dio;
+
+  /// Id của người đang đăng nhập — dùng để nhận diện khi ai đó tự đổi mật
+  /// khẩu của chính mình (so với đường quản trị đổi mật khẩu người khác),
+  /// vì API bắt buộc `currentPassword` cho trường hợp tự đổi.
+  final String currentUserId;
 
   @override
   State<UserManagementPage> createState() => _UserManagementPageState();
@@ -143,19 +152,36 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _changePassword(Map<String, dynamic> user) async {
-    final controller = TextEditingController();
+    final isSelf = '${user['id']}' == widget.currentUserId;
+    final newPasswordController = TextEditingController();
+    final currentPasswordController = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
-    final password = await showDialog<String>(
+    final result = await showDialog<({String newPassword, String? currentPassword})>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Đổi mật khẩu · ${user['name']}'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Mật khẩu mới (tối thiểu 6 ký tự)',
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelf)
+              TextField(
+                controller: currentPasswordController,
+                autofocus: true,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Mật khẩu hiện tại',
+                ),
+              ),
+            if (isSelf) const SizedBox(height: 12),
+            TextField(
+              controller: newPasswordController,
+              autofocus: !isSelf,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Mật khẩu mới (tối thiểu 6 ký tự)',
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -163,23 +189,36 @@ class _UserManagementPageState extends State<UserManagementPage> {
             child: const Text('Hủy'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            onPressed: () => Navigator.of(ctx).pop((
+              newPassword: newPasswordController.text,
+              currentPassword: isSelf ? currentPasswordController.text : null,
+            )),
             child: const Text('Lưu'),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (password == null) return;
+    newPasswordController.dispose();
+    currentPasswordController.dispose();
+    if (result == null) return;
+    final password = result.newPassword;
     if (password.length < 6) {
       if (!mounted) return;
       setState(() => _message = 'Mật khẩu phải từ 6 ký tự');
       return;
     }
+    if (isSelf && (result.currentPassword == null || result.currentPassword!.isEmpty)) {
+      if (!mounted) return;
+      setState(() => _message = 'Nhập mật khẩu hiện tại để xác nhận');
+      return;
+    }
     try {
       await widget.dio.patch<Map<String, dynamic>>(
         '/users/${user['id']}/password',
-        data: {'password': password},
+        data: {
+          'password': password,
+          if (isSelf) 'currentPassword': result.currentPassword,
+        },
       );
       messenger.showSnackBar(const SnackBar(content: Text('Đã đổi mật khẩu')));
     } catch (error) {

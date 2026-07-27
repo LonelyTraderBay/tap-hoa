@@ -11,6 +11,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateUserData,
+  SetPasswordData,
   UpdateUserData,
   assertCashierPermissionFlags,
 } from './user-validation';
@@ -198,12 +199,34 @@ export class UsersService {
   async setPassword(
     actor: AuthUser,
     userId: string,
-    password: string,
+    data: SetPasswordData,
   ): Promise<PublicUser> {
     if (actor.role !== Role.owner && actor.userId !== userId) {
       throw new ForbiddenException('Only owner can change other passwords');
     }
-    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+    if (actor.userId === userId) {
+      // Tự đổi mật khẩu của chính mình (kể cả owner) phải chứng minh biết mật khẩu
+      // hiện tại — nếu không, một phiên đăng nhập bị bỏ quên/chiếm dụng có thể khóa
+      // vĩnh viễn tài khoản thật bằng cách đặt mật khẩu mới mà chủ tài khoản không biết.
+      // `userSelect` không kèm passwordHash (không bao giờ lộ ra response công khai)
+      // nên phải truy vấn riêng ở đây.
+      const current = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { passwordHash: true },
+      });
+      if (!current) {
+        throw new NotFoundException('User not found');
+      }
+      const matches =
+        data.currentPassword !== undefined &&
+        (await bcrypt.compare(data.currentPassword, current.passwordHash));
+      if (!matches) {
+        throw new BadRequestException('current_password_incorrect');
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
     try {
       const updated = await this.prisma.user.update({
         where: { id: userId },

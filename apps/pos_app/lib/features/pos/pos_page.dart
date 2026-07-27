@@ -776,6 +776,7 @@ class _PosPageState extends State<PosPage> {
                   MaterialPageRoute<void>(
                     builder: (_) => UserManagementPage(
                       dio: widget.dayReportRepository.dio,
+                      currentUserId: widget.user.id,
                     ),
                   ),
                 );

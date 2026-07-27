@@ -12,9 +12,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
 import {
   CreateUserBody,
+  SetPasswordBody,
   UpdateUserBody,
   parseCreateUserBody,
-  parsePasswordBody,
+  parseSetPasswordBody,
   parseUpdateUserBody,
 } from './user-validation';
 import { UsersService } from './users.service';
@@ -47,8 +48,8 @@ export class UsersController {
   setPassword(
     @Req() req: { user: AuthUser },
     @Param('id') id: string,
-    @Body() body: { password?: unknown },
+    @Body() body: SetPasswordBody,
   ) {
-    return this.usersService.setPassword(req.user, id, parsePasswordBody(body));
+    return this.usersService.setPassword(req.user, id, parseSetPasswordBody(body));
   }
 }
