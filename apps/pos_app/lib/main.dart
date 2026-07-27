@@ -63,10 +63,16 @@ Future<void> main() async {
     db: database,
     shiftRepository: shiftRepository,
   );
+  // Lets any descendant (once a shift is opened and a store is known) reach
+  // back into the root SyncScheduler to register that store for periodic
+  // background catalog pull — see SyncSchedulerState.setActiveStore.
+  final syncSchedulerKey = GlobalKey<SyncSchedulerState>();
   runApp(
     SyncScheduler(
+      key: syncSchedulerKey,
       outboxWorker: outboxWorker,
       backupService: backupService,
+      pullCatalog: pullCatalog,
       child: PosApp(
         database: database,
         backupService: backupService,
@@ -82,6 +88,7 @@ Future<void> main() async {
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
         outboxWorker: outboxWorker,
+        syncSchedulerKey: syncSchedulerKey,
       ),
     ),
   );
@@ -104,6 +111,7 @@ class PosApp extends StatelessWidget {
     required this.pullCatalog,
     required this.checkoutService,
     required this.outboxWorker,
+    this.syncSchedulerKey,
   });
 
   final AppDatabase database;
@@ -120,6 +128,7 @@ class PosApp extends StatelessWidget {
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
   final OutboxWorker outboxWorker;
+  final GlobalKey<SyncSchedulerState>? syncSchedulerKey;
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +163,7 @@ class PosApp extends StatelessWidget {
         pullCatalog: pullCatalog,
         checkoutService: checkoutService,
         outboxWorker: outboxWorker,
+        syncSchedulerKey: syncSchedulerKey,
       ),
     );
   }

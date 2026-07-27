@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../data/local/database.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
+import '../../data/sync/sync_scheduler.dart';
 import '../auth/auth_repository.dart';
 import '../cash/cash_ledger_page.dart';
 import '../cash/cash_voucher_service.dart';
@@ -128,6 +129,7 @@ class PosPage extends StatefulWidget {
     required this.storeName,
     required this.role,
     this.openBarcodeScanner,
+    this.syncSchedulerKey,
   });
 
   final ProductRepository productRepository;
@@ -147,6 +149,7 @@ class PosPage extends StatefulWidget {
   final String storeName;
   final String role;
   final OpenBarcodeScanner? openBarcodeScanner;
+  final GlobalKey<SyncSchedulerState>? syncSchedulerKey;
 
   @override
   State<PosPage> createState() => _PosPageState();
@@ -162,6 +165,15 @@ class _PosPageState extends State<PosPage> {
   bool _isSyncing = false;
   String? _groupFilterId;
   String? _pendingAutoAddBarcodeQuery;
+
+  @override
+  void initState() {
+    super.initState();
+    // Register this store with the root SyncScheduler so it starts pulling
+    // catalog updates in the background (periodic timer + on app resume),
+    // not just when the user manually taps "Đồng bộ" or reloads a page.
+    widget.syncSchedulerKey?.currentState?.setActiveStore(widget.storeId);
+  }
 
   @override
   void dispose() {
@@ -688,6 +700,7 @@ class _PosPageState extends State<PosPage> {
                     pullCatalog: widget.pullCatalog,
                     checkoutService: widget.checkoutService,
                     outboxWorker: widget.outboxWorker,
+                    syncSchedulerKey: widget.syncSchedulerKey,
                   ),
                 ),
               );

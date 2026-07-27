@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../data/local/database.dart';
 import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
+import '../../data/sync/sync_scheduler.dart';
 import '../auth/auth_repository.dart';
 import '../cash/cash_voucher_service.dart';
 import '../reports/day_report_repository.dart';
@@ -32,6 +33,7 @@ class OpenShiftPage extends StatefulWidget {
     required this.pullCatalog,
     required this.checkoutService,
     required this.outboxWorker,
+    this.syncSchedulerKey,
   });
 
   final ShiftRepository repository;
@@ -47,6 +49,7 @@ class OpenShiftPage extends StatefulWidget {
   final PullCatalog pullCatalog;
   final CheckoutService checkoutService;
   final OutboxWorker outboxWorker;
+  final GlobalKey<SyncSchedulerState>? syncSchedulerKey;
 
   @override
   State<OpenShiftPage> createState() => _OpenShiftPageState();
@@ -133,6 +136,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
             storeId: store.id,
             storeName: store.name,
             role: widget.user.role,
+            syncSchedulerKey: widget.syncSchedulerKey,
           ),
         ),
       );
