@@ -57,7 +57,7 @@ class CashVoucherService {
         CashVouchersLocalCompanion.insert(
           id: voucherId,
           storeId: storeId,
-          shiftId: shift.id,
+          shiftId: Value(shift.id),
           categoryId: categoryId,
           direction: direction,
           channel: channel,

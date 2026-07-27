@@ -200,7 +200,11 @@ class CashCategoriesLocal extends Table {
 class CashVouchersLocal extends Table {
   TextColumn get id => text()();
   TextColumn get storeId => text()();
-  TextColumn get shiftId => text()();
+  // Nullable (P2.2): phiếu tạo từ đối chiếu ngân hàng trên server (channel
+  // transfer) không gắn với ca nào — kéo về qua pull. Mọi truy vấn lọc theo
+  // shiftId cụ thể (equals) tự loại các dòng null này, không cần đổi gì
+  // thêm (xem shift_repository.dart, cash_ledger_page.dart).
+  TextColumn get shiftId => text().nullable()();
   TextColumn get categoryId => text()();
   TextColumn get direction => text()();
   TextColumn get channel => text()(); // cash | transfer

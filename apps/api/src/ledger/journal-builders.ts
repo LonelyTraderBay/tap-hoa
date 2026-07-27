@@ -219,18 +219,25 @@ export function buildDebtPaymentJournal(input: {
   return out;
 }
 
+/**
+ * @param categoryAccountCode Map danh mục chi/thu → TK (P2.2, `CashCategory.accountCode`).
+ * null/undefined ⇒ fallback về hành vi cứng cũ: 711 (thu) / 642 (chi).
+ */
 export function buildCashVoucherJournal(input: {
   direction: 'in' | 'out' | string;
   channel: 'cash' | 'transfer' | string;
   amountVnd: number;
+  categoryAccountCode?: string | null;
 }): JournalLineDraft[] {
   const out: JournalLineDraft[] = [];
   const cashAcct = input.channel === 'transfer' ? '112' : '111';
+  const counterAcct =
+    input.categoryAccountCode ?? (input.direction === 'in' ? '711' : '642');
   if (input.direction === 'in') {
     pushDr(out, cashAcct, input.amountVnd);
-    pushCr(out, '711', input.amountVnd);
+    pushCr(out, counterAcct, input.amountVnd);
   } else {
-    pushDr(out, '642', input.amountVnd);
+    pushDr(out, counterAcct, input.amountVnd);
     pushCr(out, cashAcct, input.amountVnd);
   }
   assertBalanced(out);

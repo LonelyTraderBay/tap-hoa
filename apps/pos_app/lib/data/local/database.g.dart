@@ -7836,9 +7836,9 @@ class $CashVouchersLocalTable extends CashVouchersLocal
   late final GeneratedColumn<String> shiftId = GeneratedColumn<String>(
     'shift_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _categoryIdMeta = const VerificationMeta(
     'categoryId',
@@ -7971,8 +7971,6 @@ class $CashVouchersLocalTable extends CashVouchersLocal
         _shiftIdMeta,
         shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
       );
-    } else if (isInserting) {
-      context.missing(_shiftIdMeta);
     }
     if (data.containsKey('category_id')) {
       context.handle(
@@ -8062,7 +8060,7 @@ class $CashVouchersLocalTable extends CashVouchersLocal
       shiftId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}shift_id'],
-      )!,
+      ),
       categoryId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}category_id'],
@@ -8108,7 +8106,7 @@ class CashVouchersLocalData extends DataClass
     implements Insertable<CashVouchersLocalData> {
   final String id;
   final String storeId;
-  final String shiftId;
+  final String? shiftId;
   final String categoryId;
   final String direction;
   final String channel;
@@ -8120,7 +8118,7 @@ class CashVouchersLocalData extends DataClass
   const CashVouchersLocalData({
     required this.id,
     required this.storeId,
-    required this.shiftId,
+    this.shiftId,
     required this.categoryId,
     required this.direction,
     required this.channel,
@@ -8135,7 +8133,9 @@ class CashVouchersLocalData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['store_id'] = Variable<String>(storeId);
-    map['shift_id'] = Variable<String>(shiftId);
+    if (!nullToAbsent || shiftId != null) {
+      map['shift_id'] = Variable<String>(shiftId);
+    }
     map['category_id'] = Variable<String>(categoryId);
     map['direction'] = Variable<String>(direction);
     map['channel'] = Variable<String>(channel);
@@ -8153,7 +8153,9 @@ class CashVouchersLocalData extends DataClass
     return CashVouchersLocalCompanion(
       id: Value(id),
       storeId: Value(storeId),
-      shiftId: Value(shiftId),
+      shiftId: shiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shiftId),
       categoryId: Value(categoryId),
       direction: Value(direction),
       channel: Value(channel),
@@ -8173,7 +8175,7 @@ class CashVouchersLocalData extends DataClass
     return CashVouchersLocalData(
       id: serializer.fromJson<String>(json['id']),
       storeId: serializer.fromJson<String>(json['storeId']),
-      shiftId: serializer.fromJson<String>(json['shiftId']),
+      shiftId: serializer.fromJson<String?>(json['shiftId']),
       categoryId: serializer.fromJson<String>(json['categoryId']),
       direction: serializer.fromJson<String>(json['direction']),
       channel: serializer.fromJson<String>(json['channel']),
@@ -8190,7 +8192,7 @@ class CashVouchersLocalData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'storeId': serializer.toJson<String>(storeId),
-      'shiftId': serializer.toJson<String>(shiftId),
+      'shiftId': serializer.toJson<String?>(shiftId),
       'categoryId': serializer.toJson<String>(categoryId),
       'direction': serializer.toJson<String>(direction),
       'channel': serializer.toJson<String>(channel),
@@ -8205,7 +8207,7 @@ class CashVouchersLocalData extends DataClass
   CashVouchersLocalData copyWith({
     String? id,
     String? storeId,
-    String? shiftId,
+    Value<String?> shiftId = const Value.absent(),
     String? categoryId,
     String? direction,
     String? channel,
@@ -8217,7 +8219,7 @@ class CashVouchersLocalData extends DataClass
   }) => CashVouchersLocalData(
     id: id ?? this.id,
     storeId: storeId ?? this.storeId,
-    shiftId: shiftId ?? this.shiftId,
+    shiftId: shiftId.present ? shiftId.value : this.shiftId,
     categoryId: categoryId ?? this.categoryId,
     direction: direction ?? this.direction,
     channel: channel ?? this.channel,
@@ -8302,7 +8304,7 @@ class CashVouchersLocalCompanion
     extends UpdateCompanion<CashVouchersLocalData> {
   final Value<String> id;
   final Value<String> storeId;
-  final Value<String> shiftId;
+  final Value<String?> shiftId;
   final Value<String> categoryId;
   final Value<String> direction;
   final Value<String> channel;
@@ -8329,7 +8331,7 @@ class CashVouchersLocalCompanion
   CashVouchersLocalCompanion.insert({
     required String id,
     required String storeId,
-    required String shiftId,
+    this.shiftId = const Value.absent(),
     required String categoryId,
     required String direction,
     required String channel,
@@ -8341,7 +8343,6 @@ class CashVouchersLocalCompanion
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        storeId = Value(storeId),
-       shiftId = Value(shiftId),
        categoryId = Value(categoryId),
        direction = Value(direction),
        channel = Value(channel),
@@ -8382,7 +8383,7 @@ class CashVouchersLocalCompanion
   CashVouchersLocalCompanion copyWith({
     Value<String>? id,
     Value<String>? storeId,
-    Value<String>? shiftId,
+    Value<String?>? shiftId,
     Value<String>? categoryId,
     Value<String>? direction,
     Value<String>? channel,
@@ -18244,7 +18245,7 @@ typedef $$CashVouchersLocalTableCreateCompanionBuilder =
     CashVouchersLocalCompanion Function({
       required String id,
       required String storeId,
-      required String shiftId,
+      Value<String?> shiftId,
       required String categoryId,
       required String direction,
       required String channel,
@@ -18259,7 +18260,7 @@ typedef $$CashVouchersLocalTableUpdateCompanionBuilder =
     CashVouchersLocalCompanion Function({
       Value<String> id,
       Value<String> storeId,
-      Value<String> shiftId,
+      Value<String?> shiftId,
       Value<String> categoryId,
       Value<String> direction,
       Value<String> channel,
@@ -18492,7 +18493,7 @@ class $$CashVouchersLocalTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
-                Value<String> shiftId = const Value.absent(),
+                Value<String?> shiftId = const Value.absent(),
                 Value<String> categoryId = const Value.absent(),
                 Value<String> direction = const Value.absent(),
                 Value<String> channel = const Value.absent(),
@@ -18520,7 +18521,7 @@ class $$CashVouchersLocalTableTableManager
               ({
                 required String id,
                 required String storeId,
-                required String shiftId,
+                Value<String?> shiftId = const Value.absent(),
                 required String categoryId,
                 required String direction,
                 required String channel,

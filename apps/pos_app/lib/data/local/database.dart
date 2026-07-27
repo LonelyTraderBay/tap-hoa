@@ -58,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -151,6 +151,15 @@ class AppDatabase extends _$AppDatabase {
         // constraint sang bản mới (khớp `OutboxEntries` trong tables.dart).
         await migrator.alterTable(TableMigration(outboxEntries));
       }
+      if (from < 13) {
+        // P2.2: shiftId của CashVouchersLocal chuyển NOT NULL -> nullable
+        // (phiếu bank-recon server-side không gắn ca, kéo về qua pull). Như
+        // trường hợp `outboxEntries`/CHECK constraint ở migration 12,
+        // SQLite không hỗ trợ sửa nullability bằng ALTER trực tiếp — dùng
+        // `alterTable` để recreate bảng theo đúng schema `tables.dart`
+        // hiện tại (giữ nguyên dữ liệu, chỉ đổi ràng buộc NOT NULL).
+        await migrator.alterTable(TableMigration(cashVouchersLocal));
+      }
     },
   );
 
@@ -214,7 +223,9 @@ class AppDatabase extends _$AppDatabase {
       CashVouchersLocalCompanion.insert(
         id: voucher['id'] as String,
         storeId: voucher['storeId'] as String,
-        shiftId: voucher['shiftId'] as String,
+        // Null cho phiếu tạo từ đối chiếu ngân hàng server-side (P2.2) — xem
+        // ghi chú nullable trên cột này trong tables.dart.
+        shiftId: Value(voucher['shiftId'] as String?),
         categoryId: voucher['categoryId'] as String,
         direction: voucher['direction'] as String,
         channel: voucher['channel'] as String,

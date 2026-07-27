@@ -222,9 +222,11 @@ export class ReportsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    if (!storeId || !from || !to) {
-      throw new BadRequestException('storeId, from, to required');
+    if (!from || !to) {
+      throw new BadRequestException('from, to required');
     }
+    // storeId optional (P2.2 — sổ quỹ tổng): bỏ trống ⇒ gộp mọi điểm bán
+    // trong scope của user (xem ReportsService.cashFundSummary/resolveStoreIds).
     return this.reportsService.cashFundSummary(req.user, storeId, from, to);
   }
 
@@ -347,6 +349,38 @@ export class ReportsController {
       body.storeId,
       body.periodYm,
     );
+  }
+
+  @Post('bank-recon/create-entry')
+  @UseGuards(LedgerPermissionGuard)
+  createBankReconEntry(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      storeId?: string;
+      periodYm?: string;
+      statementId?: string;
+      categoryId?: string;
+      note?: string;
+    },
+  ) {
+    if (
+      !body.storeId ||
+      !body.periodYm ||
+      !body.statementId ||
+      !body.categoryId
+    ) {
+      throw new BadRequestException(
+        'storeId, periodYm, statementId, categoryId required',
+      );
+    }
+    return this.reportsService.createBankReconEntry(req.user, {
+      storeId: body.storeId,
+      periodYm: body.periodYm,
+      statementId: body.statementId,
+      categoryId: body.categoryId,
+      note: body.note,
+    });
   }
 
   @Post('ap-recon/import')
