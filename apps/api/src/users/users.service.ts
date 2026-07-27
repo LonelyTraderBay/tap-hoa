@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -98,19 +99,38 @@ export class UsersService {
     await this.assertStoresExist(data.storeIds);
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
     try {
-      const created = await this.prisma.user.create({
-        data: {
-          phone: data.phone,
-          name: data.name,
-          passwordHash,
-          role: data.role,
-          canLedger: data.canLedger,
-          canEinvoice: data.canEinvoice,
-          stores: {
-            create: data.storeIds.map((storeId) => ({ storeId })),
+      const created = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            phone: data.phone,
+            name: data.name,
+            passwordHash,
+            role: data.role,
+            canLedger: data.canLedger,
+            canEinvoice: data.canEinvoice,
+            stores: {
+              create: data.storeIds.map((storeId) => ({ storeId })),
+            },
           },
-        },
-        select: this.userSelect,
+          select: this.userSelect,
+        });
+        // Không log password/passwordHash — chỉ những gì cần cho việc kiểm toán ai
+        // tạo tài khoản nào với vai trò/điểm bán gì.
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: actor.userId,
+            action: 'user_create',
+            entityType: 'user',
+            entityId: user.id,
+            detailJson: JSON.stringify({
+              phone: user.phone,
+              role: user.role,
+              storeIds: user.stores.map((s) => s.storeId),
+            }),
+          },
+        });
+        return user;
       });
       return toPublicUser(created);
     } catch (error) {
@@ -173,6 +193,7 @@ export class UsersService {
       await this.assertStoresExist(data.storeIds);
     }
 
+    const roleChanged = data.role !== undefined && data.role !== target.role;
     const storeIds = data.storeIds;
     const updated = await this.prisma.$transaction(async (tx) => {
       if (storeIds) {
@@ -181,7 +202,7 @@ export class UsersService {
           data: storeIds.map((storeId) => ({ userId, storeId })),
         });
       }
-      return tx.user.update({
+      const user = await tx.user.update({
         where: { id: userId },
         data: {
           ...(data.name !== undefined ? { name: data.name } : {}),
@@ -192,6 +213,24 @@ export class UsersService {
         },
         select: this.userSelect,
       });
+      // Chỉ log khi vai trò thực sự đổi — sửa tên/cờ quyền/điểm bán/active không
+      // phải là mục tiêu của task này, tránh nhiễu nhật ký kiểm toán.
+      if (roleChanged) {
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: actor.userId,
+            action: 'user_role_change',
+            entityType: 'user',
+            entityId: userId,
+            detailJson: JSON.stringify({
+              fromRole: target.role,
+              toRole: data.role,
+            }),
+          },
+        });
+      }
+      return user;
     });
     return toPublicUser(updated);
   }
@@ -228,10 +267,25 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
     try {
-      const updated = await this.prisma.user.update({
-        where: { id: userId },
-        data: { passwordHash },
-        select: this.userSelect,
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({
+          where: { id: userId },
+          data: { passwordHash },
+          select: this.userSelect,
+        });
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: actor.userId,
+            action: 'user_password_reset',
+            entityType: 'user',
+            entityId: userId,
+            detailJson: JSON.stringify({
+              selfChange: actor.userId === userId,
+            }),
+          },
+        });
+        return user;
       });
       return toPublicUser(updated);
     } catch (error) {

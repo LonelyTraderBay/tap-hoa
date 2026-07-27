@@ -32,6 +32,9 @@ export class LedgerService {
     'period_unlock',
     'journal_blocked_period_lock',
     'product_price_change',
+    'user_create',
+    'user_role_change',
+    'user_password_reset',
   ];
 
   constructor(private readonly prisma: PrismaService) {}
