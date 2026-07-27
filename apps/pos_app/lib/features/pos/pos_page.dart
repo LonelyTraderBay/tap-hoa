@@ -80,14 +80,6 @@ ProductWithStock? posExactBarcodeMatch(
   return match;
 }
 
-bool posCameraBarcodeScannerAvailable(
-  TargetPlatform platform, {
-  bool isWeb = kIsWeb,
-}) {
-  if (isWeb) return false;
-  return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-}
-
 bool posShowStoreManagementAction(String role) => role == 'owner';
 
 bool posShowUserManagementAction(String role) => role == 'owner';
@@ -102,12 +94,6 @@ bool posShowCashFundAction({required bool canLedger}) => canLedger;
 bool posShowBankReconAction({required bool canLedger}) => canLedger;
 
 bool posShowEInvoiceIssueAction({required bool canEinvoice}) => canEinvoice;
-
-Future<String?> openCameraBarcodeScanner(BuildContext context) {
-  return Navigator.of(context).push<String>(
-    MaterialPageRoute(builder: (_) => const PosBarcodeScannerPage()),
-  );
-}
 
 class PosPage extends StatefulWidget {
   const PosPage({
@@ -737,6 +723,7 @@ class _PosPageState extends State<PosPage> {
                   builder: (_) => SyncDiagnosticsPage(
                     dio: widget.dayReportRepository.dio,
                     db: widget.database,
+                    role: widget.role,
                   ),
                 ),
               );

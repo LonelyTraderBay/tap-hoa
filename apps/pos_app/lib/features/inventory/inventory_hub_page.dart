@@ -1,8 +1,10 @@
 import 'package:decimal/decimal.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/local/database.dart';
+import '../pos/barcode_scanner_page.dart';
 import '../products/product_repository.dart';
 import '../reports/inventory_movement_page.dart';
 import '../reports/inventory_movement_repository.dart';
@@ -11,6 +13,36 @@ import '../reports/stock_on_hand_repository.dart';
 import '../shifts/shift_repository.dart';
 import 'allow_negative_stock_sheet.dart';
 import 'inventory_service.dart';
+
+String _normalizeStockScanBarcode(String value) => value.trim().toLowerCase();
+
+/// §4.8 "kiểm kho / quét mã xem tồn" — mirrors
+/// `pos_page.dart::posExactBarcodeMatch`'s matching semantics exactly
+/// (normalize via trim+lowercase, require a UNIQUE exact barcode match) so a
+/// scanned code behaves the same whether it's being added to the checkout
+/// cart or just looked up here: zero or multiple matches both mean "not
+/// found", never a silent wrong pick.
+ProductWithStock? inventoryScanExactBarcodeMatch(
+  Iterable<ProductWithStock> products,
+  String rawQuery,
+) {
+  final q = _normalizeStockScanBarcode(rawQuery);
+  if (q.isEmpty) {
+    return null;
+  }
+  ProductWithStock? match;
+  for (final product in products) {
+    final barcode = product.barcode;
+    if (barcode == null || _normalizeStockScanBarcode(barcode) != q) {
+      continue;
+    }
+    if (match != null) {
+      return null;
+    }
+    match = product;
+  }
+  return match;
+}
 
 class InventoryHubPage extends StatefulWidget {
   const InventoryHubPage({
@@ -621,10 +653,7 @@ class _InventoryHubPageState extends State<InventoryHubPage>
             decoration: const InputDecoration(labelText: 'Lý do hủy'),
             items: const [
               DropdownMenuItem(value: 'spoilage', child: Text('Hư hỏng')),
-              DropdownMenuItem(
-                value: 'damage',
-                child: Text('Hỏng do va chạm'),
-              ),
+              DropdownMenuItem(value: 'damage', child: Text('Hỏng do va chạm')),
               DropdownMenuItem(value: 'other', child: Text('Khác')),
             ],
             onChanged: (value) {
@@ -761,6 +790,50 @@ class _InventoryHubPageState extends State<InventoryHubPage>
     }
   }
 
+  Future<void> _scanCheckStock() async {
+    final scanned = await openCameraBarcodeScanner(context);
+    if (!mounted) return;
+    final query = scanned?.trim();
+    if (query == null || query.isEmpty) {
+      return;
+    }
+    final products = await widget.productRepository.listWithStock(
+      widget.storeId,
+    );
+    if (!mounted) return;
+    final product = inventoryScanExactBarcodeMatch(products, query);
+    await _showStockScanResult(product: product, scannedQuery: query);
+  }
+
+  Future<void> _showStockScanResult({
+    required ProductWithStock? product,
+    required String scannedQuery,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(product == null ? 'Không tìm thấy' : product.name),
+        content: product == null
+            ? Text('Không tìm thấy sản phẩm khớp mã "$scannedQuery".')
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SKU: ${product.sku}'),
+                  Text('Tồn hiện tại: ${product.qty} ${product.displayUnit}'),
+                ],
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openStockOnHand() async {
     List<StoreOption>? stores;
     if (widget.role == 'owner') {
@@ -819,6 +892,12 @@ class _InventoryHubPageState extends State<InventoryHubPage>
             onPressed: _openInventoryMovement,
             child: const Text('Nhập-xuất-tồn'),
           ),
+          if (posCameraBarcodeScannerAvailable(defaultTargetPlatform))
+            IconButton(
+              tooltip: 'Quét mã xem tồn',
+              icon: const Icon(Icons.qr_code_scanner),
+              onPressed: _scanCheckStock,
+            ),
           if (canTransfer)
             IconButton(
               tooltip: 'Cho phép âm tồn',

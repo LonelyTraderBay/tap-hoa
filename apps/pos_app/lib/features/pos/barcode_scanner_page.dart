@@ -1,5 +1,29 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+
+/// Whether the camera-based barcode scanner (`PosBarcodeScannerPage`, backed
+/// by `mobile_scanner`) can run on this platform. `mobile_scanner` only
+/// supports Android/iOS — desktop/web have no camera plugin backing here.
+bool posCameraBarcodeScannerAvailable(
+  TargetPlatform platform, {
+  bool isWeb = kIsWeb,
+}) {
+  if (isWeb) return false;
+  return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+}
+
+/// Shared entry point for the camera barcode scanner — pushes
+/// [PosBarcodeScannerPage] and returns the scanned raw value (or `null` if
+/// the user backed out without a detection). Reused by both the checkout
+/// cart flow (`PosPage._scanBarcode`) and the inventory "quét mã xem tồn"
+/// quick-check flow (`InventoryHubPage`) so there is exactly one place that
+/// owns the camera/scanner widget wiring.
+Future<String?> openCameraBarcodeScanner(BuildContext context) {
+  return Navigator.of(context).push<String>(
+    MaterialPageRoute(builder: (_) => const PosBarcodeScannerPage()),
+  );
+}
 
 class PosBarcodeScannerPage extends StatefulWidget {
   const PosBarcodeScannerPage({super.key});
