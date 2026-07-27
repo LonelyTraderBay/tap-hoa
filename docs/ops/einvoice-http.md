@@ -122,9 +122,20 @@ Do **not** set `EINVOICE_HTTP_URL` in stub mode.
 
 Operational meaning:
 
-- Store is **chưa HĐĐT thật** — invoices are synthetic (`STUB-…` numbers,
-  `stub://` artifact paths). Not valid for CQT/tax filing.
+- Store is **chưa HĐĐT thật** — invoices get synthetic numbers (`STUB-…`).
+  Not valid for CQT/tax filing.
 - POS **Xuất HĐĐT** still works for workflow testing; UI shows `provider: stub`.
+- P2.4: the stub adapter now generates a REAL PDF (readable Vietnamese text)
+  and a simple structured XML for every stub issue/adjust, stored as bytes on
+  the `EInvoice` row (`xmlContent`/`pdfContent` — DB, not local disk) and
+  downloadable via `GET /einvoices/:id/pdf` and `GET /einvoices/:id/xml`. This
+  is explicitly NOT the official CQT e-invoice schema (Thông tư 78/Nghị định
+  123) — it's a plain export of the same fields the PDF shows, useful for
+  handing a buyer *something* printable before a real gateway is connected.
+  Provider-hosted invoices (`EINVOICE_PROVIDER=http`) use the same two
+  download routes — the API proxy-fetches the vendor's `xmlPath`/`pdfPath`
+  (with the same auth header / timeout as issue/cancel/adjust) and streams it
+  back, rather than exposing the raw vendor URL to the client.
 - Do not train staff to treat stub output as legal tax invoices.
 
 When moving to production HĐĐT:
@@ -143,7 +154,12 @@ When moving to production HĐĐT:
 | `einvoice_provider_unreachable` | Network/timeout after retries |
 | `sale_not_found` / 404 on issue | Sale not synced via `POST /sync/push` |
 | `store_forbidden` | User not assigned to sale's store |
+| `einvoice_xml_not_available` / `einvoice_pdf_not_available` (404 on download) | Invoice has neither stored content nor a provider URL (e.g. a `failed` draft) |
+| `einvoice_provider_document_error:4xx/5xx` | Vendor rejected the proxy-fetch of `xmlPath`/`pdfPath` |
+| `einvoice_provider_invalid_document_url` (400 on download) | Stored `xmlPath`/`pdfPath` failed the SSRF re-check (non-https outside localhost, or metadata/`*.internal` host) |
 
-Automated coverage: `apps/api/test/einvoice.e2e-spec.ts` (stub),
-`apps/api/test/einvoice-http.e2e-spec.ts` (HTTP), `phase3-hardening.e2e-spec.ts`
-(idempotency key, unknown status).
+Automated coverage: `apps/api/test/einvoice.e2e-spec.ts` (stub — including
+P2.4 real PDF/XML download bytes and lifecycle audit visible via
+`GET /ledger/audit`), `apps/api/test/einvoice-http.e2e-spec.ts` (HTTP —
+including P2.4 proxy-download of vendor content + API key forwarding + audit),
+`phase3-hardening.e2e-spec.ts` (idempotency key, unknown status).

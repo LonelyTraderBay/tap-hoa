@@ -514,6 +514,16 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
             lines.add('SĐT: ${detail['phone']}');
           }
         }
+        if (row['action'] == 'einvoice_issue' ||
+            row['action'] == 'einvoice_cancel' ||
+            row['action'] == 'einvoice_adjust') {
+          if (detail['invoiceNumber'] != null) {
+            lines.add('Số HĐ: ${detail['invoiceNumber']}');
+          }
+          if (detail['provider'] != null) {
+            lines.add('NCC: ${detail['provider']}');
+          }
+        }
         return lines;
       }
     } catch (_) {
@@ -538,6 +548,12 @@ class _LedgerHomePageState extends State<LedgerHomePage> {
         return 'Đổi vai trò NV';
       case 'user_password_reset':
         return 'Đổi mật khẩu NV';
+      case 'einvoice_issue':
+        return 'Xuất HĐĐT';
+      case 'einvoice_cancel':
+        return 'Hủy HĐĐT';
+      case 'einvoice_adjust':
+        return 'Điều chỉnh HĐĐT';
       default:
         return action;
     }

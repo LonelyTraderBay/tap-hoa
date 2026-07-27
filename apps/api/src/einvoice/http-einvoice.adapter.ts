@@ -359,4 +359,61 @@ export class HttpEInvoiceAdapter implements EInvoiceAdapter, OnModuleInit {
 
     return this.postForIssueResult(url, headers, payload, 'einvoice adjust');
   }
+
+  /**
+   * P2.4 — proxy-fetch a provider-hosted invoice document (xmlPath/pdfPath)
+   * so the API can stream it back through our own download endpoint instead
+   * of redirecting the client to the raw vendor URL (which may need the same
+   * EINVOICE_HTTP_API_KEY auth this adapter already sends, or be a
+   * private/time-limited link not meant for direct client access).
+   *
+   * Reuses this adapter's SSRF-conscious checks: `validateEndpoint` (blocks
+   * non-https URLs outside localhost/EINVOICE_HTTP_ALLOW_INSECURE, and
+   * metadata/*.internal hosts) plus the request timeout and bearer header —
+   * defense-in-depth on top of the https-only check `parseIssueBody` already
+   * applies when the URL is first stored.
+   */
+  async fetchDocument(
+    url: string,
+    logPrefix: string,
+  ): Promise<{ buffer: Buffer; contentType: string }> {
+    try {
+      this.validateEndpoint(url, logPrefix);
+    } catch {
+      throw new BadRequestException('einvoice_provider_invalid_document_url');
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const headers: Record<string, string> = { accept: '*/*' };
+      const apiKey = process.env.EINVOICE_HTTP_API_KEY?.trim();
+      if (apiKey) {
+        headers.authorization = `Bearer ${apiKey}`;
+      }
+      const res = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        this.logger.warn(`${logPrefix} document http ${res.status}`);
+        throw new BadRequestException(
+          `einvoice_provider_document_error:${res.status}`,
+        );
+      }
+      const contentType = res.headers.get('content-type') ?? '';
+      const buffer = Buffer.from(await res.arrayBuffer());
+      return { buffer, contentType };
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(
+        `${logPrefix} document fetch failed: ${this.redact(String(err))}`,
+      );
+      throw new ServiceUnavailableException('einvoice_provider_unreachable');
+    }
+  }
 }

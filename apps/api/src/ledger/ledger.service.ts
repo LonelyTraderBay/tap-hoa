@@ -35,6 +35,9 @@ export class LedgerService {
     'user_create',
     'user_role_change',
     'user_password_reset',
+    'einvoice_issue',
+    'einvoice_cancel',
+    'einvoice_adjust',
   ];
 
   constructor(private readonly prisma: PrismaService) {}

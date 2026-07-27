@@ -847,6 +847,12 @@ model EInvoice {
   providerRef     String?
   xmlPath         String?
   pdfPath         String?
+  /** P2.4 stub-mode payload: real PDF/XML bytes stored in DB (no local-disk
+   * dependency for VPS redeploy/backup). Provider-hosted invoices (http
+   * adapter) keep using xmlPath/pdfPath (real https:// vendor URLs) and leave
+   * these columns null; download endpoint proxies those URLs instead. */
+  xmlContent      Bytes?
+  pdfContent      Bytes?
   errorMessage    String?
   retryCount      Int            @default(0)
   lastAttemptAt   DateTime?
