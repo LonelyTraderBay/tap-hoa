@@ -10,6 +10,14 @@ void main() {
     });
   });
 
+  group('posShowUserManagementAction', () {
+    test('owner only', () {
+      expect(posShowUserManagementAction('owner'), isTrue);
+      expect(posShowUserManagementAction('store_manager'), isFalse);
+      expect(posShowUserManagementAction('cashier'), isFalse);
+    });
+  });
+
   group('posShowLedgerHomeAction', () {
     test('follows canLedger flag', () {
       expect(posShowLedgerHomeAction(canLedger: true), isTrue);
@@ -18,10 +26,16 @@ void main() {
   });
 
   group('posShowCashFundAction', () {
-    test('owner or store_manager', () {
-      expect(posShowCashFundAction('owner'), isTrue);
-      expect(posShowCashFundAction('store_manager'), isTrue);
-      expect(posShowCashFundAction('cashier'), isFalse);
+    test('follows canLedger flag', () {
+      expect(posShowCashFundAction(canLedger: true), isTrue);
+      expect(posShowCashFundAction(canLedger: false), isFalse);
+    });
+  });
+
+  group('posShowBankReconAction', () {
+    test('follows canLedger flag', () {
+      expect(posShowBankReconAction(canLedger: true), isTrue);
+      expect(posShowBankReconAction(canLedger: false), isFalse);
     });
   });
 

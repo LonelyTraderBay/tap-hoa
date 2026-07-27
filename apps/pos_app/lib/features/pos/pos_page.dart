@@ -32,6 +32,7 @@ import '../products/product_service.dart';
 import '../push/push_service.dart';
 import '../shifts/shift_repository.dart';
 import '../stores/store_management_page.dart';
+import '../users/user_management_page.dart';
 import 'cart.dart';
 import 'barcode_scanner_page.dart';
 import 'checkout_service.dart';
@@ -88,10 +89,16 @@ bool posCameraBarcodeScannerAvailable(
 
 bool posShowStoreManagementAction(String role) => role == 'owner';
 
+bool posShowUserManagementAction(String role) => role == 'owner';
+
 bool posShowLedgerHomeAction({required bool canLedger}) => canLedger;
 
-bool posShowCashFundAction(String role) =>
-    role == 'owner' || role == 'store_manager';
+// Sổ quỹ kỳ / đối chiếu ngân hàng / đối chiếu công nợ NCC là báo cáo kế toán:
+// API đã bắt buộc canLedger (LedgerPermissionGuard), UI phải khớp để quản lý
+// quầy không có quyền kế toán không mở màn hình rồi ăn 403.
+bool posShowCashFundAction({required bool canLedger}) => canLedger;
+
+bool posShowBankReconAction({required bool canLedger}) => canLedger;
 
 bool posShowEInvoiceIssueAction({required bool canEinvoice}) => canEinvoice;
 
@@ -762,6 +769,20 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.store_mall_directory_outlined),
               tooltip: 'Cửa hàng',
             ),
+          if (posShowUserManagementAction(widget.role))
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => UserManagementPage(
+                      dio: widget.dayReportRepository.dio,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.badge_outlined),
+              tooltip: 'Nhân viên',
+            ),
           if (posShowLedgerHomeAction(canLedger: widget.user.canLedger))
             IconButton(
               onPressed: () {
@@ -780,7 +801,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.menu_book_outlined),
               tooltip: 'Sổ kế toán',
             ),
-          if (posShowCashFundAction(widget.role))
+          if (posShowCashFundAction(canLedger: widget.user.canLedger))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -797,7 +818,7 @@ class _PosPageState extends State<PosPage> {
               icon: const Icon(Icons.account_balance_wallet_outlined),
               tooltip: 'Sổ quỹ kỳ',
             ),
-          if (widget.role == 'owner' || widget.role == 'store_manager')
+          if (posShowBankReconAction(canLedger: widget.user.canLedger))
             IconButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -843,6 +864,7 @@ class _PosPageState extends State<PosPage> {
                       ),
                       storeId: widget.storeId,
                       isOwner: widget.role == 'owner',
+                      canLedger: widget.user.canLedger,
                     ),
                   ),
                 );

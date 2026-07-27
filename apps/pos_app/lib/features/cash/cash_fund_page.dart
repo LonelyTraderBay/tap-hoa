@@ -113,12 +113,34 @@ class _CashFundPageState extends State<CashFundPage> {
                       trailing: Text('${_data?['voucherOutVnd'] ?? 0}'),
                     ),
                     ListTile(
+                      title: const Text('Thu nợ tiền mặt'),
+                      trailing: Text('${_data?['debtPaymentCashVnd'] ?? 0}'),
+                    ),
+                    ListTile(
+                      title: const Text('Chi trả NCC tiền mặt'),
+                      trailing:
+                          Text('${_data?['supplierPaymentCashVnd'] ?? 0}'),
+                    ),
+                    ListTile(
+                      title: const Text('Hoàn tiền trả hàng bán'),
+                      trailing: Text('${_data?['saleReturnCashVnd'] ?? 0}'),
+                    ),
+                    ListTile(
                       title: const Text('Ròng tiền mặt'),
                       trailing: Text(
                         '${_data?['netCashVnd'] ?? 0}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
+                    if ((_data?['ledgerDiffVnd'] ?? 0) != 0)
+                      ListTile(
+                        leading: const Icon(Icons.warning_amber),
+                        title: const Text('Lệch sổ cái TK 111'),
+                        subtitle: const Text(
+                          'Có chứng từ chưa lên sổ (khoá kỳ hoặc lỗi ghi sổ)',
+                        ),
+                        trailing: Text('${_data?['ledgerDiffVnd'] ?? 0}'),
+                      ),
                   ],
                 ),
     );

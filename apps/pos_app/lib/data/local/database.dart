@@ -577,6 +577,50 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Hoàn tác tác động local của một lần thu nợ khi server từ chối vĩnh viễn.
+  ///
+  /// Cộng lại `balanceVnd` cho khách đúng bằng số tiền đã trừ và xóa dòng
+  /// `debtLedgerLocal` tương ứng, trong một transaction duy nhất.
+  ///
+  /// Idempotent: dòng ledger local là "cờ" duy nhất — nếu nó không còn (đã hoàn
+  /// tác trước đó, hoặc bản ghi chưa từng được ghi local) thì không cộng gì cả.
+  /// Trả về `true` khi thực sự có hoàn tác.
+  Future<bool> revertLocalDebtPayment(String paymentId) {
+    return transaction(() async {
+      final ledger =
+          await (select(debtLedgerLocal)..where(
+                (row) => row.id.equals(paymentId) & row.type.equals('payment'),
+              ))
+              .getSingleOrNull();
+      if (ledger == null) {
+        return false;
+      }
+      final removed =
+          await (delete(debtLedgerLocal)..where(
+                (row) => row.id.equals(paymentId) & row.type.equals('payment'),
+              ))
+              .go();
+      if (removed == 0) {
+        return false;
+      }
+      final customer = await (select(
+        customersLocal,
+      )..where((row) => row.id.equals(ledger.customerId))).getSingleOrNull();
+      if (customer == null) {
+        return true;
+      }
+      await (update(
+        customersLocal,
+      )..where((row) => row.id.equals(customer.id))).write(
+        CustomersLocalCompanion(
+          balanceVnd: Value(customer.balanceVnd + ledger.amountVnd),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return true;
+    });
+  }
+
   Stream<SyncStatusSnapshot> watchSyncStatus() {
     final query = select(outboxEntries)
       ..where(

@@ -7,6 +7,13 @@ String? labelOutboxReason(String? code) {
     'sku_conflict' => 'Trùng mã SKU',
     'barcode_conflict' => 'Trùng mã vạch',
     'credit_limit_exceeded' => 'Vượt hạn mức nợ',
+    'payment_exceeds_balance' =>
+      'Khách đã hết nợ (máy khác thu trước) — đã hoàn tác trên máy này',
+    // Dùng chung cho cả đơn bán ghi nợ (sync.service.ts:907/913) lẫn phiếu thu
+    // nợ, mà chỉ phiếu thu nợ mới được hoàn tác — nên nhãn phải trung tính.
+    'customer_not_found' => 'Không tìm thấy khách trên máy chủ',
+    'invalid_payment' =>
+      'Phiếu thu nợ không hợp lệ — đã hoàn tác trên máy này',
     'store_forbidden' || 'role_forbidden' => 'Không có quyền / cửa hàng',
     'shift_not_open' || 'shift_not_found' => 'Ca chưa mở / không tìm thấy ca',
     'invalid_payload' || 'invalid_qty' => 'Dữ liệu không hợp lệ',

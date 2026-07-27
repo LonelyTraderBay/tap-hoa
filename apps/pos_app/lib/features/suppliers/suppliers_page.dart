@@ -116,11 +116,15 @@ class SuppliersPage extends StatefulWidget {
     required this.repository,
     required this.storeId,
     this.isOwner = false,
+    this.canLedger = false,
   });
 
   final SuppliersRepository repository;
   final String storeId;
   final bool isOwner;
+
+  /// Đối chiếu công nợ NCC là báo cáo kế toán — API bắt buộc canLedger.
+  final bool canLedger;
 
   @override
   State<SuppliersPage> createState() => _SuppliersPageState();
@@ -530,10 +534,11 @@ class _SuppliersPageState extends State<SuppliersPage> {
                               onPressed: () => _returnGoods(s),
                               child: const Text('Trả hàng'),
                             ),
-                            TextButton(
-                              onPressed: () => _openRecon(s),
-                              child: const Text('Đối chiếu'),
-                            ),
+                            if (widget.canLedger)
+                              TextButton(
+                                onPressed: () => _openRecon(s),
+                                child: const Text('Đối chiếu'),
+                              ),
                             TextButton(
                               onPressed: () => _pay(s),
                               child: const Text('Thanh toán'),

@@ -45,12 +45,13 @@ describe('Phase 3 hardening A1 accounting e2e', () => {
     const passwordHash = await bcrypt.hash('123456', 10);
     const manager = await prisma.user.upsert({
       where: { phone: MANAGER_PHONE },
-      update: { active: true, role: 'store_manager' },
+      update: { active: true, role: 'store_manager', canLedger: true },
       create: {
         phone: MANAGER_PHONE,
         name: 'QL CH2',
         passwordHash,
         role: 'store_manager',
+        canLedger: true,
       },
     });
     await prisma.userStore.upsert({

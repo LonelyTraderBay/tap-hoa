@@ -458,6 +458,15 @@ class OutboxWorker {
       for (final rejected in result.rejectedShifts) {
         await _db.markOutboxError(rejected.id, rejected.reason);
       }
+      // Thu nợ bị server từ chối là từ chối VĨNH VIỄN (nghiệp vụ), không phải
+      // lỗi tạm thời: server chỉ đưa entry vào `rejectedDebtPayments` cho
+      // payment_exceeds_balance / customer_not_found / invalid_payment. Mọi lỗi
+      // hạ tầng đều ném ra ngoài và tới đây dưới dạng DioException (bắt ở
+      // catch bên dưới, giữ pending). Vì local đã trừ nợ ngay khi thu nên phải
+      // hoàn tác trước khi đánh dấu entry lỗi.
+      for (final rejected in result.rejectedDebtPayments) {
+        await _db.revertLocalDebtPayment(rejected.id);
+      }
       await markRejected(
         result.rejectedDebtPayments,
         entityType: 'debt_payment',
