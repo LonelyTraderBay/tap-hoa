@@ -78,6 +78,22 @@ export class StoresController {
     );
   }
 
+  @Patch(':id/allow-negative-stock')
+  setAllowNegativeStock(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Body() body: { allowNegativeStock?: boolean },
+  ) {
+    if (typeof body.allowNegativeStock !== 'boolean') {
+      throw new BadRequestException('allowNegativeStock must be a boolean');
+    }
+    return this.storesService.setAllowNegativeStock(
+      req.user,
+      id,
+      body.allowNegativeStock,
+    );
+  }
+
   @Patch(':id/vat')
   setVat(
     @Req() req: { user: AuthUser },

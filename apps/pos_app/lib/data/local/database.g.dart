@@ -5427,6 +5427,20 @@ class $StoresLocalTable extends StoresLocal
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _allowNegativeStockMeta =
+      const VerificationMeta('allowNegativeStock');
+  @override
+  late final GeneratedColumn<bool> allowNegativeStock = GeneratedColumn<bool>(
+    'allow_negative_stock',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("allow_negative_stock" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -5446,6 +5460,7 @@ class $StoresLocalTable extends StoresLocal
     active,
     debtOverdueDays,
     largeDebtThresholdVnd,
+    allowNegativeStock,
     updatedAt,
   ];
   @override
@@ -5505,6 +5520,15 @@ class $StoresLocalTable extends StoresLocal
         ),
       );
     }
+    if (data.containsKey('allow_negative_stock')) {
+      context.handle(
+        _allowNegativeStockMeta,
+        allowNegativeStock.isAcceptableOrUnknown(
+          data['allow_negative_stock']!,
+          _allowNegativeStockMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -5546,6 +5570,10 @@ class $StoresLocalTable extends StoresLocal
         DriftSqlType.int,
         data['${effectivePrefix}large_debt_threshold_vnd'],
       ),
+      allowNegativeStock: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}allow_negative_stock'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -5566,6 +5594,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
   final bool active;
   final int debtOverdueDays;
   final int? largeDebtThresholdVnd;
+  final bool allowNegativeStock;
   final DateTime updatedAt;
   const StoresLocalData({
     required this.id,
@@ -5574,6 +5603,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     required this.active,
     required this.debtOverdueDays,
     this.largeDebtThresholdVnd,
+    required this.allowNegativeStock,
     required this.updatedAt,
   });
   @override
@@ -5587,6 +5617,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     if (!nullToAbsent || largeDebtThresholdVnd != null) {
       map['large_debt_threshold_vnd'] = Variable<int>(largeDebtThresholdVnd);
     }
+    map['allow_negative_stock'] = Variable<bool>(allowNegativeStock);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -5601,6 +5632,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       largeDebtThresholdVnd: largeDebtThresholdVnd == null && nullToAbsent
           ? const Value.absent()
           : Value(largeDebtThresholdVnd),
+      allowNegativeStock: Value(allowNegativeStock),
       updatedAt: Value(updatedAt),
     );
   }
@@ -5619,6 +5651,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       largeDebtThresholdVnd: serializer.fromJson<int?>(
         json['largeDebtThresholdVnd'],
       ),
+      allowNegativeStock: serializer.fromJson<bool>(json['allowNegativeStock']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -5632,6 +5665,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       'active': serializer.toJson<bool>(active),
       'debtOverdueDays': serializer.toJson<int>(debtOverdueDays),
       'largeDebtThresholdVnd': serializer.toJson<int?>(largeDebtThresholdVnd),
+      'allowNegativeStock': serializer.toJson<bool>(allowNegativeStock),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -5643,6 +5677,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     bool? active,
     int? debtOverdueDays,
     Value<int?> largeDebtThresholdVnd = const Value.absent(),
+    bool? allowNegativeStock,
     DateTime? updatedAt,
   }) => StoresLocalData(
     id: id ?? this.id,
@@ -5653,6 +5688,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     largeDebtThresholdVnd: largeDebtThresholdVnd.present
         ? largeDebtThresholdVnd.value
         : this.largeDebtThresholdVnd,
+    allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   StoresLocalData copyWithCompanion(StoresLocalCompanion data) {
@@ -5667,6 +5703,9 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
       largeDebtThresholdVnd: data.largeDebtThresholdVnd.present
           ? data.largeDebtThresholdVnd.value
           : this.largeDebtThresholdVnd,
+      allowNegativeStock: data.allowNegativeStock.present
+          ? data.allowNegativeStock.value
+          : this.allowNegativeStock,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -5680,6 +5719,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
           ..write('active: $active, ')
           ..write('debtOverdueDays: $debtOverdueDays, ')
           ..write('largeDebtThresholdVnd: $largeDebtThresholdVnd, ')
+          ..write('allowNegativeStock: $allowNegativeStock, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -5693,6 +5733,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
     active,
     debtOverdueDays,
     largeDebtThresholdVnd,
+    allowNegativeStock,
     updatedAt,
   );
   @override
@@ -5705,6 +5746,7 @@ class StoresLocalData extends DataClass implements Insertable<StoresLocalData> {
           other.active == this.active &&
           other.debtOverdueDays == this.debtOverdueDays &&
           other.largeDebtThresholdVnd == this.largeDebtThresholdVnd &&
+          other.allowNegativeStock == this.allowNegativeStock &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -5715,6 +5757,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
   final Value<bool> active;
   final Value<int> debtOverdueDays;
   final Value<int?> largeDebtThresholdVnd;
+  final Value<bool> allowNegativeStock;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const StoresLocalCompanion({
@@ -5724,6 +5767,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     this.active = const Value.absent(),
     this.debtOverdueDays = const Value.absent(),
     this.largeDebtThresholdVnd = const Value.absent(),
+    this.allowNegativeStock = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -5734,6 +5778,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     this.active = const Value.absent(),
     this.debtOverdueDays = const Value.absent(),
     this.largeDebtThresholdVnd = const Value.absent(),
+    this.allowNegativeStock = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -5747,6 +5792,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     Expression<bool>? active,
     Expression<int>? debtOverdueDays,
     Expression<int>? largeDebtThresholdVnd,
+    Expression<bool>? allowNegativeStock,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -5758,6 +5804,8 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
       if (debtOverdueDays != null) 'debt_overdue_days': debtOverdueDays,
       if (largeDebtThresholdVnd != null)
         'large_debt_threshold_vnd': largeDebtThresholdVnd,
+      if (allowNegativeStock != null)
+        'allow_negative_stock': allowNegativeStock,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -5770,6 +5818,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
     Value<bool>? active,
     Value<int>? debtOverdueDays,
     Value<int?>? largeDebtThresholdVnd,
+    Value<bool>? allowNegativeStock,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -5781,6 +5830,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
       debtOverdueDays: debtOverdueDays ?? this.debtOverdueDays,
       largeDebtThresholdVnd:
           largeDebtThresholdVnd ?? this.largeDebtThresholdVnd,
+      allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -5809,6 +5859,9 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
         largeDebtThresholdVnd.value,
       );
     }
+    if (allowNegativeStock.present) {
+      map['allow_negative_stock'] = Variable<bool>(allowNegativeStock.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -5827,6 +5880,7 @@ class StoresLocalCompanion extends UpdateCompanion<StoresLocalData> {
           ..write('active: $active, ')
           ..write('debtOverdueDays: $debtOverdueDays, ')
           ..write('largeDebtThresholdVnd: $largeDebtThresholdVnd, ')
+          ..write('allowNegativeStock: $allowNegativeStock, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -16801,6 +16855,7 @@ typedef $$StoresLocalTableCreateCompanionBuilder =
       Value<bool> active,
       Value<int> debtOverdueDays,
       Value<int?> largeDebtThresholdVnd,
+      Value<bool> allowNegativeStock,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -16812,6 +16867,7 @@ typedef $$StoresLocalTableUpdateCompanionBuilder =
       Value<bool> active,
       Value<int> debtOverdueDays,
       Value<int?> largeDebtThresholdVnd,
+      Value<bool> allowNegativeStock,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -16852,6 +16908,11 @@ class $$StoresLocalTableFilterComposer
 
   ColumnFilters<int> get largeDebtThresholdVnd => $composableBuilder(
     column: $table.largeDebtThresholdVnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get allowNegativeStock => $composableBuilder(
+    column: $table.allowNegativeStock,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16900,6 +16961,11 @@ class $$StoresLocalTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get allowNegativeStock => $composableBuilder(
+    column: $table.allowNegativeStock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -16934,6 +17000,11 @@ class $$StoresLocalTableAnnotationComposer
 
   GeneratedColumn<int> get largeDebtThresholdVnd => $composableBuilder(
     column: $table.largeDebtThresholdVnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get allowNegativeStock => $composableBuilder(
+    column: $table.allowNegativeStock,
     builder: (column) => column,
   );
 
@@ -16978,6 +17049,7 @@ class $$StoresLocalTableTableManager
                 Value<bool> active = const Value.absent(),
                 Value<int> debtOverdueDays = const Value.absent(),
                 Value<int?> largeDebtThresholdVnd = const Value.absent(),
+                Value<bool> allowNegativeStock = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => StoresLocalCompanion(
@@ -16987,6 +17059,7 @@ class $$StoresLocalTableTableManager
                 active: active,
                 debtOverdueDays: debtOverdueDays,
                 largeDebtThresholdVnd: largeDebtThresholdVnd,
+                allowNegativeStock: allowNegativeStock,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -16998,6 +17071,7 @@ class $$StoresLocalTableTableManager
                 Value<bool> active = const Value.absent(),
                 Value<int> debtOverdueDays = const Value.absent(),
                 Value<int?> largeDebtThresholdVnd = const Value.absent(),
+                Value<bool> allowNegativeStock = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => StoresLocalCompanion.insert(
@@ -17007,6 +17081,7 @@ class $$StoresLocalTableTableManager
                 active: active,
                 debtOverdueDays: debtOverdueDays,
                 largeDebtThresholdVnd: largeDebtThresholdVnd,
+                allowNegativeStock: allowNegativeStock,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

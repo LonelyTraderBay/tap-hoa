@@ -157,6 +157,7 @@ export class SyncService {
             active: store.active,
             debtOverdueDays: store.debtOverdueDays,
             largeDebtThresholdVnd: store.largeDebtThresholdVnd,
+            allowNegativeStock: store.allowNegativeStock,
             updatedAt: store.updatedAt.toISOString(),
           }
         : null,

@@ -750,6 +750,7 @@ class _PosPageState extends State<PosPage> {
                 MaterialPageRoute<void>(
                   builder: (_) => InventoryHubPage(
                     db: widget.database,
+                    dio: widget.dayReportRepository.dio,
                     inventoryService: InventoryService(db: widget.database),
                     productRepository: widget.productRepository,
                     stockOnHandRepository: widget.stockOnHandRepository,

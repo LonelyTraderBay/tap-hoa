@@ -124,6 +124,8 @@ class StoresLocal extends Table {
   BoolColumn get active => boolean().withDefault(const Constant(true))();
   IntColumn get debtOverdueDays => integer().withDefault(const Constant(30))();
   IntColumn get largeDebtThresholdVnd => integer().nullable()();
+  BoolColumn get allowNegativeStock =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

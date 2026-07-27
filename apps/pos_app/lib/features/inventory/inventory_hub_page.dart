@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/local/database.dart';
@@ -6,12 +7,14 @@ import '../products/product_repository.dart';
 import '../reports/stock_on_hand_page.dart';
 import '../reports/stock_on_hand_repository.dart';
 import '../shifts/shift_repository.dart';
+import 'allow_negative_stock_sheet.dart';
 import 'inventory_service.dart';
 
 class InventoryHubPage extends StatefulWidget {
   const InventoryHubPage({
     super.key,
     required this.db,
+    required this.dio,
     required this.inventoryService,
     required this.productRepository,
     required this.stockOnHandRepository,
@@ -20,6 +23,7 @@ class InventoryHubPage extends StatefulWidget {
   });
 
   final AppDatabase db;
+  final Dio dio;
   final InventoryService inventoryService;
   final ProductRepository productRepository;
   final StockOnHandRepository stockOnHandRepository;
@@ -619,6 +623,18 @@ class _InventoryHubPageState extends State<InventoryHubPage>
             onPressed: _openStockOnHand,
             child: const Text('Tồn hiện tại'),
           ),
+          if (canTransfer)
+            IconButton(
+              tooltip: 'Cho phép âm tồn',
+              icon: const Icon(Icons.exposure_outlined),
+              onPressed: () => showAllowNegativeStockSheet(
+                context,
+                db: widget.db,
+                dio: widget.dio,
+                storeId: widget.storeId,
+                role: widget.role,
+              ),
+            ),
         ],
         bottom: TabBar(
           controller: _tabs,

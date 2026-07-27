@@ -28,6 +28,7 @@ export class StoresService {
     largeDebtThresholdVnd: true,
     vatEnabled: true,
     defaultVatRateBps: true,
+    allowNegativeStock: true,
     updatedAt: true,
   } as const;
 
@@ -123,6 +124,23 @@ export class StoresService {
         where: { id: storeId },
         data: { debtOverdueDays: days },
         select: { id: true, debtOverdueDays: true },
+      });
+    } catch {
+      throw new NotFoundException('Store not found');
+    }
+  }
+
+  async setAllowNegativeStock(
+    user: AuthUser,
+    storeId: string,
+    allowNegativeStock: boolean,
+  ) {
+    this.assertStoreManage(user, storeId);
+    try {
+      return await this.prisma.store.update({
+        where: { id: storeId },
+        data: { allowNegativeStock },
+        select: { id: true, allowNegativeStock: true },
       });
     } catch {
       throw new NotFoundException('Store not found');
