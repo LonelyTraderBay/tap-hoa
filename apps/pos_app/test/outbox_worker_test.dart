@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -284,24 +284,172 @@ void main() {
     expect(outbox.lastError, 'sku_conflict');
   });
 
-  test('tick leaves outbox pending on DioException', () async {
-    const saleId = 'sale-offline';
-    await seedSaleOutbox(saleId: saleId);
+  test(
+    'tick leaves outbox pending on DioException and backs off with a '
+    'future nextRetryAt',
+    () async {
+      const saleId = 'sale-offline';
+      await seedSaleOutbox(saleId: saleId);
 
-    when(
-      () => dio.post<Map<String, dynamic>>(
-        '/sync/push',
-        data: any(named: 'data'),
-      ),
-    ).thenThrow(
-      DioException(requestOptions: RequestOptions(path: '/sync/push')),
-    );
+      when(
+        () => dio.post<Map<String, dynamic>>(
+          '/sync/push',
+          data: any(named: 'data'),
+        ),
+      ).thenThrow(
+        DioException(requestOptions: RequestOptions(path: '/sync/push')),
+      );
 
-    await worker.tick();
+      final before = DateTime.now();
+      await worker.tick();
 
-    final outbox = await (db.select(
-      db.outboxEntries,
-    )..where((entry) => entry.id.equals('outbox-$saleId'))).getSingle();
-    expect(outbox.status, 'pending');
-  });
+      final outbox = await (db.select(
+        db.outboxEntries,
+      )..where((entry) => entry.id.equals('outbox-$saleId'))).getSingle();
+      expect(outbox.status, 'pending');
+      expect(outbox.retryCount, 1);
+      // retryCount=1 -> outboxBackoffDuration(1) == outboxBackoffBase (15s).
+      // So sánh theo khoảng (không so mốc mili giây tuyệt đối) vì
+      // `nextRetryAt` được tính từ `DateTime.now()` thật bên trong worker,
+      // không có clock injectable trong codebase này.
+      expect(outbox.nextRetryAt, isNotNull);
+      final delta = outbox.nextRetryAt!.difference(before);
+      expect(delta.inSeconds, greaterThan(10));
+      expect(delta.inSeconds, lessThanOrEqualTo(20));
+    },
+  );
+
+  test(
+    'an entry with a future nextRetryAt is excluded from pendingOutbox and '
+    'the next tick batch',
+    () async {
+      const saleId = 'sale-offline-2';
+      await seedSaleOutbox(saleId: saleId);
+
+      when(
+        () => dio.post<Map<String, dynamic>>(
+          '/sync/push',
+          data: any(named: 'data'),
+        ),
+      ).thenThrow(
+        DioException(requestOptions: RequestOptions(path: '/sync/push')),
+      );
+
+      await worker.tick();
+      // Right after the failure, nextRetryAt is ~15s in the future -> not
+      // due yet.
+      final pendingNow = await db.pendingOutbox();
+      expect(pendingNow, isEmpty);
+
+      // A second tick right away must not push again: there is nothing due
+      // for retry, so the worker should return before ever calling dio.
+      await worker.tick();
+      verify(
+        () => dio.post<Map<String, dynamic>>(
+          '/sync/push',
+          data: any(named: 'data'),
+        ),
+      ).called(1);
+
+      final outbox = await (db.select(
+        db.outboxEntries,
+      )..where((entry) => entry.id.equals('outbox-$saleId'))).getSingle();
+      expect(outbox.status, 'pending');
+      expect(outbox.retryCount, 1);
+    },
+  );
+
+  test(
+    'repeated infra failures past the retry threshold dead-letter the '
+    'entry',
+    () async {
+      const saleId = 'sale-dead-letter';
+      await seedSaleOutbox(saleId: saleId);
+      // Simulate an entry that has already failed `outboxMaxRetries` times
+      // in earlier ticks and is due for retry right now (nextRetryAt in the
+      // past/null) — avoids waiting out real backoff delays in the test.
+      await (db.update(
+        db.outboxEntries,
+      )..where((row) => row.id.equals('outbox-$saleId'))).write(
+        const OutboxEntriesCompanion(retryCount: Value(outboxMaxRetries)),
+      );
+
+      when(
+        () => dio.post<Map<String, dynamic>>(
+          '/sync/push',
+          data: any(named: 'data'),
+        ),
+      ).thenThrow(
+        DioException(requestOptions: RequestOptions(path: '/sync/push')),
+      );
+
+      await worker.tick();
+
+      final outbox = await (db.select(
+        db.outboxEntries,
+      )..where((entry) => entry.id.equals('outbox-$saleId'))).getSingle();
+      expect(outbox.status, 'dead_letter');
+      expect(outbox.retryCount, outboxMaxRetries + 1);
+      expect(outbox.nextRetryAt, isNull);
+      expect(outbox.lastError, 'sync_retry_exhausted');
+    },
+  );
+
+  test(
+    'a dead-lettered entry is excluded from pendingOutbox but included in '
+    'listOutboxErrors',
+    () async {
+      const saleId = 'sale-dead-letter-2';
+      await seedSaleOutbox(saleId: saleId);
+      await (db.update(
+        db.outboxEntries,
+      )..where((row) => row.id.equals('outbox-$saleId'))).write(
+        const OutboxEntriesCompanion(
+          status: Value('dead_letter'),
+          retryCount: Value(outboxMaxRetries + 1),
+          lastError: Value('sync_retry_exhausted'),
+        ),
+      );
+
+      final pending = await db.pendingOutbox();
+      expect(pending, isEmpty);
+
+      final errors = await db.listOutboxErrors();
+      expect(errors.map((e) => e.id), contains('outbox-$saleId'));
+      expect(errors.single.status, 'dead_letter');
+    },
+  );
+
+  test(
+    'requeuing a dead-lettered entry resets retryCount/nextRetryAt and puts '
+    'it back in pendingOutbox',
+    () async {
+      const saleId = 'sale-dead-letter-3';
+      await seedSaleOutbox(saleId: saleId);
+      const outboxId = 'outbox-$saleId';
+      await (db.update(
+        db.outboxEntries,
+      )..where((row) => row.id.equals(outboxId))).write(
+        OutboxEntriesCompanion(
+          status: const Value('dead_letter'),
+          retryCount: const Value(outboxMaxRetries + 1),
+          nextRetryAt: Value(DateTime.now().add(const Duration(minutes: 5))),
+          lastError: const Value('sync_retry_exhausted'),
+        ),
+      );
+
+      await db.requeueOutbox(outboxId);
+
+      final outbox = await (db.select(
+        db.outboxEntries,
+      )..where((row) => row.id.equals(outboxId))).getSingle();
+      expect(outbox.status, 'pending');
+      expect(outbox.retryCount, 0);
+      expect(outbox.nextRetryAt, isNull);
+      expect(outbox.lastError, isNull);
+
+      final pending = await db.pendingOutbox();
+      expect(pending.map((e) => e.id), contains(outboxId));
+    },
+  );
 }

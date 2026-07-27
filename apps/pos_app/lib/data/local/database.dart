@@ -12,6 +12,17 @@ part 'database.g.dart';
 
 const lastBackupAtMetaKey = 'lastBackupAt';
 
+/// Reason code ghi vào `lastError` khi một outbox entry bị chuyển sang
+/// `status = 'dead_letter'` (hết lượt retry hạ tầng, xem
+/// `recordOutboxInfraFailure`). Cố tình dùng reason CODE (snake_case) thay
+/// vì viết thẳng câu tiếng Việt — đúng convention hiện có của cột này (so
+/// với `'insufficient_stock'`, `'sku_conflict'`...), để
+/// `outbox_reason_labels.dart::labelOutboxReason` là nơi DUY NHẤT quyết
+/// định câu hiển thị cho người dùng (giữ nguyên tắc "lastError chứa mã lỗi
+/// ổn định, UI tự dịch", không rò rỉ câu tiếng Việt hoặc message
+/// DioException thô vào tầng dữ liệu).
+const outboxSyncRetryExhaustedReason = 'sync_retry_exhausted';
+
 @DriftDatabase(
   tables: [
     Products,
@@ -47,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -121,6 +132,24 @@ class AppDatabase extends _$AppDatabase {
           storesLocal,
           storesLocal.allowNegativeStock,
         );
+      }
+      if (from < 12) {
+        await migrator.addColumn(outboxEntries, outboxEntries.retryCount);
+        await migrator.addColumn(outboxEntries, outboxEntries.nextRetryAt);
+        // `addColumn` chỉ thêm cột (ALTER TABLE ADD COLUMN) — nó KHÔNG cập
+        // nhật CHECK constraint hiện có trên cột `status` (SQLite không hỗ
+        // trợ sửa CHECK bằng ALTER trực tiếp). Nếu dừng ở 2 dòng addColumn
+        // trên, máy đã cài đặt từ trước (upgrade từ schema < 12) vẫn giữ
+        // CHECK constraint cũ 3 giá trị — UPDATE status='dead_letter' sau
+        // này sẽ ném SqliteException CHECK constraint failed chỉ trên NHỮNG
+        // MÁY ĐÃ CÀI TRƯỚC ĐÓ (máy cài mới qua `onCreate`/`createAll()` thì
+        // không sao vì đọc thẳng schema hiện tại trong tables.dart). Gọi
+        // `alterTable` (không kèm `newColumns`, vì 2 cột trên đã tồn tại
+        // sau 2 dòng addColumn ngay phía trên) để recreate bảng theo đúng
+        // 12-bước sqlite.org/lang_altertable.html#otheralter mà package
+        // drift đã cài sẵn — giữ nguyên toàn bộ dữ liệu, chỉ đổi CHECK
+        // constraint sang bản mới (khớp `OutboxEntries` trong tables.dart).
+        await migrator.alterTable(TableMigration(outboxEntries));
       }
     },
   );
@@ -490,14 +519,33 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Chỉ lấy entry `pending` đã tới lượt retry — `nextRetryAt` null (chưa
+  /// từng lỗi hạ tầng lần nào) hoặc đã ở trong quá khứ. Entry đang chờ
+  /// backoff (`nextRetryAt` ở tương lai, xem
+  /// `outbox_worker.dart::recordOutboxInfraFailure`) bị loại khỏi batch tới
+  /// khi tick kế tiếp gọi hàm này — đây chính là cơ chế backoff: không cần
+  /// một scheduler riêng, `pendingOutbox()` tự "im lặng" với các entry chưa
+  /// tới hạn.
   Future<List<OutboxEntry>> pendingOutbox({int limit = 50}) {
+    final now = DateTime.now();
     return (select(outboxEntries)
-          ..where((entry) => entry.status.equals('pending'))
+          ..where(
+            (entry) =>
+                entry.status.equals('pending') &
+                (entry.nextRetryAt.isNull() |
+                    entry.nextRetryAt.isSmallerOrEqualValue(now)),
+          )
           ..orderBy([(entry) => OrderingTerm.asc(entry.createdAt)])
           ..limit(limit))
         .get();
   }
 
+  /// Đưa một entry (kể cả đã `dead_letter`) trở lại hàng đợi retry tự động.
+  /// Reset cả `retryCount`/`nextRetryAt` về trạng thái "chưa từng lỗi hạ
+  /// tầng lần nào" — nếu không reset, một entry dead-letter được người dùng
+  /// bấm "Thử lại" mà lỡ gặp đúng 1 lỗi hạ tầng nữa sẽ dead-letter lại NGAY
+  /// (retryCount đã sẵn vượt ngưỡng từ trước), rất khó hiểu với người dùng
+  /// vừa chủ động thử lại.
   Future<void> requeueOutbox(String outboxId) async {
     await (update(
       outboxEntries,
@@ -505,21 +553,88 @@ class AppDatabase extends _$AppDatabase {
       const OutboxEntriesCompanion(
         status: Value('pending'),
         lastError: Value(null),
+        retryCount: Value(0),
+        nextRetryAt: Value(null),
       ),
     );
   }
 
+  /// Gồm cả `'error'` (server từ chối nghiệp vụ — cần người dùng sửa dữ
+  /// liệu) lẫn `'dead_letter'` (hết lượt retry hạ tầng — chỉ cần thử lại
+  /// khi mạng/server đã ổn). Cả hai đều cần một người xem qua, nên gộp
+  /// chung một danh sách cho màn "Đồng bộ lỗi" (`OutboxConflictsPage`) thay
+  /// vì tách hai màn — UI tự phân biệt bằng `status` (xem
+  /// `outbox_conflicts_page.dart`).
   Future<List<OutboxEntry>> listOutboxErrors() {
     return (select(outboxEntries)
-          ..where((row) => row.status.equals('error'))
+          ..where(
+            (row) =>
+                row.status.equals('error') | row.status.equals('dead_letter'),
+          )
           ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
         .get();
   }
 
   Stream<int> watchOutboxErrorCount() {
-    return (select(outboxEntries)..where((row) => row.status.equals('error')))
+    return (select(outboxEntries)
+          ..where(
+            (row) =>
+                row.status.equals('error') | row.status.equals('dead_letter'),
+          ))
         .watch()
         .map((rows) => rows.length);
+  }
+
+  /// Ghi nhận một lượt push `/sync/push` thất bại do lỗi HẠ TẦNG (mất mạng,
+  /// server sập, timeout — bắt ở `on DioException` trong
+  /// `outbox_worker.dart::tick()`), KHÔNG phải bị server từ chối nghiệp vụ
+  /// (nhánh đó dùng `markOutboxError`, không đụng tới ở đây).
+  ///
+  /// [entries] phải là đúng danh sách entry đã nằm trong batch vừa gửi thất
+  /// bại (biến `pending` mà `tick()` đã fetch qua `pendingOutbox()` ở đầu
+  /// hàm) — dùng thẳng `retryCount` đọc được lúc đó làm mốc, không đọc lại
+  /// từ DB (không có ai khác ghi xen vào giữa lúc fetch và lúc catch trong
+  /// cùng một lượt `tick()`).
+  ///
+  /// Với mỗi entry: tăng `retryCount`. Nếu con số mới còn trong hạn
+  /// [maxRetries], đặt `nextRetryAt = now + backoffFor(retryCount mới)` để
+  /// `pendingOutbox()` bỏ qua entry này tới lúc đó (xem tài liệu ở đó). Nếu
+  /// vượt hạn, chuyển hẳn sang `status = 'dead_letter'` — loại khỏi vòng
+  /// lặp retry tự động vĩnh viễn, chỉ còn cách quay lại `pending` qua
+  /// `requeueOutbox` (màn "Đồng bộ lỗi", giống hệt cơ chế của `'error'`).
+  Future<void> recordOutboxInfraFailure(
+    List<OutboxEntry> entries, {
+    required Duration Function(int retryCount) backoffFor,
+    required int maxRetries,
+  }) async {
+    if (entries.isEmpty) {
+      return;
+    }
+    final now = DateTime.now();
+    for (final entry in entries) {
+      final retryCount = entry.retryCount + 1;
+      if (retryCount > maxRetries) {
+        await (update(
+          outboxEntries,
+        )..where((row) => row.id.equals(entry.id))).write(
+          OutboxEntriesCompanion(
+            status: const Value('dead_letter'),
+            retryCount: Value(retryCount),
+            nextRetryAt: const Value(null),
+            lastError: const Value(outboxSyncRetryExhaustedReason),
+          ),
+        );
+      } else {
+        await (update(
+          outboxEntries,
+        )..where((row) => row.id.equals(entry.id))).write(
+          OutboxEntriesCompanion(
+            retryCount: Value(retryCount),
+            nextRetryAt: Value(now.add(backoffFor(retryCount))),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> updateOutboxPayload(String outboxId, String payloadJson) {

@@ -58,12 +58,26 @@ class OutboxEntries extends Table {
   TextColumn get entityType => text()();
   TextColumn get payloadJson => text()();
   DateTimeColumn get createdAt => dateTime()();
+  // 'dead_letter': entry hết lượt retry hạ tầng tự động (xem
+  // `outbox_worker.dart::outboxMaxRetries`) — khác `'error'` (server từ chối
+  // nghiệp vụ, người dùng phải sửa dữ liệu); dead_letter chỉ cần thử lại khi
+  // hạ tầng (mạng/server) đã ổn, không cần sửa payload.
   TextColumn get status => text()
       .check(
-        const CustomExpression<bool>("status IN ('pending', 'error', 'done')"),
+        const CustomExpression<bool>(
+          "status IN ('pending', 'error', 'done', 'dead_letter')",
+        ),
       )
       .withDefault(const Constant('pending'))();
   TextColumn get lastError => text().nullable()();
+  // Số lần push thất bại do lỗi HẠ TẦNG liên tiếp (mất mạng, server sập) —
+  // KHÔNG tăng khi bị server từ chối nghiệp vụ (status='error', xem
+  // `markOutboxError`). Reset về 0 khi requeue (`requeueOutbox`).
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+  // Mốc thời gian sớm nhất `pendingOutbox()` mới lấy lại entry này để retry
+  // — null nghĩa là sẵn sàng ngay (trường hợp thường gặp: entry mới tạo,
+  // hoặc chưa từng lỗi hạ tầng lần nào).
+  DateTimeColumn get nextRetryAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

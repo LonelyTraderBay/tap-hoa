@@ -147,9 +147,22 @@ class _OutboxConflictsPageState extends State<OutboxConflictsPage> {
                 separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final entry = _entries[index];
+                  final isDeadLetter = entry.status == 'dead_letter';
                   final reason =
                       labelOutboxReason(entry.lastError) ?? entry.lastError;
+                  final accentColor = isDeadLetter
+                      ? theme.colorScheme.tertiary
+                      : theme.colorScheme.error;
                   return ListTile(
+                    leading: Icon(
+                      // dead_letter = hết lượt retry hạ tầng (mạng/server),
+                      // payload không có gì sai; error = server từ chối
+                      // nghiệp vụ, cần sửa dữ liệu. Hai icon khác hẳn nhau để
+                      // người dùng không nhầm "phải sửa gì đó" khi thực ra
+                      // chỉ cần chờ mạng ổn rồi thử lại.
+                      isDeadLetter ? Icons.wifi_off : Icons.error_outline,
+                      color: accentColor,
+                    ),
                     title: Text(labelEntityType(entry.entityType)),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,9 +170,14 @@ class _OutboxConflictsPageState extends State<OutboxConflictsPage> {
                         Text(
                           reason ?? '—',
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.error,
+                            color: accentColor,
                           ),
                         ),
+                        if (isDeadLetter)
+                          Text(
+                            'Đã tự thử lại ${entry.retryCount} lần',
+                            style: theme.textTheme.bodySmall,
+                          ),
                         const SizedBox(height: 2),
                         Text(
                           '${_shortenId(entry.id)} · ${_formatCreatedAt(entry.createdAt)}',
