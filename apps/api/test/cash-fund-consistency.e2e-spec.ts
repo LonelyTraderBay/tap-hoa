@@ -89,10 +89,6 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
       update: { qty: 500, avgCostVnd: 9000 },
     });
 
-    const at = new Date();
-    const nowIso = at.toISOString();
-    const { periodYm, from, to } = ictPeriodRange(at);
-
     // ---- mở ca ----
     const shiftId = randomUUID();
     await request(app.getHttpServer())
@@ -100,6 +96,12 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ storeId, openingCash: 500_000, clientId: shiftId })
       .expect(201);
+
+    // Chứng từ phải có clientCreatedAt >= shift.openedAt (sync.service.ts
+    // kiểm tra 'shift_not_open_at_sale'), nên lấy mốc thời gian SAU khi mở ca.
+    const at = new Date();
+    const nowIso = at.toISOString();
+    const { periodYm, from, to } = ictPeriodRange(at);
 
     // ---- khách nợ ----
     const customerId = randomUUID();
@@ -416,16 +418,16 @@ describe('Sổ quỹ khớp sổ cái TK 111', () => {
   it('chứng từ bị khoá kỳ làm lệch sổ quỹ ↔ sổ cái và ledgerDiffVnd chỉ ra điều đó', async () => {
     await resetStoreData();
 
-    const at = new Date();
-    const nowIso = at.toISOString();
-    const { periodYm, from, to } = ictPeriodRange(at);
-
     const shiftId = randomUUID();
     await request(app.getHttpServer())
       .post('/shifts/open')
       .set('Authorization', `Bearer ${token}`)
       .send({ storeId, openingCash: 0, clientId: shiftId })
       .expect(201);
+
+    const at = new Date();
+    const nowIso = at.toISOString();
+    const { periodYm, from, to } = ictPeriodRange(at);
 
     await request(app.getHttpServer())
       .post('/ledger/period-locks')

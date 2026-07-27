@@ -31,10 +31,10 @@ IDE: `.vscode/launch.json` — **API (tap-hoa :3040)** / **Flutter POS (tap-hoa)
 |---------|----------------|
 | Supabase `project_id` | `tap-hoa` |
 | Postgres database | `tap_hoa` (never bare `postgres`) |
-| Postgres host port | **55422** |
+| Postgres host port | **54422** |
 | Nest API port | **3040** |
 | Schema | `public` |
-| Studio | http://127.0.0.1:55423 |
+| Studio | http://127.0.0.1:54423 |
 | POS title | **Tap Hoa POS** |
 | Local SQLite | `tap_hoa_pos.sqlite` |
 | Nest package | `tap-hoa-api` |
@@ -42,7 +42,7 @@ IDE: `.vscode/launch.json` — **API (tap-hoa :3040)** / **Flutter POS (tap-hoa)
 `apps/api/.env` (auto-written by `write-tap-hoa-env.ps1`):
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55422/tap_hoa?schema=public
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54422/tap_hoa?schema=public
 JWT_SECRET=dev-change-me-tap-hoa
 PORT=3040
 ```
@@ -52,7 +52,7 @@ PORT=3040
 On API boot (when `NODE_ENV` ≠ `production`), Nest calls `assertTapHoaLocalIdentity()`:
 
 - Rejects port `54322` / `5432` (shared defaults)
-- Requires DB name `tap_hoa`, schema `public`, host localhost, port `55422`
+- Requires DB name `tap_hoa`, schema `public`, host localhost, port `54422`
 - Requires `PORT=3040`
 
 Override only for special tooling: `TAP_HOA_SKIP_LOCAL_IDENTITY=1`  
@@ -75,14 +75,23 @@ npx supabase stop
 | Port | Service |
 |------|---------|
 | 3040 | Nest API |
-| 55420 | Supabase shadow DB |
-| 55421 | Supabase API |
-| 55422 | PostgreSQL (`tap_hoa`) |
-| 55423 | Supabase Studio |
-| 55424 | Inbucket |
-| 55427 | Analytics |
-| 55429 | Pooler |
+| 54420 | Supabase shadow DB |
+| 54421 | Supabase API |
+| 54422 | PostgreSQL (`tap_hoa`) |
+| 54423 | Supabase Studio |
+| 54424 | Inbucket |
+| 54427 | Analytics |
+| 54429 | Pooler |
 | 18083 | Edge inspector |
+
+> Moved from the `5542x` block to `5442x` on 2026-07-27: Windows/Hyper-V had
+> dynamically reserved TCP `55325–55424` (`netsh interface ipv4 show
+> excludedportrange protocol=tcp`), which fully covered the old range and
+> made Docker unable to publish those container ports. `5442x` sits in a
+> free gap. If it collides again on some machine, re-run that `netsh`
+> command and pick another free 10-port block — update `config.toml`,
+> `tap-hoa.identity.ts`, `.env.example`, `write-tap-hoa-env.ps1`,
+> `dev-up.ps1`, and this doc together.
 
 ## Do not
 

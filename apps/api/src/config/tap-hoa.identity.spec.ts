@@ -50,7 +50,7 @@ describe('tap-hoa.identity', () => {
         DATABASE_URL:
           'postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=taskd_period_unlock',
       }),
-    ).toThrow(/55422|54322|Refusing shared/);
+    ).toThrow(/54422|54322|Refusing shared/);
   });
 
   it('rejects generic database name postgres', () => {
