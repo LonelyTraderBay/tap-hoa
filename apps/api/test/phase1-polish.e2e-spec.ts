@@ -202,4 +202,188 @@ describe('Phase1 polish sync: product groups + sale returns', () => {
       ]),
     );
   });
+
+  it('rejects sale_return when totalRefundVnd does not match sum of lines (H2)', async () => {
+    const login = await loginAsOwner(app);
+
+    await prisma.shift.updateMany({
+      where: { storeId: storeCh1, closedAt: null },
+      data: { closedAt: new Date(), closingCash: 0 },
+    });
+    const shift = await prisma.shift.create({
+      data: {
+        id: randomUUID(),
+        storeId: storeCh1,
+        userId: login.user.id,
+        openingCash: 100000,
+        openedAt: new Date(),
+      },
+    });
+
+    const saleId = randomUUID();
+    const now = new Date();
+    await prisma.sale.create({
+      data: {
+        id: saleId,
+        storeId: storeCh1,
+        shiftId: shift.id,
+        soldById: login.user.id,
+        paymentMethod: 'cash',
+        cashAmount: 20000,
+        transferAmount: 0,
+        debtAmount: 0,
+        discountVnd: 0,
+        totalVnd: 20000,
+        clientCreatedAt: now,
+        lines: {
+          create: [
+            {
+              id: randomUUID(),
+              productId,
+              qty: '2',
+              unitPrice: 10000,
+              lineTotal: 20000,
+            },
+          ],
+        },
+      },
+    });
+
+    // Split tự nhất quán nội bộ (15000 = 15000+0+0, qua được check cũ) nhưng
+    // KHÔNG khớp tổng dòng hàng trả thật (lineRefundVnd=10000, ứng với trả
+    // đúng 1/2 đơn vị đã bán) — mô phỏng payload lỗi hoặc bị chỉnh tay qua
+    // OutboxEditSheet (raw JSON) mà H2 phải chặn.
+    const returnId = randomUUID();
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'polish-return-mismatch',
+        sales: [],
+        saleReturns: [
+          {
+            id: returnId,
+            storeId: storeCh1,
+            originalSaleId: saleId,
+            shiftId: shift.id,
+            cashRefundVnd: 15000,
+            transferRefundVnd: 0,
+            debtCreditVnd: 0,
+            totalRefundVnd: 15000,
+            clientCreatedAt: now.toISOString(),
+            lines: [
+              {
+                productId,
+                qty: '1',
+                unitPrice: 10000,
+                lineRefundVnd: 10000,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(res.body.rejectedSaleReturns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: returnId,
+          reason: 'refund_total_mismatch',
+        }),
+      ]),
+    );
+    expect(res.body.acceptedSaleReturnIds ?? []).not.toContain(returnId);
+    const stored = await prisma.saleReturn.findUnique({
+      where: { id: returnId },
+    });
+    expect(stored).toBeNull();
+  });
+
+  it('accepts sale_return when totalRefundVnd matches sum of lines (H2)', async () => {
+    const login = await loginAsOwner(app);
+
+    await prisma.shift.updateMany({
+      where: { storeId: storeCh1, closedAt: null },
+      data: { closedAt: new Date(), closingCash: 0 },
+    });
+    const shift = await prisma.shift.create({
+      data: {
+        id: randomUUID(),
+        storeId: storeCh1,
+        userId: login.user.id,
+        openingCash: 100000,
+        openedAt: new Date(),
+      },
+    });
+
+    const saleId = randomUUID();
+    const now = new Date();
+    await prisma.sale.create({
+      data: {
+        id: saleId,
+        storeId: storeCh1,
+        shiftId: shift.id,
+        soldById: login.user.id,
+        paymentMethod: 'cash',
+        cashAmount: 20000,
+        transferAmount: 0,
+        debtAmount: 0,
+        discountVnd: 0,
+        totalVnd: 20000,
+        clientCreatedAt: now,
+        lines: {
+          create: [
+            {
+              id: randomUUID(),
+              productId,
+              qty: '2',
+              unitPrice: 10000,
+              lineTotal: 20000,
+            },
+          ],
+        },
+      },
+    });
+
+    // Cùng dữ liệu như test mismatch ở trên, nhưng totalRefundVnd/split khớp
+    // đúng tổng lines[] (10000 = 10000) — phải vẫn được accept như hành vi
+    // cũ, không bị H2 làm regress.
+    const returnId = randomUUID();
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'polish-return-match',
+        sales: [],
+        saleReturns: [
+          {
+            id: returnId,
+            storeId: storeCh1,
+            originalSaleId: saleId,
+            shiftId: shift.id,
+            cashRefundVnd: 10000,
+            transferRefundVnd: 0,
+            debtCreditVnd: 0,
+            totalRefundVnd: 10000,
+            clientCreatedAt: now.toISOString(),
+            lines: [
+              {
+                productId,
+                qty: '1',
+                unitPrice: 10000,
+                lineRefundVnd: 10000,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(res.body.acceptedSaleReturnIds).toContain(returnId);
+    const stored = await prisma.saleReturn.findUniqueOrThrow({
+      where: { id: returnId },
+    });
+    expect(stored.totalRefundVnd).toBe(10000);
+    expect(stored.cashRefundVnd).toBe(10000);
+  });
 });

@@ -17,6 +17,12 @@ String? labelOutboxReason(String? code) {
     'store_forbidden' || 'role_forbidden' => 'Không có quyền / cửa hàng',
     'shift_not_open' || 'shift_not_found' => 'Ca chưa mở / không tìm thấy ca',
     'invalid_payload' || 'invalid_qty' => 'Dữ liệu không hợp lệ',
+    // Server đối chiếu tổng hoàn (totalRefundVnd) với tổng cộng dồn từng
+    // dòng hàng trả (lines[].lineRefundVnd) — chỉ lệch khi payload lỗi hoặc
+    // bị sửa tay qua ô sửa JSON thô (OutboxEditSheet). Luồng nhập liệu bình
+    // thường trên máy luôn tự tính khớp nên không tự phát sinh nhãn này.
+    'refund_total_mismatch' =>
+      'Tổng tiền hoàn không khớp tổng các dòng hàng trả — kiểm tra lại số liệu',
     // Phải khớp `outboxSyncRetryExhaustedReason` trong
     // `data/local/database.dart` — entry đã tự retry (backoff cấp số nhân)
     // nhiều lần do lỗi hạ tầng (mất mạng, server sập) và bị chuyển sang
