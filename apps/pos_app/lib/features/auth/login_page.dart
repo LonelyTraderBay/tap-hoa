@@ -5,12 +5,14 @@ import '../../data/sync/outbox_worker.dart';
 import '../../data/sync/pull_catalog.dart';
 import '../../data/sync/sync_scheduler.dart';
 import 'auth_repository.dart';
+import 'entry_choice_page.dart';
 import '../cash/cash_voucher_service.dart';
 import '../customers/customer_repository.dart';
 import '../customers/debt_payment_service.dart';
 import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
 import '../products/product_service.dart';
+import '../quick_view/quick_view_hub_page.dart';
 import '../reports/day_report_repository.dart';
 import '../reports/stock_on_hand_repository.dart';
 import '../shifts/open_shift_page.dart';
@@ -88,25 +90,45 @@ class _LoginPageState extends State<LoginPage> {
         // ignore
       }
       if (mounted) {
+        // §4.8 "Xem nhanh, không mở ca": owner/store_manager thấy thêm lựa
+        // chọn ngoài luồng mở ca (EntryChoicePage); cashier giữ nguyên hành
+        // vi cũ — luôn thẳng OpenShiftPage vì việc chính là bán hàng tại
+        // quầy, không cần (và không được cấp) lối tắt này.
+        final destination = quickViewAllowedForRole(user.role)
+            ? EntryChoicePage(
+                user: user,
+                shiftRepository: widget.shiftRepository,
+                dayReportRepository: widget.dayReportRepository,
+                stockOnHandRepository: widget.stockOnHandRepository,
+                productRepository: widget.productRepository,
+                productService: widget.productService,
+                customerRepository: widget.customerRepository,
+                debtPaymentService: widget.debtPaymentService,
+                cashVoucherService: widget.cashVoucherService,
+                database: widget.database,
+                pullCatalog: widget.pullCatalog,
+                checkoutService: widget.checkoutService,
+                outboxWorker: widget.outboxWorker,
+                syncSchedulerKey: widget.syncSchedulerKey,
+              )
+            : OpenShiftPage(
+                repository: widget.shiftRepository,
+                user: user,
+                dayReportRepository: widget.dayReportRepository,
+                stockOnHandRepository: widget.stockOnHandRepository,
+                productRepository: widget.productRepository,
+                productService: widget.productService,
+                customerRepository: widget.customerRepository,
+                debtPaymentService: widget.debtPaymentService,
+                cashVoucherService: widget.cashVoucherService,
+                database: widget.database,
+                pullCatalog: widget.pullCatalog,
+                checkoutService: widget.checkoutService,
+                outboxWorker: widget.outboxWorker,
+                syncSchedulerKey: widget.syncSchedulerKey,
+              );
         await Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => OpenShiftPage(
-              repository: widget.shiftRepository,
-              user: user,
-              dayReportRepository: widget.dayReportRepository,
-              stockOnHandRepository: widget.stockOnHandRepository,
-              productRepository: widget.productRepository,
-              productService: widget.productService,
-              customerRepository: widget.customerRepository,
-              debtPaymentService: widget.debtPaymentService,
-              cashVoucherService: widget.cashVoucherService,
-              database: widget.database,
-              pullCatalog: widget.pullCatalog,
-              checkoutService: widget.checkoutService,
-              outboxWorker: widget.outboxWorker,
-              syncSchedulerKey: widget.syncSchedulerKey,
-            ),
-          ),
+          MaterialPageRoute<void>(builder: (_) => destination),
         );
       }
     } catch (_) {

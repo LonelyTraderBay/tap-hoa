@@ -108,17 +108,119 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('navigates to open shift after login', (tester) async {
+  testWidgets(
+    'owner sees the entry choice screen after login, then reaches open shift',
+    (tester) async {
+      final repository = MockAuthRepository();
+      final shiftRepository = MockShiftRepository();
+      when(() => repository.login('0900000001', '123456')).thenAnswer(
+        (_) async => const AuthUser(
+          id: 'user-1',
+          name: 'Owner',
+          role: 'owner',
+          storeIds: ['store-1'],
+          canLedger: true,
+          canEinvoice: true,
+        ),
+      );
+      when(() => shiftRepository.fetchStores()).thenAnswer(
+        (_) async => const [
+          StoreOption(id: 'store-1', code: 'CH1', name: 'Cửa hàng 1'),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildApp(
+          database: database,
+          authRepository: repository,
+          shiftRepository: shiftRepository,
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField).at(0), '0900000001');
+      await tester.enterText(find.byType(TextField).at(1), '123456');
+      await tester.tap(find.widgetWithText(FilledButton, 'Đăng nhập'));
+      await tester.pumpAndSettle();
+
+      // §4.8 G3: owner thấy màn chọn giữa "Mở ca bán hàng" và "Xem nhanh
+      // (không mở ca)" thay vì thẳng OpenShiftPage như trước G3.
+      expect(find.text('Xin chào Owner'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Mở ca bán hàng'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Xem nhanh (không mở ca)'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Mở ca bán hàng'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mở ca'), findsWidgets);
+      expect(find.text('Xin chào Owner'), findsOneWidget);
+      await unmount(tester);
+    },
+  );
+
+  testWidgets(
+    'owner reaches the quick-view hub by choosing "Xem nhanh (không mở ca)"',
+    (tester) async {
+      final repository = MockAuthRepository();
+      final shiftRepository = MockShiftRepository();
+      when(() => repository.login('0900000001', '123456')).thenAnswer(
+        (_) async => const AuthUser(
+          id: 'user-1',
+          name: 'Owner',
+          role: 'owner',
+          storeIds: ['store-1'],
+          canLedger: true,
+          canEinvoice: true,
+        ),
+      );
+      when(() => shiftRepository.fetchStores()).thenAnswer(
+        (_) async => const [
+          StoreOption(id: 'store-1', code: 'CH1', name: 'Cửa hàng 1'),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildApp(
+          database: database,
+          authRepository: repository,
+          shiftRepository: shiftRepository,
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField).at(0), '0900000001');
+      await tester.enterText(find.byType(TextField).at(1), '123456');
+      await tester.tap(find.widgetWithText(FilledButton, 'Đăng nhập'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.widgetWithText(OutlinedButton, 'Xem nhanh (không mở ca)'),
+      );
+      await tester.pumpAndSettle();
+
+      // Vào đúng hub "Xem nhanh" (quick_view_hub_page.dart), không mở ca.
+      expect(find.text('Xem nhanh'), findsOneWidget);
+      expect(find.text('Báo cáo doanh thu nhanh'), findsOneWidget);
+      expect(find.text('Kiểm kho / quét mã xem tồn'), findsOneWidget);
+      expect(find.text('Công nợ khách hàng'), findsOneWidget);
+      // Vẫn có lối quay lại mở ca bất cứ lúc nào từ chính hub này.
+      expect(find.widgetWithText(FilledButton, 'Mở ca bán hàng'), findsOneWidget);
+      await unmount(tester);
+    },
+  );
+
+  testWidgets('store_manager also sees the entry choice screen after login', (
+    tester,
+  ) async {
     final repository = MockAuthRepository();
     final shiftRepository = MockShiftRepository();
-    when(() => repository.login('0900000001', '123456')).thenAnswer(
+    when(() => repository.login('0900000002', '123456')).thenAnswer(
       (_) async => const AuthUser(
-        id: 'user-1',
-        name: 'Owner',
-        role: 'owner',
+        id: 'user-2',
+        name: 'Manager',
+        role: 'store_manager',
         storeIds: ['store-1'],
-        canLedger: true,
-        canEinvoice: true,
+        canLedger: false,
+        canEinvoice: false,
       ),
     );
     when(() => shiftRepository.fetchStores()).thenAnswer(
@@ -134,13 +236,59 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.byType(TextField).at(0), '0900000001');
+    await tester.enterText(find.byType(TextField).at(0), '0900000002');
     await tester.enterText(find.byType(TextField).at(1), '123456');
     await tester.tap(find.widgetWithText(FilledButton, 'Đăng nhập'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Mở ca'), findsWidgets);
-    expect(find.text('Xin chào Owner'), findsOneWidget);
+    expect(find.text('Xin chào Manager'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Mở ca bán hàng'), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, 'Xem nhanh (không mở ca)'),
+      findsOneWidget,
+    );
     await unmount(tester);
   });
+
+  testWidgets(
+    'cashier skips the entry choice screen and goes straight to open shift',
+    (tester) async {
+      final repository = MockAuthRepository();
+      final shiftRepository = MockShiftRepository();
+      when(() => repository.login('0900000003', '123456')).thenAnswer(
+        (_) async => const AuthUser(
+          id: 'user-3',
+          name: 'Cashier',
+          role: 'cashier',
+          storeIds: ['store-1'],
+          canLedger: false,
+          canEinvoice: false,
+        ),
+      );
+      when(() => shiftRepository.fetchStores()).thenAnswer(
+        (_) async => const [
+          StoreOption(id: 'store-1', code: 'CH1', name: 'Cửa hàng 1'),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildApp(
+          database: database,
+          authRepository: repository,
+          shiftRepository: shiftRepository,
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField).at(0), '0900000003');
+      await tester.enterText(find.byType(TextField).at(1), '123456');
+      await tester.tap(find.widgetWithText(FilledButton, 'Đăng nhập'));
+      await tester.pumpAndSettle();
+
+      // Hành vi cũ không đổi: thẳng OpenShiftPage, không có lựa chọn "Xem
+      // nhanh" nào cho cashier (việc chính là bán hàng tại quầy).
+      expect(find.text('Mở ca'), findsWidgets);
+      expect(find.text('Xin chào Cashier'), findsOneWidget);
+      expect(find.text('Xem nhanh (không mở ca)'), findsNothing);
+      await unmount(tester);
+    },
+  );
 }
