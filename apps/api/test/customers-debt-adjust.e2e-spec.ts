@@ -133,6 +133,45 @@ describe('Customer debt adjustment e2e', () => {
       balanceAfterVnd: 25000,
       debtLedgerEntryId: increase.body.debtLedgerEntryId,
     });
+
+    // G2 (docs/superpowers/plans/2026-07-28-va-gap-audit-spec.md): 'debt_adjust'
+    // phai co trong defaultAuditActions de man "So . Nhat ky" tren Flutter
+    // (ledger_page.dart, goi listAudit KHONG truyen `action`) thay duoc log
+    // nay. Goi thang GET /ledger/audit khong truyen `action` (giong het cach
+    // client that goi) roi tim ban ghi theo entityId - neu allowlist thieu
+    // 'debt_adjust' thi mang tra ve se rong va assertion duoi day se fail.
+    const auditApi = await request(app.getHttpServer())
+      .get('/ledger/audit')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .expect(200);
+    const auditEntriesViaHttp = (
+      auditApi.body as Array<{
+        action: string;
+        entityId: string | null;
+        actorUserId: string | null;
+        entityType: string;
+        detailJson: string | null;
+      }>
+    ).filter(
+      (row) => row.action === 'debt_adjust' && row.entityId === customerId,
+    );
+    expect(auditEntriesViaHttp).toHaveLength(2);
+    // GET /ledger/audit sap xep moi nhat truoc (orderBy at desc) nen phan tu
+    // dau la lan dieu chinh giam (-5000, do manager thuc hien).
+    expect(auditEntriesViaHttp[0]).toMatchObject({
+      actorUserId: manager.userId,
+      entityType: 'customer',
+    });
+    expect(JSON.parse(auditEntriesViaHttp[0].detailJson ?? '{}')).toMatchObject({
+      amountVnd: -5000,
+      reason: 'Giam tru chot cong no',
+      balanceBeforeVnd: 25000,
+      balanceAfterVnd: 20000,
+    });
+    expect(auditEntriesViaHttp[1]).toMatchObject({
+      actorUserId: owner.userId,
+      entityType: 'customer',
+    });
   });
 
   it('rejects cashier access, zero amount, missing reason, and negative balances', async () => {

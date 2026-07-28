@@ -147,7 +147,12 @@ class ProductService {
             ))
           .getSingleOrNull();
 
-      Map<String, String>? seedStock;
+      // minQty ("Tồn tối thiểu") phải luôn được ghi lại — kể cả khi sản phẩm
+      // đã có dòng tồn kho tại điểm bán này — nên seedStock luôn được gửi đi.
+      // Khi đã có tồn, không đụng tới qty thực tế (giữ nguyên như cũ), chỉ
+      // cập nhật minQty; backend (`upsertFromSync`) cũng chỉ áp dụng minQty
+      // trong nhánh "existing" đó.
+      final Map<String, String> seedStock;
       if (existingStock == null) {
         await _db.into(_db.productStocks).insert(
           ProductStocksCompanion.insert(
@@ -159,6 +164,18 @@ class ProductService {
           ),
         );
         seedStock = {'qty': initialQty, 'minQty': minQty};
+      } else {
+        await (_db.update(_db.productStocks)
+              ..where(
+                (t) => t.productId.equals(id) & t.storeId.equals(storeId),
+              ))
+            .write(
+          ProductStocksCompanion(
+            minQty: Value(minQty),
+            updatedAt: Value(now),
+          ),
+        );
+        seedStock = {'qty': existingStock.qty, 'minQty': minQty};
       }
 
       await _replaceComponents(id, components);
@@ -218,7 +235,7 @@ class ProductService {
     required int basePriceVnd,
     required int costVnd,
     required bool active,
-    required Map<String, String>? seedStock,
+    required Map<String, String> seedStock,
     required List<ComboComponentInput> components,
     required DateTime createdAt,
   }) async {
@@ -237,6 +254,7 @@ class ProductService {
       'costVnd': costVnd,
       'active': active,
       'storeId': storeId,
+      'seedStock': seedStock,
       'components': [
         for (final c in components)
           {
@@ -245,9 +263,6 @@ class ProductService {
           },
       ],
     };
-    if (seedStock != null) {
-      payload['seedStock'] = seedStock;
-    }
     await _db.into(_db.outboxEntries).insert(
       OutboxEntriesCompanion.insert(
         id: _uuid.v4(),

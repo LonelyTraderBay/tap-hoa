@@ -564,6 +564,7 @@ class _PosPageState extends State<PosPage> {
             db: widget.database,
             worker: widget.outboxWorker,
           ),
+          role: widget.role,
           db: widget.database,
         ),
       ),

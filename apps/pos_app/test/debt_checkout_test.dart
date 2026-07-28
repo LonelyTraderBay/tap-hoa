@@ -171,11 +171,12 @@ void main() {
     );
 
     final unlimited = await customerRepository.create(name: 'Unlimited');
-    final saleId = await checkout.complete(
+    final result = await checkout.complete(
       cart: cartWithStingQty2(),
       payment: const PaymentSplit(debt: 20000),
       customerId: unlimited.id,
     );
+    final saleId = result.saleId;
 
     final row = await (db.select(db.customersLocal)
           ..where((r) => r.id.equals(unlimited.id)))

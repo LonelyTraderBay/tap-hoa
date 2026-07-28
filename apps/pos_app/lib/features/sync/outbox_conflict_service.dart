@@ -21,12 +21,21 @@ class OutboxConflictService {
     await _worker.tick();
   }
 
-  Future<void> retryAll() async {
+  /// §6.3: `dead_letter` (hết lượt retry hạ tầng) là mốc "nghiêm trọng" —
+  /// [includeDeadLetter]`= false` (dùng khi caller là cashier, xem
+  /// `outbox_conflicts_page.dart::outboxDeadLetterActionsAllowedForRole`)
+  /// loại các dòng đó khỏi lượt "Thử lại tất cả", để nút bulk không trở
+  /// thành lối vòng qua khoá per-row đã áp cho cashier. Dòng `error` (chưa
+  /// tới ngưỡng nghiêm trọng) luôn được thử lại, không phân biệt role.
+  Future<void> retryAll({bool includeDeadLetter = true}) async {
     final errors = await _db.listOutboxErrors();
-    for (final entry in errors) {
+    final targets = includeDeadLetter
+        ? errors
+        : errors.where((entry) => entry.status != 'dead_letter').toList();
+    for (final entry in targets) {
       await _db.requeueOutbox(entry.id);
     }
-    if (errors.isNotEmpty) {
+    if (targets.isNotEmpty) {
       await _worker.tick();
     }
   }

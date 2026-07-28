@@ -15,6 +15,7 @@ import '../customers/debt_payment_service.dart';
 import '../pos/checkout_service.dart';
 import '../products/product_repository.dart';
 import '../products/product_service.dart';
+import '../quick_view/quick_view_hub_page.dart';
 import 'shift_repository.dart';
 
 class OpenShiftPage extends StatefulWidget {
@@ -62,6 +63,11 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
   bool _isLoading = true;
   bool _isSubmitting = false;
   String? _message;
+  // DoD G3: màn báo lỗi "đã có ca đang mở ở máy khác" không được chặn cứng
+  // — owner/store_manager phải có lối thoát sang "Xem nhanh" thay vì kẹt ở
+  // đây. Cờ riêng (thay vì so khớp chuỗi `_message`) để không phụ thuộc nội
+  // dung text hiển thị.
+  bool _shiftAlreadyOpenElsewhere = false;
 
   @override
   void initState() {
@@ -108,6 +114,7 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
     setState(() {
       _isSubmitting = true;
       _message = null;
+      _shiftAlreadyOpenElsewhere = false;
     });
 
     try {
@@ -142,7 +149,10 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
       );
     } on ShiftAlreadyOpenException {
       if (!mounted) return;
-      setState(() => _message = 'Đã có ca đang mở tại cửa hàng này');
+      setState(() {
+        _message = 'Đã có ca đang mở tại cửa hàng này';
+        _shiftAlreadyOpenElsewhere = true;
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() => _message = 'Mở ca thất bại');
@@ -151,6 +161,29 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _openQuickView() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => QuickViewHubPage(
+          user: widget.user,
+          shiftRepository: widget.repository,
+          dayReportRepository: widget.dayReportRepository,
+          stockOnHandRepository: widget.stockOnHandRepository,
+          productRepository: widget.productRepository,
+          productService: widget.productService,
+          customerRepository: widget.customerRepository,
+          debtPaymentService: widget.debtPaymentService,
+          cashVoucherService: widget.cashVoucherService,
+          database: widget.database,
+          pullCatalog: widget.pullCatalog,
+          checkoutService: widget.checkoutService,
+          outboxWorker: widget.outboxWorker,
+          syncSchedulerKey: widget.syncSchedulerKey,
+        ),
+      ),
+    );
   }
 
   @override
@@ -214,6 +247,15 @@ class _OpenShiftPageState extends State<OpenShiftPage> {
                       if (_message != null) ...[
                         const SizedBox(height: 12),
                         Text(_message!, textAlign: TextAlign.center),
+                      ],
+                      if (_shiftAlreadyOpenElsewhere &&
+                          quickViewAllowedForRole(widget.user.role)) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _openQuickView,
+                          icon: const Icon(Icons.visibility_outlined),
+                          label: const Text('Xem nhanh (không mở ca)'),
+                        ),
                       ],
                     ],
                   ),

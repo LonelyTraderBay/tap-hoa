@@ -31,7 +31,18 @@ class DebtPaymentService {
       throw StateError('Missing store or user session');
     }
     final userId = (jsonDecode(userJson) as Map<String, dynamic>)['id'] as String;
-    final shift = await _shiftRepository.requireOpenShift(
+    // §4.8 "Xem nhanh, không mở ca": thu nợ tại chỗ phải hoạt động cả khi
+    // không có ca nào đang mở (owner/store_manager xem ngoài quầy — xem
+    // quick_view_hub_page.dart). Trước G3, dòng này gọi requireOpenShift và
+    // ném NoOpenShiftException khiến thu nợ luôn thất bại nếu chưa mở ca.
+    // Đổi sang findOpenShift (trả null thay vì throw) là an toàn vì kiến
+    // trúc đã sẵn sàng cho shiftId rỗng ở cả hai đầu:
+    //  - Local schema: DebtLedgerLocal.shiftId nullable
+    //    (data/local/tables.dart).
+    //  - Server: DebtLedgerEntry.shiftId nullable (prisma/schema.prisma) và
+    //    sync.service.ts::processDebtPayment không bắt buộc shiftId, đã tự
+    //    `payment.shiftId ?? null` từ trước.
+    final shift = await _shiftRepository.findOpenShift(
       storeId: storeId,
       userId: userId,
     );
@@ -62,7 +73,7 @@ class DebtPaymentService {
           type: 'payment',
           amountVnd: amountVnd,
           balanceAfterVnd: newBalance,
-          shiftId: Value(shift.id),
+          shiftId: Value(shift?.id),
           recordedById: userId,
           paymentMethod: Value(paymentMethod),
           note: Value(note),
@@ -81,7 +92,7 @@ class DebtPaymentService {
             'amountVnd': amountVnd,
             'paymentMethod': paymentMethod,
             'note': note,
-            'shiftId': shift.id,
+            'shiftId': shift?.id,
             'clientCreatedAt': now.toUtc().toIso8601String(),
             'recordedById': userId,
           }),

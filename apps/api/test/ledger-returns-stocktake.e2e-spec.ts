@@ -58,6 +58,9 @@ describe('Phase 2 closeout: return + stocktake journals', () => {
     await prisma.saleReturn.deleteMany({ where: { storeId } });
     await prisma.saleLine.deleteMany({ where: { sale: { storeId } } });
     await prisma.sale.deleteMany({ where: { storeId } });
+    await prisma.auditLog.deleteMany({
+      where: { action: 'sale_return_create' },
+    });
     await prisma.shift.updateMany({
       where: { storeId, closedAt: null },
       data: { closedAt: new Date(), closingCash: 0 },
@@ -136,6 +139,7 @@ describe('Phase 2 closeout: return + stocktake journals', () => {
               transferRefundVnd: 0,
               debtCreditVnd: 0,
               totalRefundVnd: 15000,
+              note: 'Khach doi y, tra lai hang',
               clientCreatedAt: now,
               lines: [
                 {
@@ -173,6 +177,37 @@ describe('Phase 2 closeout: return + stocktake journals', () => {
     expect(entries[0].lines.find((l) => l.accountCode === '632')?.creditVnd).toBe(
       9000,
     );
+
+    // §5.7: trả hàng phải để lại nhật ký kiểm soát, thấy được qua GET
+    // /ledger/audit ngay cả khi client không truyền `action` (allowlist mặc
+    // định phải chứa 'sale_return_create' — xem defaultAuditActions).
+    const auditRows = await prisma.auditLog.findMany({
+      where: { action: 'sale_return_create', entityId: returnId },
+    });
+    expect(auditRows).toHaveLength(1);
+
+    const auditApi = await request(app.getHttpServer())
+      .get('/ledger/audit')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const auditEntry = auditApi.body.find(
+      (row: { action: string; entityId: string | null }) =>
+        row.action === 'sale_return_create' && row.entityId === returnId,
+    );
+    expect(auditEntry).toMatchObject({
+      actorUserId: userId,
+      entityType: 'sale_return',
+      entityId: returnId,
+    });
+    expect(JSON.parse(auditEntry.detailJson)).toMatchObject({
+      saleId,
+      storeId,
+      totalVnd: 15000,
+      cashRefundVnd: 15000,
+      transferRefundVnd: 0,
+      debtCreditVnd: 0,
+      reason: 'Khach doi y, tra lai hang',
+    });
   });
 
   it('stocktake decrease posts Dr 642 Cr 156; period lock blocks', async () => {

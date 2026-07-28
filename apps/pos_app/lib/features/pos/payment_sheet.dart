@@ -136,11 +136,12 @@ class _PaymentSheetState extends State<PaymentSheet> {
 
     try {
       final soldAt = DateTime.now();
-      final saleId = await widget.checkoutService.complete(
+      final result = await widget.checkoutService.complete(
         cart: widget.cart,
         payment: payment,
         customerId: _selectedCustomer?.id,
       );
+      final saleId = result.saleId;
       if (!mounted) return;
 
       final lines = widget.cart.lines
@@ -183,6 +184,15 @@ class _PaymentSheetState extends State<PaymentSheet> {
         }
       }
       if (!mounted) return;
+      // Spec §6.2: đơn đã hoàn tất bình thường (allowNegativeStock=true nên
+      // không bị chặn) — đây chỉ là cảnh báo thêm SAU khi hoàn tất, không
+      // phải dialog xác nhận chặn luồng, để không làm chậm thao tác bán
+      // hàng tiếp theo của thu ngân.
+      if (result.negativeStockWarnings.isNotEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(_negativeStockSnackBar(result.negativeStockWarnings));
+      }
       Navigator.of(context).pop();
       widget.onCompleted();
     } on PaymentMismatchException {
@@ -209,6 +219,19 @@ class _PaymentSheetState extends State<PaymentSheet> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  SnackBar _negativeStockSnackBar(List<NegativeStockWarning> warnings) {
+    final productLines = warnings
+        .map((w) => '${w.productName}: còn ${w.remainingQtyLabel}')
+        .join('\n');
+    return SnackBar(
+      backgroundColor: Colors.red.shade700,
+      duration: const Duration(seconds: 8),
+      content: Text(
+        'Cảnh báo: tồn kho đã về âm, báo chủ kiểm kê\n$productLines',
+      ),
+    );
   }
 
   @override

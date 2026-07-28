@@ -101,4 +101,43 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  // §4.8 G3 "Xem nhanh, không mở ca": owner/store_manager thu nợ tại chỗ mà
+  // không mở ca bán hàng tại quầy — recordPayment không còn được phép ném
+  // NoOpenShiftException (hành vi cũ của requireOpenShift) vì kiến trúc đã
+  // hỗ trợ shiftId rỗng ở cả local schema (DebtLedgerLocal.shiftId nullable)
+  // lẫn server (DebtLedgerEntry.shiftId nullable, sync.service.ts đã dùng
+  // `payment.shiftId ?? null` từ trước).
+  test(
+    'recordPayment succeeds without an open shift and stores a null shiftId',
+    () async {
+      await seedSession(db);
+      await seedCustomer(db);
+      // Cố ý KHÔNG gọi openShift(...) — mô phỏng "Xem nhanh".
+
+      final id = await service.recordPayment(
+        customerId: 'c1',
+        amountVnd: 5000,
+        paymentMethod: 'cash',
+      );
+
+      final customer = await (db.select(
+        db.customersLocal,
+      )..where((t) => t.id.equals('c1'))).getSingle();
+      expect(customer.balanceVnd, 15000);
+
+      final ledger = await (db.select(
+        db.debtLedgerLocal,
+      )..where((t) => t.id.equals(id))).getSingle();
+      expect(ledger.type, 'payment');
+      // Not `isNull` — that matcher name collides with drift's query-builder
+      // `isNull` (both libraries are imported in this file), so use plain
+      // equality instead.
+      expect(ledger.shiftId, null);
+
+      final outbox = await db.pendingOutbox();
+      final entry = outbox.firstWhere((e) => e.entityType == 'debt_payment');
+      expect(entry.payloadJson, contains('"shiftId":null'));
+    },
+  );
 }

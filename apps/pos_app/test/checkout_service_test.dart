@@ -92,7 +92,7 @@ void main() {
     await seedSession(db);
     await openShift(shiftRepository);
 
-    final id = await checkout.complete(
+    final result = await checkout.complete(
       cart: cartWithStingQty2(),
       payment: const PaymentSplit(cash: 20000),
     );
@@ -113,7 +113,9 @@ void main() {
           ))
         .get();
     expect(outbox.single.entityType, 'sale');
-    expect(id, isNotEmpty);
+    expect(result.saleId, isNotEmpty);
+    // G5 (§6.2): còn đủ tồn (10 - 2 = 8 >= 0) — không có cảnh báo âm tồn.
+    expect(result.negativeStockWarnings, isEmpty);
 
     final sales = await db.select(db.salesLocal).get();
     expect(sales.single.totalVnd, 20000);
@@ -162,7 +164,7 @@ void main() {
     );
     await openShift(shiftRepository);
 
-    await checkout.complete(
+    final result = await checkout.complete(
       cart: cartWithStingQty2(),
       payment: const PaymentSplit(cash: 20000),
     );
@@ -174,6 +176,15 @@ void main() {
           ))
         .getSingle();
     expect(stock.qty, '-1');
+
+    // G5 (§6.2): "cho bán nếu cấu hình cho phép" đã có từ trước — phần còn
+    // thiếu là "Cảnh báo". complete() phải trả về đủ thông tin sản phẩm +
+    // tồn còn lại (âm) cho lớp UI hiển thị, dù giao dịch đã hoàn tất.
+    expect(result.negativeStockWarnings, hasLength(1));
+    final warning = result.negativeStockWarnings.single;
+    expect(warning.productId, 'p1');
+    expect(warning.productName, 'Sting');
+    expect(warning.remainingQtyLabel, '-1');
   });
 
   test('checkout requires open shift', () async {
