@@ -161,6 +161,48 @@ export class ReportsService {
     return user.storeIds;
   }
 
+  /**
+   * H3: biến thể của `resolveStoreIds` dành RIÊNG cho nhóm báo cáo KẾ TOÁN
+   * theo kỳ (`resolvePeriodStoreFilter` → `periodTrialBalance`/`periodPnl`/
+   * `vatSummary`/`periodExportCsv`/`periodExportXlsx`/`periodExportPdf`/
+   * `vatDeclarationAssist`). Khi owner xem "Tổng hợp" (không truyền
+   * `storeId`) PHẢI khớp đúng scope với `LedgerService.trialBalance`
+   * (`ledgerStoreFilter` trong `ledger/ledger.service.ts`, owner-aggregate
+   * trả về `{}` — không lọc gì) — tức KHÔNG loại `store.active=false`.
+   *
+   * Lý do nghiệp vụ: một điểm bán ngừng hoạt động thì SỔ SÁCH LỊCH SỬ của
+   * nó (bút toán `JournalEntry` đã phát sinh thật) vẫn phải xuất hiện đầy
+   * đủ trong "Tổng hợp" — ngừng hoạt động chỉ nghĩa là không bán mới, không
+   * phải xoá lịch sử kế toán. Báo cáo tài chính/thuế theo kỳ tuyệt đối
+   * không được thiếu dữ liệu của một điểm bán chỉ vì nó bị đánh dấu ngừng
+   * hoạt động SAU kỳ đó. Trước khi H3 vá, `/ledger/trial-balance` và
+   * `/reports/period/*` KHÔNG nhất quán khi cùng `storeId=null` — 2 tab
+   * cùng màn `ledger_page.dart` (Cân đối phát sinh / Báo cáo kỳ) sẽ ra 2 số
+   * khác nhau nếu tồn tại store `active=false` có bút toán lịch sử.
+   *
+   * Cố ý KHÔNG đổi `resolveStoreIds` gốc — hàm đó còn phục vụ nhóm báo cáo
+   * VẬN HÀNH dùng chung (`dayReport`/`topSkus`/`resolveDebtAgingStoreFilter`
+   * cho `debtAging`/`arExportCsv`) và `cashFundSummary` (xem phân nhóm
+   * "VẬN HÀNH" vs "KẾ TOÁN" trong comment đầu `reports.controller.ts`) —
+   * các báo cáo đó phản ánh số liệu HIỆN TẠI/sống theo ngày hoặc live
+   * balance, cố tình giữ nguyên hành vi lọc `active=true` để không lẫn số
+   * liệu vận hành hằng ngày với dữ liệu của cửa hàng đã ngừng hoạt động.
+   * Chi tiết quyết định + các nơi đã rà soát: xem "Ghi chú review H3" trong
+   * `docs/superpowers/plans/2026-07-28-h1-h6-deep-audit-fixes.md`.
+   */
+  private async resolveLedgerStoreIds(
+    user: AuthUser,
+    storeId?: string,
+  ): Promise<string[]> {
+    if (storeId || user.role !== Role.owner) {
+      return this.resolveStoreIds(user, storeId);
+    }
+    const stores = await this.prisma.store.findMany({
+      select: { id: true },
+    });
+    return stores.map((store) => store.id);
+  }
+
   async dayReport(
     user: AuthUser,
     date: string,
@@ -681,7 +723,9 @@ export class ReportsService {
     if (user.role !== Role.owner && user.role !== Role.store_manager) {
       throw new ForbiddenException('forbidden');
     }
-    const storeIds = await this.resolveStoreIds(user, storeId);
+    // H3: dùng `resolveLedgerStoreIds` (KHÔNG lọc active khi "Tổng hợp"),
+    // không phải `resolveStoreIds` — xem JSDoc của hàm đó để biết lý do.
+    const storeIds = await this.resolveLedgerStoreIds(user, storeId);
     return { storeIds, scope: storeId ? 'store' : 'aggregate' };
   }
 
@@ -1027,6 +1071,15 @@ export class ReportsService {
    * theo từng điểm bán — cùng với tổng gộp ở top-level; khi `storeId` được
    * truyền, `byStore` chỉ có đúng 1 phần tử khớp top-level (giữ nguyên hành
    * vi/field cũ, chỉ thêm field mới nên không phá test hiện có).
+   *
+   * (H3) Cố ý CHƯA đổi sang `resolveLedgerStoreIds` dù endpoint này cũng
+   * thuộc nhóm KẾ TOÁN (`canLedger`, xem `reports.controller.ts`): không
+   * nằm cùng màn hình với `/ledger/trial-balance` (bug H3 chỉ yêu cầu 2 API
+   * đó nhất quán), và 2 số nội bộ của chính báo cáo này (`netCashVnd` vs
+   * `ledgerNetCashVnd`) đã tự đối chiếu nhất quán với nhau vì cùng dùng
+   * chung `storeIds` — chỉ "thiếu" store ngừng hoạt động trong tổng gộp,
+   * không "sai lệch chéo API" như H3 mô tả. Ghi nhận làm nợ tiềm năng nếu
+   * sau này cần mở rộng.
    */
   async cashFundSummary(
     user: AuthUser,
