@@ -369,4 +369,155 @@ describe('Shifts', () => {
     // bán tiền mặt thuần, transferInShiftVnd phải giữ nguyên 0).
     expect(closed.body.transferInShiftVnd).toBe(0);
   });
+
+  // H7: shiftCloses xử lý TRƯỚC pushSaleReturns() trong cùng push() — nếu 1
+  // request /sync/push DUY NHẤT vừa có saleReturn hoàn tiền mặt vừa có
+  // shiftClose của CHÍNH ca đó, khoản hoàn tiền mặt phải đã COMMIT vào DB
+  // trước khi transaction đóng ca (loadShiftCashInputsWithClient, fix H1)
+  // chạy aggregate tính expectedCashVnd — nếu không sẽ tái phát đúng lỗi H1
+  // (báo lệch âm giả) qua nguyên nhân khác (thứ tự xử lý trong cùng request,
+  // không phải thiếu query). Đối xứng với test H1 ở trên, chỉ khác: saleReturn
+  // và shiftClose gộp CHUNG 1 request thay vì 2 request riêng (request đóng
+  // ca ở H1 đi qua REST /shifts/:id/close, còn ở đây đi qua /sync/push).
+  it('H7: hoàn tiền mặt trả hàng và đóng ca gộp CÙNG 1 request /sync/push vẫn trừ đúng khỏi expectedCashVnd', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id;
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { sku: 'STING-330' },
+    });
+    // Đặt tồn đủ lớn, độc lập với các file e2e khác đã tiêu hao tồn của SKU
+    // này trước đó trong cùng lần chạy --runInBand.
+    await prisma.productStoreStock.upsert({
+      where: { productId_storeId: { productId: product.id, storeId } },
+      create: { productId: product.id, storeId, qty: 1000, minQty: 0 },
+      update: { qty: 1000 },
+    });
+
+    const clientId = randomUUID();
+    const opened = await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 500_000, clientId })
+      .expect(201);
+    const shiftId = opened.body.id as string;
+
+    // Chứng từ phải có clientCreatedAt >= shift.openedAt.
+    const nowIso = new Date().toISOString();
+
+    // ---- bán hàng tiền mặt trong ca: 4 x 50.000 = 200.000 (request riêng —
+    // saleReturn cần originalSaleId trỏ tới 1 sale đã tồn tại trong DB) ----
+    const saleId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'shifts-h7-test',
+        sales: [
+          {
+            id: saleId,
+            storeId,
+            shiftId,
+            soldById: login.user.id,
+            paymentMethod: 'cash',
+            cashAmount: 200_000,
+            transferAmount: 0,
+            debtAmount: 0,
+            discountVnd: 0,
+            totalVnd: 200_000,
+            clientCreatedAt: nowIso,
+            lines: [
+              {
+                id: randomUUID(),
+                productId: product.id,
+                qty: '4',
+                unitPrice: 50_000,
+                lineTotal: 200_000,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.rejected ?? []).toHaveLength(0);
+        expect(res.body.acceptedIds).toContain(saleId);
+      });
+
+    // ---- CÙNG 1 request /sync/push: vừa trả 1 đơn vị (hoàn 30.000 tiền mặt
+    // + 20.000 chuyển khoản, tổng dòng hàng 50.000) VỪA đóng CHÍNH ca đó.
+    // Trước khi vá H7, vòng lặp shiftCloses chạy TRƯỚC pushSaleReturns()
+    // trong push() nên tại thời điểm transaction đóng ca aggregate
+    // SaleReturn.cashRefundVnd theo shiftId, khoản hoàn 30.000 của CÙNG
+    // request này chưa kịp commit → expectedCashVnd sai thành 700.000 (bỏ
+    // sót khoản hoàn) thay vì đúng 670.000 — tái phát lỗi H1 dù công thức
+    // tính đã đúng (H1 đã vá) chỉ vì thứ tự xử lý trong cùng request.
+    const returnId = randomUUID();
+    const push = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'shifts-h7-test',
+        sales: [],
+        saleReturns: [
+          {
+            id: returnId,
+            storeId,
+            originalSaleId: saleId,
+            shiftId,
+            cashRefundVnd: 30_000,
+            transferRefundVnd: 20_000,
+            debtCreditVnd: 0,
+            totalRefundVnd: 50_000,
+            clientCreatedAt: nowIso,
+            lines: [
+              {
+                id: randomUUID(),
+                productId: product.id,
+                qty: '1',
+                unitPrice: 50_000,
+                lineRefundVnd: 50_000,
+              },
+            ],
+          },
+        ],
+        shiftCloses: [
+          {
+            id: shiftId,
+            closingCash: 670_000,
+            closedAt: nowIso,
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(push.body.rejectedSaleReturns ?? []).toHaveLength(0);
+    expect(push.body.acceptedSaleReturnIds).toContain(returnId);
+    expect(push.body.acceptedShiftCloseIds).toContain(shiftId);
+    // expectedCashVnd = mở ca 500.000 + bán TM 200.000 − hoàn TM 30.000 =
+    // 670.000, khớp đúng closingCash đếm tay → varianceVnd = 0. Hoàn chuyển
+    // khoản (20.000) không tính vào tiền mặt lẫn transferInShiftVnd (sale
+    // gốc là bán tiền mặt thuần).
+    expect(push.body.closedShifts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: shiftId,
+          expectedCashVnd: 670_000,
+          varianceVnd: 0,
+          transferInShiftVnd: 0,
+          closingCash: 670_000,
+        }),
+      ]),
+    );
+
+    const shift = await prisma.shift.findUniqueOrThrow({
+      where: { id: shiftId },
+    });
+    expect(shift.expectedCashVnd).toBe(670_000);
+    expect(shift.varianceVnd).toBe(0);
+    expect(shift.closingCash).toBe(670_000);
+  });
 });

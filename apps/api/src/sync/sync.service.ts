@@ -258,6 +258,26 @@ export class SyncService {
       body.debtPayments ?? [],
     );
 
+    // H7: pushSaleReturns() PHẢI chạy trước vòng lặp shiftCloses. Lý do:
+    // processShiftClose → shiftsService.closeFromSync → close() tính
+    // expectedCashVnd bằng aggregate query DB THẬT tại đúng thời điểm gọi
+    // (loadShiftCashInputsWithClient, tổng SaleReturn.cashRefundVnd theo
+    // shiftId — fix H1). Nếu 1 request /sync/push vừa có saleReturn hoàn
+    // tiền mặt vừa có shiftClose của CHÍNH ca đó, khoản hoàn tiền phải đã
+    // COMMIT vào DB trước khi transaction đóng ca chạy aggregate, nếu không
+    // sẽ tái phát lỗi H1 (báo lệch âm giả) qua đường thứ tự trong cùng
+    // request thay vì thiếu query. Đã xác nhận đổi thứ tự này an toàn:
+    // sale-returns.service.ts::processFromSync không đọc/ghi gì liên quan
+    // Shift (không có shift_not_open check, không cần ca đang mở) và không
+    // phụ thuộc customerUpserts/productUpserts/productGroupUpserts trong
+    // cùng batch (Sale gốc mà return tham chiếu luôn đã tồn tại từ trước,
+    // được pushSales() xử lý ở trên, không đổi vị trí) — xem "Ghi chú review
+    // H7" trong docs/superpowers/plans/2026-07-28-h1-h6-deep-audit-fixes.md.
+    const returnResult = await this.pushSaleReturns(
+      user,
+      body.saleReturns ?? [],
+    );
+
     const acceptedShiftCloseIds: string[] = [];
     const closedShifts: ClosedShiftSnapshot[] = [];
     for (const shift of body.shiftCloses ?? []) {
@@ -282,11 +302,6 @@ export class SyncService {
     const groupResult = await this.pushProductGroupUpserts(
       user,
       body.productGroupUpserts ?? [],
-    );
-
-    const returnResult = await this.pushSaleReturns(
-      user,
-      body.saleReturns ?? [],
     );
 
     await this.prisma.syncCursor.upsert({
