@@ -8,6 +8,13 @@
 
 **Không nằm trong phạm vi đợt này** (ghi nhận nhưng chưa đủ rõ ý định để coi là gap): backup/restore phía server (chỉ có client), "gửi ảnh hóa đơn" gửi PDF thay vì ảnh raster.
 
+### Đóng 2 mục còn lại (2026-07-28, sau khi hỏi lại user)
+
+- **Backup/restore phía server** — **Không phải gap.** Audit ban đầu chỉ quét `apps/api/src` (code), bỏ sót `docs/ops/production-deploy.md` — file này đã có sẵn quy trình đầy đủ đúng spec §6.3 "khôi phục từ backup... server": mục "4. Daily PostgreSQL backup" (`pg_dump` qua cron hằng ngày, giữ ≥7 bản, checklist copy ra ngoài VPS + restore trial trước go-live), mục "5. 15-minute rollback drill" (restore snapshot pre-deploy). README.md dòng 175-176/196 cũng dẫn tới đúng file này. Kết luận: đã đáp ứng ở tầng ops runbook, không cần code — bài học cho lần audit sau: phải quét cả `docs/ops/*.md`, không chỉ code.
+- **"Gửi ảnh hóa đơn" gửi PDF** — **Giữ nguyên, đóng gap.** User xác nhận PDF đạt đúng tinh thần spec (gửi qua Zalo/Messenger, xem/in được); không đáng thêm code render ảnh PNG riêng chỉ để khớp câu chữ.
+
+**Kết quả:** toàn bộ 8/8 mục phát hiện qua audit code-vs-spec 2026-07-28 đã đóng (6 vá code qua G1-G6 đã merge PR #28, 2 xác nhận không phải gap thật). Không còn backlog nào từ đợt audit này.
+
 **Architecture:** Không đổi monorepo. Offline-first giữ nguyên: chứng từ mới → Drift + outbox + sync DTO + e2e. Bút toán/audit mới bám `LedgerService` / `journal-builders` + `defaultAuditActions` allowlist.
 
 **Tech Stack:** NestJS 10 + Prisma + PostgreSQL (`apps/api`); Flutter 3 + Drift (`apps/pos_app`).
