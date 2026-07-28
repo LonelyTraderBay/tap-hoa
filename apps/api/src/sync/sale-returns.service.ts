@@ -256,6 +256,27 @@ export class SaleReturnsService {
             },
           });
         }
+
+        // §5.7: trả hàng/hủy đơn phải có nhật ký kiểm soát — ghi cùng
+        // transaction tạo SaleReturn để không thể có bản ghi mồ côi.
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: user.userId,
+            action: 'sale_return_create',
+            entityType: 'sale_return',
+            entityId: dto.id,
+            detailJson: JSON.stringify({
+              saleId: dto.originalSaleId,
+              storeId: dto.storeId,
+              totalVnd: total,
+              cashRefundVnd: cash,
+              transferRefundVnd: transfer,
+              debtCreditVnd: debtCredit,
+              reason: dto.note ?? null,
+            }),
+          },
+        });
       });
       await this.ledger.safePost(
         () => this.ledger.postFromSaleReturn(dto.id, user.userId),

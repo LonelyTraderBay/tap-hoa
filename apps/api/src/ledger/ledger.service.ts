@@ -38,6 +38,7 @@ export class LedgerService {
     'einvoice_issue',
     'einvoice_cancel',
     'einvoice_adjust',
+    'sale_return_create',
   ];
 
   constructor(private readonly prisma: PrismaService) {}

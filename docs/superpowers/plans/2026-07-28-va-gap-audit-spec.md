@@ -26,7 +26,7 @@
 
 | Task | Mô tả | Ưu tiên | Status |
 |------|-------|---------|--------|
-| **G1** | Ghi AuditLog cho trả hàng/hủy đơn | Cao | Chưa |
+| **G1** | Ghi AuditLog cho trả hàng/hủy đơn | Cao | Done (build xanh, unit 76/76, e2e 39 suite/140 test pass) |
 | **G2** | Rà soát + bổ sung toàn bộ action còn thiếu trong `defaultAuditActions` allowlist | Cao | Chưa |
 | **G3** | Lối "Xem nhanh, không mở ca" cho app ngoài quầy (owner/store_manager) | Cao | Chưa |
 | **G4** | Sửa `minQty` không sửa được sau khi tạo sản phẩm | Trung bình | Chưa |
@@ -40,10 +40,10 @@
 **Vấn đề:** `apps/api/src/sync/sale-returns.service.ts::processFromSync` (dòng 39-275) tạo `SaleReturn` + `StockMovement` + bút toán sổ cái (`postFromSaleReturn`) nhưng **không hề gọi `tx.auditLog.create`**. Đây đúng là nghiệp vụ "xóa/hủy đơn" mà spec §5.7 yêu cầu phải có nhật ký — hiện không có dấu vết nào trong `AuditLog`.
 
 **DoD:**
-- [ ] `processFromSync` ghi 1 `AuditLog` khi tạo `SaleReturn` thành công, action đặt tên nhất quán với các action hiện có (vd `sale_return_create`), payload đủ để truy vết: `saleId`, `storeId`, actor (`userId`), số tiền hoàn, lý do (nếu client có gửi).
-- [ ] Action mới được thêm vào `defaultAuditActions` (`ledger.service.ts`) **ngay trong task này** — không để lặp lại đúng lỗi của G2.
-- [ ] `sale-returns.e2e-spec.ts` (hoặc file e2e liên quan) có test: trả hàng xong → `GET /ledger/audit` (không truyền `action`) trả về đúng bản ghi, đủ field.
-- [ ] `npm run build` + `test:unit` + full `test:e2e` xanh (container Postgres riêng).
+- [x] `processFromSync` ghi 1 `AuditLog` khi tạo `SaleReturn` thành công, action đặt tên nhất quán với các action hiện có (vd `sale_return_create`), payload đủ để truy vết: `saleId`, `storeId`, actor (`userId`), số tiền hoàn, lý do (nếu client có gửi).
+- [x] Action mới được thêm vào `defaultAuditActions` (`ledger.service.ts`) **ngay trong task này** — không để lặp lại đúng lỗi của G2.
+- [x] `sale-returns.e2e-spec.ts` (hoặc file e2e liên quan) có test: trả hàng xong → `GET /ledger/audit` (không truyền `action`) trả về đúng bản ghi, đủ field.
+- [x] `npm run build` + `test:unit` + full `test:e2e` xanh (container Postgres riêng).
 
 ---
 
@@ -122,3 +122,21 @@
 | Review | Orchestrator đọc diff + tự chạy lại build/test/e2e độc lập trước khi tick DoD |
 | Commit | 1 commit/task, message tiếng Việt mô tả rõ, cập nhật bảng Trạng thái + tick DoD trong cùng commit |
 | Thứ tự | G1 → G2 → G3 → G4 → G5 → G6 (nghiêm trọng trước, còn lại theo thứ tự phát hiện) |
+
+---
+
+### Ghi chú review G1
+
+**Action string đã chọn:** `sale_return_create` — theo đúng gợi ý trong DoD, giữ style `<entity>_<verb>` nhất quán với các action hiện có (`product_price_change`, `debt_adjust`, `einvoice_issue/cancel/adjust`, `user_create`). `entityType` dùng `'sale_return'`, `entityId` = `SaleReturn.id` — khớp với convention đã có sẵn của `journal_blocked_period_lock` khi nguồn là sale_return (xem `postEntry` trong `ledger.service.ts`, dùng `auditSourceType ?? sourceType`).
+
+**Evidence (file:line):**
+- Ghi `AuditLog` trong cùng transaction tạo `SaleReturn`: `apps/api/src/sync/sale-returns.service.ts:260-279` (`tx.auditLog.create` ngay sau khối cập nhật công nợ, vẫn trong `this.prisma.$transaction(...)` bắt đầu ở dòng 171 — đảm bảo không có bản ghi `SaleReturn` nào thiếu audit tương ứng, kể cả khi rollback). Payload `detailJson` gồm `saleId` (= `dto.originalSaleId`), `storeId`, `totalVnd`, `cashRefundVnd`, `transferRefundVnd`, `debtCreditVnd`, `reason` (= `dto.note ?? null`); actor nằm ở field top-level `actorUserId` (theo đúng convention của `customers.service.ts`/`products.service.ts`, không lặp lại trong `detailJson`).
+- Bổ sung allowlist: `apps/api/src/ledger/ledger.service.ts:41` — thêm `'sale_return_create'` vào `defaultAuditActions` (mảng dòng 30-42), để `GET /ledger/audit` không truyền `action` vẫn trả về log này (tránh lặp lại lỗi G2 mô tả với `debt_adjust`).
+- Test e2e: mở rộng test có sẵn `apps/api/test/ledger-returns-stocktake.e2e-spec.ts` (`it('sale return posts reverse revenue/COGS; idempotent', ...)`, dòng 46) thay vì tạo file `sale-returns.e2e-spec.ts` mới, vì file này đã dựng sẵn đúng luồng sale → sale_return qua `/sync/push` và đã có `token`/`userId`/`storeId`/`returnId` trong scope. Assertions mới ở dòng 181-210: kiểm tra đúng 1 bản ghi `AuditLog` cho `returnId` (không bị ghi trùng khi `pushReturn()` gọi lại lần 2 — do khối `existing` check nằm ngoài transaction nên lần retry không chạm lại `tx.auditLog.create`), gọi thật `GET /ledger/audit` **không truyền `action`** rồi tìm bản ghi theo `action`+`entityId`, `toMatchObject` actor/entityType/entityId, và `JSON.parse(detailJson)` khớp đủ field kể cả `reason` (đã thêm `note: 'Khach doi y, tra lai hang'` vào payload push để bài test phủ luôn nhánh "lý do có gửi kèm").
+
+**Kết quả xác nhận:** `npm run build` xanh; `npm run test:unit` 76/76 pass (10 suite); `npm run test:e2e` (container Postgres 15 tạm, cổng 55977, đã `docker stop`/`rm` sau khi xong) 140/140 test pass, 39/39 suite pass — bao gồm `ledger-returns-stocktake.e2e-spec.ts` với assertion audit mới.
+
+**Quyết định tự đưa ra khi implement:**
+- Đặt lệnh `tx.auditLog.create` ở cuối khối transaction (sau nhánh cập nhật công nợ `debtCredit`) thay vì ngay sau `tx.saleReturn.create` — theo đúng vị trí tương tự các chỗ khác trong repo (`users.service.ts`, `customers.service.ts` đều ghi audit là thao tác cuối cùng trong transaction trước khi trả về), và vì payload audit không phụ thuộc dữ liệu tạo ra ở các bước sau nó nên vị trí không ảnh hưởng tính đúng đắn — chỉ ảnh hưởng thứ tự đọc code.
+- Không thêm field mới vào `PushSaleReturnDto` — trường `note` sẵn có (dùng làm "lý do trả hàng" hiển thị trên `SaleReturn.note`) được tái dùng làm "lý do" trong audit payload, tránh nhân đôi khái niệm phía client.
+- Không sửa `postFromSaleReturn`/`safePost` (bút toán sổ cái) — audit trail cho hành vi "tạo trả hàng" là độc lập với việc bút toán có post thành công hay không (bút toán dùng `safePost` fail-soft, có audit `journal_post_failed` riêng nếu lỗi); ghi trong transaction tạo `SaleReturn` là đúng phạm vi "xóa đơn" mà spec §5.7 yêu cầu, không mở rộng sang phạm vi kế toán của G2+.
