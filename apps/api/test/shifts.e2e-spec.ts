@@ -242,4 +242,131 @@ describe('Shifts', () => {
       .send({ storeId, openingCash: 300000, clientId })
       .expect(409);
   });
+
+  // H1: loadShiftCashInputsWithClient bỏ sót hoàn tiền mặt trả hàng bán
+  // (SaleReturn.cashRefundVnd) khi tính expectedCashVnd lúc đóng ca — khiến
+  // hệ thống báo "lệch âm" giả dù tiền mặt đếm được khớp đúng thực tế.
+  it('H1: trừ hoàn tiền mặt trả hàng (SaleReturn.cashRefundVnd) khỏi expectedCashVnd khi đóng ca', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id;
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { sku: 'STING-330' },
+    });
+    // Đặt tồn đủ lớn, độc lập với các file e2e khác đã tiêu hao tồn của SKU
+    // này trước đó trong cùng lần chạy --runInBand.
+    await prisma.productStoreStock.upsert({
+      where: { productId_storeId: { productId: product.id, storeId } },
+      create: { productId: product.id, storeId, qty: 1000, minQty: 0 },
+      update: { qty: 1000 },
+    });
+
+    const clientId = randomUUID();
+    const opened = await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 500_000, clientId })
+      .expect(201);
+    const shiftId = opened.body.id as string;
+
+    // Chứng từ phải có clientCreatedAt >= shift.openedAt.
+    const nowIso = new Date().toISOString();
+
+    // ---- bán hàng tiền mặt trong ca: 4 x 50.000 = 200.000 ----
+    const saleId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'shifts-h1-test',
+        sales: [
+          {
+            id: saleId,
+            storeId,
+            shiftId,
+            soldById: login.user.id,
+            paymentMethod: 'cash',
+            cashAmount: 200_000,
+            transferAmount: 0,
+            debtAmount: 0,
+            discountVnd: 0,
+            totalVnd: 200_000,
+            clientCreatedAt: nowIso,
+            lines: [
+              {
+                id: randomUUID(),
+                productId: product.id,
+                qty: '4',
+                unitPrice: 50_000,
+                lineTotal: 200_000,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.rejected ?? []).toHaveLength(0);
+        expect(res.body.acceptedIds).toContain(saleId);
+      });
+
+    // ---- trả 1 đơn vị trong CÙNG ca: hoàn 30.000 tiền mặt + 20.000 chuyển
+    // khoản (tổng dòng hàng 50.000). Phần chuyển khoản KHÔNG được trừ vào
+    // expectedCashVnd — chỉ cashRefundVnd mới chạm tiền mặt trong ngăn kéo.
+    const returnId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'shifts-h1-test',
+        sales: [],
+        saleReturns: [
+          {
+            id: returnId,
+            storeId,
+            originalSaleId: saleId,
+            shiftId,
+            cashRefundVnd: 30_000,
+            transferRefundVnd: 20_000,
+            debtCreditVnd: 0,
+            totalRefundVnd: 50_000,
+            clientCreatedAt: nowIso,
+            lines: [
+              {
+                id: randomUUID(),
+                productId: product.id,
+                qty: '1',
+                unitPrice: 50_000,
+                lineRefundVnd: 50_000,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.rejectedSaleReturns ?? []).toHaveLength(0);
+        expect(res.body.acceptedSaleReturnIds).toContain(returnId);
+      });
+
+    // ---- đóng ca ----
+    // expectedCashVnd = mở ca 500.000 + bán TM 200.000 − hoàn TM 30.000 = 670.000.
+    // Trước khi vá H1, hệ thống bỏ sót khoản hoàn tiền mặt nên expected sẽ là
+    // 700.000 — đếm đúng thực tế 670.000 sẽ bị báo lệch âm giả 30.000 dù tiền
+    // mặt trong ngăn kéo hoàn toàn khớp (doanh thu tiền mặt − hoàn tiền mặt).
+    const closed = await request(app.getHttpServer())
+      .post(`/shifts/${shiftId}/close`)
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ closingCash: 670_000 })
+      .expect(201);
+
+    expect(closed.body.expectedCashVnd).toBe(670_000);
+    expect(closed.body.varianceVnd).toBe(0);
+    // Hoàn chuyển khoản của trả hàng không tính vào CK trong ca (sale gốc là
+    // bán tiền mặt thuần, transferInShiftVnd phải giữ nguyên 0).
+    expect(closed.body.transferInShiftVnd).toBe(0);
+  });
 });
