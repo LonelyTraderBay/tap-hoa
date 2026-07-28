@@ -29,7 +29,7 @@
 | **G1** | Ghi AuditLog cho trả hàng/hủy đơn | Cao | Done (build xanh, unit 76/76, e2e 39 suite/140 test pass) |
 | **G2** | Rà soát + bổ sung toàn bộ action còn thiếu trong `defaultAuditActions` allowlist | Cao | Done (build xanh, unit 78/78 — 11 suite, e2e 39 suite/140 test pass; bổ sung 4 action: `debt_adjust`, `bank_recon_locked`, `ap_recon_locked`, `journal_post_failed`) |
 | **G3** | Lối "Xem nhanh, không mở ca" cho app ngoài quầy (owner/store_manager) | Cao | Done (flutter analyze sạch; flutter test 172/172 pass — 40 file) |
-| **G4** | Sửa `minQty` không sửa được sau khi tạo sản phẩm | Trung bình | Chưa |
+| **G4** | Sửa `minQty` không sửa được sau khi tạo sản phẩm | Trung bình | Done (flutter analyze sạch — 0 issue toàn repo; flutter test 175/175 pass — 41 file, +3 so với baseline G3) |
 | **G5** | Cảnh báo khi bán khiến tồn về âm (được cấu hình cho phép) | Trung bình | Chưa |
 | **G6** | Đánh dấu `dead_letter` = "cần chủ xử lý" + khoá thao tác cho cashier | Trung bình | Chưa |
 
@@ -80,10 +80,10 @@
 **Vấn đề:** `apps/pos_app/lib/features/products/product_form_sheet.dart:509-529` chỉ hiện ô "Tồn tối thiểu" khi `widget.isCreate`; `apps/pos_app/lib/features/products/product_service.dart:144-162` (`update()`) chỉ gửi `minQty` khi `existingStock == null`. Backend (`apps/api/src/products/products.service.ts:296-324`) đã hỗ trợ cập nhật `minQty` cho tồn đã tồn tại — bug nằm hoàn toàn ở client.
 
 **DoD:**
-- [ ] Ô "Tồn tối thiểu" hiện cả khi sửa sản phẩm đã tồn tại, load đúng giá trị hiện tại làm mặc định.
-- [ ] `product_service.dart::update()` luôn gửi `minQty` (kể cả khi `existingStock != null`) tới backend qua kênh phù hợp (`seedStock` hoặc field tương đương).
-- [ ] `flutter test` xác nhận round-trip: sửa `minQty` trên sản phẩm đã có tồn kho → đọc lại đúng giá trị mới.
-- [ ] `flutter analyze` sạch trên path đụng.
+- [x] Ô "Tồn tối thiểu" hiện cả khi sửa sản phẩm đã tồn tại, load đúng giá trị hiện tại làm mặc định.
+- [x] `product_service.dart::update()` luôn gửi `minQty` (kể cả khi `existingStock != null`) tới backend qua kênh phù hợp (`seedStock` hoặc field tương đương).
+- [x] `flutter test` xác nhận round-trip: sửa `minQty` trên sản phẩm đã có tồn kho → đọc lại đúng giá trị mới.
+- [x] `flutter analyze` sạch trên path đụng.
 
 ---
 
@@ -222,3 +222,38 @@
 - **Store picker luôn hiện cho cả owner lẫn store_manager** (kể cả khi chỉ có 1 cửa hàng) thay vì ẩn khi danh sách có ≤ 1 phần tử — giữ code đơn giản, đúng y hệt cách `OpenShiftPage` đang làm (`_stores`/`_selectedStore`, luôn render `DropdownButtonFormField`), tránh thêm 1 nhánh UI chỉ để tiết kiệm 1 dòng dropdown khi store_manager thường chỉ có đúng 1 điểm.
 - **Vị trí nút "Mở ca bán hàng" trong `QuickViewHubPage`** đặt ngoài vùng `_isLoading` (không nằm trong `Expanded` phía dưới) để đảm bảo luôn bấm được ngay cả khi `fetchStores()` chưa trả lời (mất mạng/chậm) — tránh tình huống "kẹt" y hệt lỗi gốc mà G3 phải sửa (`open_shift_page.dart` cũ không có lối thoát khi lỗi).
 - **Không sửa `main.dart`** — `LoginPage` giữ nguyên chữ ký constructor, không thêm dependency mới nào (mọi thứ `EntryChoicePage`/`QuickViewHubPage` cần đều đã có sẵn trong bộ tham số `LoginPage` nhận từ `main.dart`).
+
+---
+
+### Ghi chú review G4
+
+**Xác nhận lại mô tả bug so với code thật:** đúng như audit mô tả — `ProductEditData` (`apps/pos_app/lib/features/products/product_repository.dart:37-74`) đã có sẵn field `minQty` và `getForEdit()` (dòng 161-207) đã đọc đúng `stock?.minQty ?? '0'` theo đúng `storeId` — nhưng `_ProductFormSheetState._loadExisting()` chưa từng gán giá trị đó vào `_minQtyController`, và ô nhập nằm trong khối `if (widget.isCreate)` nên không hiện khi sửa. Phát hiện thêm 1 chi tiết sâu hơn mô tả gốc: nhánh `else` (sửa) của `_save()` gọi `widget.productService.update(...)` **hoàn toàn không truyền `minQty`** (không phải truyền `'0'` — tham số bị bỏ qua luôn), nên dù `update()` có sửa được cũng luôn nhận default `'0'` — cộng với bug ở `product_service.dart::update()` (chỉ set `seedStock` khi `existingStock == null`) tạo thành 2 lớp bug cộng dồn, không chỉ 1.
+
+**Sửa `product_form_sheet.dart`:**
+- `_loadExisting()` — thêm `_minQtyController.text = data.minQty;` (dòng 108), nạp đúng minQty hiện tại của `widget.storeId` (form này không có khái niệm chọn điểm bán — `storeId` cố định theo tham số constructor, truyền từ `product_list_page.dart`, nơi duy nhất gọi `ProductFormSheet.show`).
+- Tách khối `if (widget.isCreate) [...]` ở `build()` (dòng 513-534): ô "Tồn ban đầu" vẫn chỉ hiện lúc tạo mới (sửa tồn ban đầu không có ý nghĩa — tồn thực tế phải đi qua nghiệp vụ kho, không qua form sản phẩm), ô "Tồn tối thiểu" chuyển ra ngoài, luôn hiện ở cả 2 chế độ.
+- Validate `_save()` (dòng 184-191): tách check `initialQty.isEmpty` (chỉ bắt buộc lúc tạo) khỏi check `minQty.isEmpty` (bắt buộc ở cả 2 chế độ, vì ô giờ luôn hiện) — quyết định tự đưa ra: chặn rỗng ở client vì gửi `seedStock.minQty` rỗng lên backend sẽ khiến `parseNonNegativeQty('')` throw, `upsertFromSync` reject nguyên bản ghi (`invalid_product`) — không chỉ minQty thất bại mà toàn bộ sửa tên/giá cũng mất theo (xem `apps/api/src/products/products.service.ts:147-158`).
+- Nhánh `else` (sửa) của `_save()` (dòng 248): thêm `minQty: minQty,` vào lời gọi `widget.productService.update(...)` — đây chính là chỗ tham số bị bỏ sót hoàn toàn trước đây.
+
+**Sửa `product_service.dart::update()`** (dòng 144-179):
+- Giữ nguyên nhánh `existingStock == null` (tạo mới dòng tồn kho — không đổi hành vi). Thêm nhánh `else` (dòng 167-179): `UPDATE productStocks SET minQty = ... WHERE productId = ... AND storeId = ...` trên Drift local trước (để app đọc lại ngay lập tức không cần chờ round-trip server), sau đó luôn gán `seedStock = {'qty': existingStock.qty, 'minQty': minQty}` (không còn nhánh nào để `seedStock` là `null`) — dùng **`existingStock.qty` hiện tại** làm `qty` gửi kèm, không phải `initialQty` (vốn luôn là `'0'` mặc định vì form sửa không có ô nhập tồn ban đầu) để tránh gửi nhầm tồn về 0.
+- Điều này an toàn vì đã đọc kỹ `apps/api/src/products/products.service.ts::upsertFromSync` (dòng 296-325): điều kiện vào khối này là `dto.seedStock != null && seedQty != null` (**bắt buộc phải có `qty` hợp lệ dù chỉ muốn sửa `minQty`** — đây là lý do không thể chỉ gửi `{minQty: ...}` mà thiếu `qty`), nhưng khi `existing` (dòng tồn) đã có sẵn, nhánh cập nhật (dòng 314-324) **chỉ `update({ data: { minQty: seedMinQty } })`** — hoàn toàn không đụng `qty` — nên giá trị `qty` gửi kèm trong `seedStock` lúc này chỉ để thoả điều kiện validate của backend, không có tác dụng ghi đè tồn thực tế.
+- Đổi luôn `_enqueueOutbox({ required Map<String, String>? seedStock, ... })` → non-nullable (`required Map<String, String> seedStock`) vì sau fix, **cả `create()` lẫn `update()` đều luôn truyền một map cụ thể**, không còn caller nào truyền `null` — bỏ nhánh `if (seedStock != null) payload['seedStock'] = ...` (dead code sau fix), gán thẳng `payload['seedStock'] = seedStock`. Đây là dọn dẹp nhỏ đi kèm, không đổi hành vi ở 2 caller hiện có.
+
+**Payload gửi backend không đổi field/format:** vẫn đúng `PushProductSeedStockDto = { qty: string; minQty?: string }` dưới key `seedStock` (`apps/api/src/sync/dto/push-sale.dto.ts:83-86,103`) — xác nhận qua `apps/pos_app/lib/data/sync/outbox_worker.dart:322,336` (`jsonDecode(entry.payloadJson)` rồi forward nguyên map `payload` vào mảng `productUpserts` gửi lên `/sync/push`, không có bước ánh xạ tên field trung gian nào) nên key `'seedStock'`/`'qty'`/`'minQty'` trong `product_service.dart` phải khớp chính xác chữ ký DTO phía server — đã đối chiếu khớp.
+
+**Test mới/sửa:**
+- `apps/pos_app/test/product_service_test.dart` — sửa lại test cũ `'update changes fields and omits seedStock when stock exists'` (assertion `payload.containsKey('seedStock'), isFalse` **chính là bug đã được mã hoá thành test** — nếu giữ nguyên sẽ tự mâu thuẫn với fix) thành `'update on a product that already has stock still sends seedStock (current qty + new minQty) — regression cho bug G4'`: tạo sản phẩm có `initialQty:'3', minQty:'2'`, gọi `update(..., minQty:'9')`, xác nhận cả local Drift (`productStocks.minQty=='9'`, `qty` giữ nguyên `'3'`) lẫn outbox payload (`seedStock.qty=='3'`, `seedStock.minQty=='9'`) đúng như thiết kế. Thêm test round-trip đúng theo DoD: `'round-trip: sửa minQty trên sản phẩm ĐÃ CÓ tồn kho rồi đọc lại qua ProductRepository.getForEdit ra đúng giá trị mới'` — tạo sản phẩm (`minQty:'1'`), đọc qua `getForEdit` xác nhận `'1'`, gọi `update(minQty:'7')`, đọc lại qua `getForEdit` xác nhận `'7'` và `qty` không đổi (`'10'`).
+- `apps/pos_app/test/product_form_sheet_test.dart` (file mới — chưa từng có test riêng cho `ProductFormSheet`, không có convention sẵn để theo nên dùng đúng pattern `Builder` + `ElevatedButton` mở sheet qua `.show(...)` giống `sale_return_refund_test.dart:153-169`, và `AppDatabase` in-memory thật + `ProductRepository`/`ProductService` thật thay vì mock, giống lý do G3 đã chọn cho `quick_view_hub_page_test.dart`) — 2 test: (1) sửa sản phẩm đã tồn tại vẫn hiện ô "Tồn tối thiểu" nạp sẵn `'4'`, không hiện ô "Tồn ban đầu"; (2) đổi ô thành `'9'`, tap "Lưu" (phải `tester.ensureVisible` trước vì sheet dài hơn viewport test mặc định 800×600 nên nút nằm off-screen), sheet đóng lại, đọc lại qua `getForEdit` ra đúng `'9'` và `qty` không đổi (`'20'`) — đây là bài test đi qua đúng luồng UI thật (không gọi thẳng service) nên phủ được cả phần sửa trong `product_form_sheet.dart` mà test service-level không chạm tới.
+- Gặp 1 lỗi biên dịch khi viết test: `package:drift/drift.dart` (cần cho `.equals()` khi build `where`) và `package:flutter_test/flutter_test.dart` cùng export 1 symbol top-level tên `isNotNull` (`ambiguous_import`) trong `product_service_test.dart` — sửa bằng cách dùng `isA<ProductEditData>()` thay cho `isNotNull` (không đụng tới import dùng chung của file).
+
+**Kết quả xác nhận:**
+- `flutter analyze` — "No issues found!" trên cả 4 file đụng trực tiếp lẫn toàn bộ repo `pos_app`.
+- `flutter test` (toàn bộ, không riêng file mới) — `+175: All tests passed!`, 0 failed. Đếm độc lập bằng `rg '^\s*(test|testWidgets)\(' apps/pos_app/test -c` cũng ra đúng **175 test / 41 file** (baseline G3 là 172/40 file — tăng đúng 3 test mới: 1 test sửa lại + 1 test round-trip trong `product_service_test.dart`, 2 test trong `product_form_sheet_test.dart` mới — tổng +3 khớp).
+- File Windows generated (`generated_plugin_registrant.cc/.h`, `generated_plugins.cmake`) bị `flutter test`/`flutter analyze` đụng vào (đúng quirk môi trường đã ghi trong plan) nhưng `git diff --ignore-all-space` rỗng — đã `git restore` cả 3 file trước khi commit.
+
+**Quyết định tự đưa ra khi implement:**
+- **Gửi `existingStock.qty` (tồn hiện tại) thay vì `'0'`/`initialQty` trong `seedStock.qty` khi sửa tồn đã có** — bắt buộc về mặt kỹ thuật (backend yêu cầu `seedQty != null` mới vào được nhánh xử lý `seedStock`, kể cả khi mục đích chỉ là sửa `minQty`), và chọn giá trị tồn **thật** thay vì `'0'` để nếu tương lai có ai sửa lại điều kiện backend (vd bỏ yêu cầu `seedQty`), hành vi vẫn an toàn — không có giá trị rác nào được gửi đi dù hiện tại backend không dùng tới nó ở nhánh update.
+- **Không thêm dropdown/khái niệm "chọn điểm bán" vào `ProductFormSheet`** — đã đọc kỹ và xác nhận `storeId` là tham số cố định truyền từ nơi gọi duy nhất (`product_list_page.dart`), form không có UI chọn điểm bán nào, nên câu "load đúng giá trị minQty hiện tại của điểm bán đang chọn" trong yêu cầu áp dụng đúng nghĩa "điểm bán đang được xem" (`widget.storeId`), không cần thêm state mới.
+- **Không thêm parse/validate số cho `minQty`** (vd không âm, đúng định dạng số) — giữ đúng mức độ rigor hiện có của form (bug gốc chỉ về việc hiện ô + gửi dữ liệu, không phải về validate định dạng; `initialQty` cạnh đó cũng chưa từng được parse-validate trong `_save()` từ trước) — tránh mở rộng phạm vi ngoài G4. Chỉ thêm đúng 1 lớp validate mới (không rỗng) vì đây là điều kiện bắt buộc để tránh backend reject nguyên bản ghi, không phải một cải tiến UX ngoài phạm vi.
+- **Đổi `_enqueueOutbox`'s `seedStock` sang non-nullable** — dọn dẹp đi kèm hợp lý vì cả 2 caller (`create`, `update`) sau fix đều luôn truyền map cụ thể; cân nhắc rồi quyết định giữ thay đổi này (thay vì giữ nullable cho "an toàn") vì kiểu non-nullable diễn đạt đúng invariant mới của code, và `flutter analyze` xác nhận không có caller nào khác bị ảnh hưởng (`_enqueueOutbox` là hàm private, chỉ 2 call site).

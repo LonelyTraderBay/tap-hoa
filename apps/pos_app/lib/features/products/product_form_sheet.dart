@@ -105,6 +105,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     _packSizeController.text = data.packSize ?? '';
     _basePriceController.text = data.basePriceVnd.toString();
     _costController.text = data.costVnd.toString();
+    _minQtyController.text = data.minQty;
     setState(() {
       _isWeighted = data.isWeighted;
       _active = data.active;
@@ -180,11 +181,13 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
       return;
     }
 
-    if (widget.isCreate) {
-      if (initialQty.isEmpty || minQty.isEmpty) {
-        setState(() => _error = 'Nhập tồn ban đầu và tồn tối thiểu');
-        return;
-      }
+    if (widget.isCreate && initialQty.isEmpty) {
+      setState(() => _error = 'Nhập tồn ban đầu');
+      return;
+    }
+    if (minQty.isEmpty) {
+      setState(() => _error = 'Nhập tồn tối thiểu');
+      return;
     }
 
     setState(() {
@@ -242,6 +245,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
           basePriceVnd: basePrice,
           costVnd: cost,
           active: _active,
+          minQty: minQty,
           components: [
             for (final c in _components)
               ComboComponentInput(
@@ -517,17 +521,17 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                         labelText: 'Tồn ban đầu',
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _minQtyController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Tồn tối thiểu',
-                      ),
-                    ),
                   ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _minQtyController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Tồn tối thiểu',
+                    ),
+                  ),
                   if (_error != null) ...[
                     const SizedBox(height: 8),
                     Text(_error!, textAlign: TextAlign.center),
