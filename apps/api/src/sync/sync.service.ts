@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CustomersService } from '../customers/customers.service';
 import { DevicesService } from '../devices/devices.service';
+import { comboUnitCostVnd } from '../inventory/combo-unit-cost';
 import { computeSaleLineVatSnapshots } from '../ledger/journal-builders';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -965,6 +966,10 @@ export class SyncService {
             if (product.comboComponents.length === 0) {
               throw new Error('invalid_combo');
             }
+            const resolvedComponents: {
+              avgCostVnd: number;
+              qtyBase: number;
+            }[] = [];
             for (const c of product.comboComponents) {
               const componentStock = await tx.productStoreStock.findUnique({
                 where: {
@@ -981,8 +986,14 @@ export class SyncService {
                 (componentStock?.avgCostVnd ?? 0) > 0
                   ? componentStock!.avgCostVnd
                   : (componentProduct?.costVnd ?? 0);
-              unitCostVnd += Math.round(avg * Number(c.qtyBase));
+              resolvedComponents.push({
+                avgCostVnd: avg,
+                qtyBase: Number(c.qtyBase),
+              });
             }
+            // Sum raw (unrounded) component costs, round ONCE at the end — see
+            // combo-unit-cost.ts for why per-component rounding is wrong (H4).
+            unitCostVnd = comboUnitCostVnd(resolvedComponents);
           } else {
             const stock = await tx.productStoreStock.findUnique({
               where: {
