@@ -30,7 +30,7 @@
 | **G2** | Rà soát + bổ sung toàn bộ action còn thiếu trong `defaultAuditActions` allowlist | Cao | Done (build xanh, unit 78/78 — 11 suite, e2e 39 suite/140 test pass; bổ sung 4 action: `debt_adjust`, `bank_recon_locked`, `ap_recon_locked`, `journal_post_failed`) |
 | **G3** | Lối "Xem nhanh, không mở ca" cho app ngoài quầy (owner/store_manager) | Cao | Done (flutter analyze sạch; flutter test 172/172 pass — 40 file) |
 | **G4** | Sửa `minQty` không sửa được sau khi tạo sản phẩm | Trung bình | Done (flutter analyze sạch — 0 issue toàn repo; flutter test 175/175 pass — 41 file, +3 so với baseline G3) |
-| **G5** | Cảnh báo khi bán khiến tồn về âm (được cấu hình cho phép) | Trung bình | Chưa |
+| **G5** | Cảnh báo khi bán khiến tồn về âm (được cấu hình cho phép) | Trung bình | Done (flutter analyze sạch — 0 issue toàn repo; flutter test 177/177 pass — 42 file, +2 so với baseline G4) |
 | **G6** | Đánh dấu `dead_letter` = "cần chủ xử lý" + khoá thao tác cho cashier | Trung bình | Chưa |
 
 ---
@@ -92,10 +92,10 @@
 **Vấn đề:** `checkout_service.dart:107,331` cho phép bán khi `allowNegativeStock=true` (đúng spec "cho bán nếu cấu hình cho phép") nhưng đơn đi qua hoàn toàn im lặng — không có cảnh báo nào cho thu ngân, trong khi spec §6.2 yêu cầu "Cảnh báo" trong mọi trường hợp tồn về âm.
 
 **DoD:**
-- [ ] Khi hoàn tất đơn khiến tồn kho của một dòng hàng về âm (và được cấu hình cho phép), hiển thị cảnh báo rõ ràng cho thu ngân ngay tại POS (banner/snackbar/dialog) — **không chặn giao dịch**, chỉ cảnh báo.
-- [ ] Cảnh báo nêu rõ sản phẩm nào và tồn còn lại (âm) để thu ngân biết cần báo chủ kiểm kê.
-- [ ] `flutter test` phủ: bán vượt tồn khi `allowNegativeStock=true` → cảnh báo xuất hiện đúng sản phẩm/số lượng; tồn đủ → không cảnh báo.
-- [ ] `flutter analyze` sạch trên path đụng.
+- [x] Khi hoàn tất đơn khiến tồn kho của một dòng hàng về âm (và được cấu hình cho phép), hiển thị cảnh báo rõ ràng cho thu ngân ngay tại POS (banner/snackbar/dialog) — **không chặn giao dịch**, chỉ cảnh báo.
+- [x] Cảnh báo nêu rõ sản phẩm nào và tồn còn lại (âm) để thu ngân biết cần báo chủ kiểm kê.
+- [x] `flutter test` phủ: bán vượt tồn khi `allowNegativeStock=true` → cảnh báo xuất hiện đúng sản phẩm/số lượng; tồn đủ → không cảnh báo.
+- [x] `flutter analyze` sạch trên path đụng.
 
 ---
 
@@ -257,3 +257,46 @@
 - **Không thêm dropdown/khái niệm "chọn điểm bán" vào `ProductFormSheet`** — đã đọc kỹ và xác nhận `storeId` là tham số cố định truyền từ nơi gọi duy nhất (`product_list_page.dart`), form không có UI chọn điểm bán nào, nên câu "load đúng giá trị minQty hiện tại của điểm bán đang chọn" trong yêu cầu áp dụng đúng nghĩa "điểm bán đang được xem" (`widget.storeId`), không cần thêm state mới.
 - **Không thêm parse/validate số cho `minQty`** (vd không âm, đúng định dạng số) — giữ đúng mức độ rigor hiện có của form (bug gốc chỉ về việc hiện ô + gửi dữ liệu, không phải về validate định dạng; `initialQty` cạnh đó cũng chưa từng được parse-validate trong `_save()` từ trước) — tránh mở rộng phạm vi ngoài G4. Chỉ thêm đúng 1 lớp validate mới (không rỗng) vì đây là điều kiện bắt buộc để tránh backend reject nguyên bản ghi, không phải một cải tiến UX ngoài phạm vi.
 - **Đổi `_enqueueOutbox`'s `seedStock` sang non-nullable** — dọn dẹp đi kèm hợp lý vì cả 2 caller (`create`, `update`) sau fix đều luôn truyền map cụ thể; cân nhắc rồi quyết định giữ thay đổi này (thay vì giữ nullable cho "an toàn") vì kiểu non-nullable diễn đạt đúng invariant mới của code, và `flutter analyze` xác nhận không có caller nào khác bị ảnh hưởng (`_enqueueOutbox` là hàm private, chỉ 2 call site).
+
+---
+
+### Ghi chú review G5
+
+**Cơ chế cảnh báo đã chọn:** `CheckoutService.complete()` (service thuần, không có `BuildContext`, không tự hiện UI được) đổi kiểu trả về từ `Future<String>` sang `Future<CheckoutResult>` — gói `saleId` cũ + `negativeStockWarnings: List<NegativeStockWarning>` (rỗng ở đường đi bình thường, chỉ có phần tử khi `allowNegativeStock=true` VÀ tồn SAU bán thực sự < 0). Lớp UI phía trên — cụ thể là `PaymentSheet._complete()` (không đụng `pos_page.dart`) — đọc `result.negativeStockWarnings` SAU KHI `complete()` đã resolve (đơn đã ghi Drift + outbox xong, giao dịch không còn có thể bị chặn nữa nên không có rủi ro "cảnh báo làm hỏng giao dịch") và hiển thị 1 `SnackBar` màu đỏ (`Colors.red.shade700`, `duration: 8s`) liệt kê từng sản phẩm + tồn còn lại, rồi mới `Navigator.pop()` như luồng thành công bình thường — không có `AlertDialog` xác nhận nào chắn đường.
+
+**Vì sao chọn SnackBar (không phải banner/dialog mới):** `payment_sheet.dart` đã có sẵn đúng 1 precedent y hệt về hình dạng — khối `catch` quanh `promptAndPrintReceipt` (dòng 179-185) hiện `SnackBar` "Tạo hóa đơn thất bại" SAU khi đơn đã hoàn tất, ngay trước `Navigator.pop()`. Tái dùng đúng pattern này giữ "nhất quán phong cách" (yêu cầu trong DoD) thay vì đưa vào 1 loại UI mới (`MaterialBanner` — đã grep xác nhận không dùng ở đâu trong `apps/pos_app`, trong khi `SnackBar` xuất hiện ở 23 file). Có tô màu đỏ + kéo dài `duration` lên 8s (mặc định Flutter là 4s, không file nào khác trong repo tự set `duration`) để đủ thời gian đọc danh sách nhiều dòng sản phẩm, phân biệt trực quan với các SnackBar thông tin thường (không màu) trong cùng file.
+
+**Evidence (file:line):**
+- `apps/pos_app/lib/features/pos/checkout_service.dart:67-79` — class `NegativeStockWarning` (`productId`, `productName`, `remainingQtyLabel` — String đã format sẵn qua `_formatQty` có sẵn của file, luôn âm).
+- `apps/pos_app/lib/features/pos/checkout_service.dart:81-94` — class `CheckoutResult` (`saleId` + `negativeStockWarnings`).
+- `apps/pos_app/lib/features/pos/checkout_service.dart:105` — `complete()` đổi chữ ký `Future<String>` → `Future<CheckoutResult>`.
+- `apps/pos_app/lib/features/pos/checkout_service.dart:135` — khai báo `final warnings = <NegativeStockWarning>[];` trước khối `_db.transaction`, thu thập trong lúc lặp qua từng dòng hàng (dòng 239-251 cho thành phần combo, dòng 254-266 cho dòng hàng thường).
+- `apps/pos_app/lib/features/pos/checkout_service.dart:347` — `return CheckoutResult(saleId: saleId, negativeStockWarnings: warnings);`.
+- `apps/pos_app/lib/features/pos/checkout_service.dart:354-417` — `_decrementStock` đổi trả về `Future<NegativeStockWarning?>`: giữ nguyên 100% logic trừ tồn + ghi `stockMovementsLocal` hiện có; chỉ thêm khối mới ở cuối (dòng 406-416) — khi `newQty < Decimal.zero` (chỉ có thể xảy ra lúc `allowNegative=true`, vì nhánh `!allowNegative` đã throw `InsufficientStockException` ở dòng 375-377 từ trước, giữ nguyên không đổi) mới truy vấn thêm `_db.products` để lấy `productName` — không tốn thêm query trên đường đi bình thường, chỉ query khi thực sự cần dựng cảnh báo.
+- `apps/pos_app/lib/features/pos/payment_sheet.dart:139,144` — `final result = await widget.checkoutService.complete(...); final saleId = result.saleId;`.
+- `apps/pos_app/lib/features/pos/payment_sheet.dart:186-195` — sau khối `try/catch` in hóa đơn (không đổi), kiểm `result.negativeStockWarnings.isNotEmpty` rồi `ScaffoldMessenger.of(context).showSnackBar(...)` **trước** `Navigator.of(context).pop()` — comment tại chỗ giải thích rõ đây là cảnh báo thêm, không phải dialog chặn luồng.
+- `apps/pos_app/lib/features/pos/payment_sheet.dart:224-235` — `_negativeStockSnackBar()`: nội dung `'Cảnh báo: tồn kho đã về âm, báo chủ kiểm kê\n<Tên SP>: còn <qty âm>'` (mỗi sản phẩm 1 dòng nếu nhiều dòng hàng cùng về âm trong cùng đơn).
+
+**Test:**
+- `apps/pos_app/test/checkout_service_test.dart` — mở rộng 2 test hiện có thay vì thêm `test()` mới (đúng test đã có sẵn cho 2 kịch bản tồn đủ/tồn âm của checkout):
+  - `'checkout writes sale and decrements stock'` (tồn đủ, 10 → 8): thêm `expect(result.negativeStockWarnings, isEmpty)` — kịch bản (b) của DoD ở tầng service.
+  - `'checkout allows negative stock when store setting enabled'` (tồn 1 → -1, `allowNegativeStock=true`): thêm assertion `result.negativeStockWarnings` có đúng 1 phần tử, `productId='p1'`, `productName='Sting'`, `remainingQtyLabel='-1'` — kịch bản (a) ở tầng service.
+  - `apps/pos_app/test/debt_checkout_test.dart` — cập nhật 1 call site lấy `saleId` qua `result.saleId` (đổi kiểu trả về của `complete()`, không đổi hành vi/assertion của test).
+- `apps/pos_app/test/payment_sheet_test.dart` (file mới) — 2 `testWidgets` lái **đúng luồng UI thật** (`PaymentSheet.show(...)` → tap "Hoàn tất" → dialog "Hóa đơn" → "Bỏ qua" → kiểm SnackBar), không gọi thẳng `CheckoutService`, đúng yêu cầu DoD "cảnh báo xuất hiện" (hiện tượng UI quan sát được, không chỉ dữ liệu service):
+  - Kịch bản (a): tồn 1, bán 2, `allowNegativeStock=true` → sau khi sheet đóng (`find.text('Thanh toán')` findsNothing — xác nhận giao dịch KHÔNG bị chặn), tìm thấy `'Sting: còn -1'` và `'Cảnh báo: tồn kho đã về âm'`.
+  - Kịch bản (b): tồn 10, bán 2 (vẫn giữ `allowNegativeStock=true`, để tách biệt đúng biến đang test là "có về âm hay không" chứ không phải cờ cấu hình) → sheet đóng bình thường, `'Cảnh báo: tồn kho đã về âm'` findsNothing.
+  - 2 vướng mắc kỹ thuật gặp phải khi viết test (không phải bug ở code sản phẩm, đã xác nhận qua debug print tạm thời rồi gỡ) — ghi lại vì không hiển nhiên với ai đọc lại sau này:
+    1. `pumpAndSettle()` treo tới hết timeout ("pumpAndSettle timed out") nếu gọi ngay sau khi tap "Hoàn tất": nút này hiện `CircularProgressIndicator` (animation vô hạn) trong lúc `_complete()` đang `await` dialog "Hóa đơn" (chờ người dùng thật, không tự resolve) — 2 điều kiện cộng lại khiến `hasScheduledFrame` không bao giờ về `false`. Khắc phục bằng `pump()` có giới hạn (`tapCompleteAndReachReceiptDialog`, dòng 144-149 của file test) thay cho `pumpAndSettle()` ở đúng bước này; sau khi dialog bị tắt (sheet sắp bị pop, spinner biến mất theo) mới quay lại dùng `pumpAndSettle()` an toàn.
+    2. `ScaffoldMessenger.showSnackBar` throw assertion `_scaffolds.isNotEmpty` nếu cây widget test không có `Scaffold` con nào — khác với ứng dụng thật (`pos_page.dart` luôn có `Scaffold` bao ngoài chỗ gọi `PaymentSheet.show`). Khắc phục bằng cách bọc `Scaffold` quanh `Builder` trong harness test (`openPaymentSheet`, dòng 114-136 của file test), khớp đúng cây widget thật thay vì né bằng cách khác (vd gọi thẳng `showSnackBar` ngoài context thật).
+
+**Kết quả xác nhận:**
+- `flutter analyze` — "No issues found!" trên toàn bộ repo `pos_app` (không riêng path đụng).
+- `flutter test` (toàn bộ) — `+177: All tests passed!`, 0 failed. Đếm độc lập bằng `rg '^\s*(test|testWidgets)\(' apps/pos_app/test -c` ra đúng **177 test / 42 file** (baseline G4 là 175/41 file — tăng đúng 2, khớp 2 `testWidgets` mới trong `payment_sheet_test.dart`; không có `test()`/`testWidgets()` mới ở 2 file mở rộng vì chỉ thêm `expect` vào thân test có sẵn, không thêm khối test mới).
+- File Windows generated (`generated_plugin_registrant.cc/.h`, `generated_plugins.cmake`) bị đụng bởi `flutter test`/`flutter analyze` (đúng quirk môi trường đã ghi trong plan) nhưng `git diff --ignore-all-space` rỗng — đã `git restore` cả 3 file trước khi commit.
+
+**Quyết định tự đưa ra khi implement:**
+- **Đổi kiểu trả về của `complete()` thay vì dùng callback/exception để truyền cảnh báo** — cân nhắc 2 phương án khác trước khi chọn: (a) throw 1 exception "soft" mang theo warnings — loại ngay vì cảnh báo không phải lỗi, throw sẽ nhảy vào nhánh `catch` sai ngữ nghĩa trong khi đơn đã thành công thật sự; (b) thêm callback `onNegativeStock(List<...>)` vào `complete()` — loại vì thêm 1 tham số phụ vào chữ ký service chỉ để phục vụ đúng 1 UI. Trả trong `CheckoutResult` (cùng pattern với `ReceiptPdfShareResult` đã có sẵn trong `receipt_print.dart`) là cách "thuần" hơn, giữ `checkout_service.dart` không có `BuildContext`/phụ thuộc UI, và cho phép caller tương lai (nếu có luồng checkout khác ngoài `PaymentSheet`) tự quyết định cách hiển thị.
+- **Không sửa `pos_page.dart`** — cảnh báo được implement gọn trong `payment_sheet.dart` (nơi duy nhất gọi `checkoutService.complete()` — đã grep xác nhận toàn bộ `apps/pos_app/lib`), dùng lại đúng `ScaffoldMessenger` pattern đã có sẵn tại chỗ (khối bắt lỗi in hóa đơn ngay phía trên). Không cần đổi chữ ký `onCompleted` (`VoidCallback`) hay đụng `_message` state của `PosPage` — giữ đúng phạm vi G5, giảm diện tích diff.
+- **SnackBar hiện TRƯỚC `Navigator.pop()`, không phải sau** — dựa đúng theo thứ tự đã có sẵn của khối "Tạo hóa đơn thất bại" (show rồi mới pop); xác nhận qua test rằng `ScaffoldMessenger` được đăng ký ở `Scaffold` của trang bên dưới (không phải của sheet đang đóng) nên SnackBar sống sót qua việc pop, không bị mất theo animation đóng sheet.
+- **Không dedupe cảnh báo khi 1 sản phẩm xuất hiện nhiều lần** (vd vừa là dòng bán thường vừa là thành phần combo trong cùng đơn) — DoD không yêu cầu, và thông tin lặp vẫn đúng (phản ánh đúng tiến trình trừ tồn qua từng lần `_decrementStock`), không sai lệch — thêm dedupe sẽ là over-engineering ngoài 2 kịch bản DoD yêu cầu.
+- **Ngưỡng cảnh báo là `< 0` tuyệt đối, không có buffer/ngưỡng gần hết** — đúng yêu cầu "chỉ cảnh báo khi tồn SAU bán thực sự ÂM (< 0)"; tồn về đúng 0 KHÔNG kích hoạt cảnh báo (điều kiện `newQty < Decimal.zero` loại trừ đúng trường hợp bằng 0) — phân biệt rõ với "hàng sắp hết" (báo cáo tồn kho, ngoài phạm vi G5).

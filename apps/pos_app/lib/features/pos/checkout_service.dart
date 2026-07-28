@@ -60,6 +60,39 @@ String _formatQty(Decimal qty) {
   return qty.toStringAsFixed(3);
 }
 
+/// Spec §6.2: khi `allowNegativeStock=true` cho phép bán dù tồn về âm,
+/// nhưng vẫn phải "Cảnh báo" — đây là dữ liệu 1 dòng cảnh báo cho 1 sản
+/// phẩm có tồn kho SAU bán thực sự < 0, để lớp UI phía trên (payment_sheet)
+/// hiển thị cho thu ngân biết cần báo chủ kiểm kê.
+class NegativeStockWarning {
+  const NegativeStockWarning({
+    required this.productId,
+    required this.productName,
+    required this.remainingQtyLabel,
+  });
+
+  final String productId;
+  final String productName;
+
+  /// Tồn kho còn lại sau khi bán, đã format và luôn âm (vd "-1", "-0.500").
+  final String remainingQtyLabel;
+}
+
+class CheckoutResult {
+  const CheckoutResult({
+    required this.saleId,
+    required this.negativeStockWarnings,
+  });
+
+  final String saleId;
+
+  /// Rỗng ở đường đi bình thường. Chỉ có phần tử khi `allowNegativeStock`
+  /// đang bật VÀ đơn này khiến tồn của ít nhất 1 dòng hàng (hoặc thành
+  /// phần combo) về âm — giao dịch vẫn đã hoàn tất bình thường, đây chỉ là
+  /// cảnh báo thêm, không phải lỗi.
+  final List<NegativeStockWarning> negativeStockWarnings;
+}
+
 class CheckoutService {
   CheckoutService({required AppDatabase db, required ShiftRepository shiftRepository})
     : _db = db,
@@ -69,7 +102,7 @@ class CheckoutService {
   final ShiftRepository _shiftRepository;
   final _uuid = const Uuid();
 
-  Future<String> complete({
+  Future<CheckoutResult> complete({
     required Cart cart,
     required PaymentSplit payment,
     String? customerId,
@@ -99,6 +132,7 @@ class CheckoutService {
 
     final draft = cart.toSaleDraft();
     final saleId = _uuid.v4();
+    final warnings = <NegativeStockWarning>[];
     final outboxId = _uuid.v4();
     final clientCreatedAt = DateTime.now();
     final storeRow = await (_db.select(_db.storesLocal)
@@ -202,7 +236,7 @@ class CheckoutService {
               .get();
           for (final c in components) {
             final componentQty = baseQty * Decimal.parse(c.qtyBase);
-            await _decrementStock(
+            final warning = await _decrementStock(
               storeId: storeId,
               productId: c.componentProductId,
               soldQty: componentQty,
@@ -212,9 +246,12 @@ class CheckoutService {
               userId: userId,
               clientCreatedAt: clientCreatedAt,
             );
+            if (warning != null) {
+              warnings.add(warning);
+            }
           }
         } else {
-          await _decrementStock(
+          final warning = await _decrementStock(
             storeId: storeId,
             productId: line.productId,
             soldQty: baseQty,
@@ -224,6 +261,9 @@ class CheckoutService {
             userId: userId,
             clientCreatedAt: clientCreatedAt,
           );
+          if (warning != null) {
+            warnings.add(warning);
+          }
         }
       }
 
@@ -304,10 +344,14 @@ class CheckoutService {
       }
     });
 
-    return saleId;
+    return CheckoutResult(saleId: saleId, negativeStockWarnings: warnings);
   }
 
-  Future<void> _decrementStock({
+  /// Trừ tồn kho cho 1 sản phẩm (dòng hàng thường hoặc 1 thành phần combo).
+  /// Trả về `NegativeStockWarning` khi tồn SAU bán thực sự < 0 (chỉ có thể
+  /// xảy ra khi `allowNegative=true` — nếu không, nhánh trên đã throw
+  /// `InsufficientStockException` trước khi tới đây); ngược lại trả `null`.
+  Future<NegativeStockWarning?> _decrementStock({
     required String storeId,
     required String productId,
     required Decimal soldQty,
@@ -358,5 +402,17 @@ class CheckoutService {
         updatedAt: clientCreatedAt,
       ),
     );
+
+    if (newQty < Decimal.zero) {
+      final product = await (_db.select(_db.products)
+            ..where((t) => t.id.equals(productId)))
+          .getSingleOrNull();
+      return NegativeStockWarning(
+        productId: productId,
+        productName: product?.name ?? productId,
+        remainingQtyLabel: _formatQty(newQty),
+      );
+    }
+    return null;
   }
 }
