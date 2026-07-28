@@ -27,7 +27,7 @@
 | Task | Mô tả | Ưu tiên | Status |
 |------|-------|---------|--------|
 | **G1** | Ghi AuditLog cho trả hàng/hủy đơn | Cao | Done (build xanh, unit 76/76, e2e 39 suite/140 test pass) |
-| **G2** | Rà soát + bổ sung toàn bộ action còn thiếu trong `defaultAuditActions` allowlist | Cao | Chưa |
+| **G2** | Rà soát + bổ sung toàn bộ action còn thiếu trong `defaultAuditActions` allowlist | Cao | Done (build xanh, unit 78/78 — 11 suite, e2e 39 suite/140 test pass; bổ sung 4 action: `debt_adjust`, `bank_recon_locked`, `ap_recon_locked`, `journal_post_failed`) |
 | **G3** | Lối "Xem nhanh, không mở ca" cho app ngoài quầy (owner/store_manager) | Cao | Chưa |
 | **G4** | Sửa `minQty` không sửa được sau khi tạo sản phẩm | Trung bình | Chưa |
 | **G5** | Cảnh báo khi bán khiến tồn về âm (được cấu hình cho phép) | Trung bình | Chưa |
@@ -52,10 +52,10 @@
 **Vấn đề:** `debt_adjust` được ghi thật vào `AuditLog` (`apps/api/src/customers/customers.service.ts:151-167`) nhưng `defaultAuditActions` (`apps/api/src/ledger/ledger.service.ts:30-41`) — allowlist dùng làm bộ lọc mặc định cho `GET /ledger/audit` khi client không truyền `action` — **thiếu `'debt_adjust'`**, nên màn "Sổ · Nhật ký" trên Flutter (`ledger_page.dart`, gọi `listAudit` không truyền `action`) không bao giờ hiện log này dù nó tồn tại trong DB. Cùng lỗi khả năng cao còn ở `bank_recon_locked`/`ap_recon_locked` (phát hiện qua audit nhưng chưa xác nhận kỹ) và có thể còn action khác chưa rà hết.
 
 **DoD:**
-- [ ] Grep toàn bộ `apps/api/src` tìm mọi lời gọi tạo `AuditLog` (`auditLog.create`), liệt kê đầy đủ action string thật đang tồn tại trong code.
-- [ ] Đối chiếu danh sách đó với `defaultAuditActions`, bổ sung **mọi** action còn thiếu (tối thiểu: `debt_adjust`; xác nhận lại `bank_recon_locked`, `ap_recon_locked`).
-- [ ] Test (unit hoặc e2e) xác nhận `GET /ledger/audit` không truyền `action` trả về đủ các action vừa bổ sung, không cần biết trước tên action.
-- [ ] `npm run build` + `test:unit` + full `test:e2e` xanh.
+- [x] Grep toàn bộ `apps/api/src` tìm mọi lời gọi tạo `AuditLog` (`auditLog.create`), liệt kê đầy đủ action string thật đang tồn tại trong code.
+- [x] Đối chiếu danh sách đó với `defaultAuditActions`, bổ sung **mọi** action còn thiếu (tối thiểu: `debt_adjust`; xác nhận lại `bank_recon_locked`, `ap_recon_locked`).
+- [x] Test (unit hoặc e2e) xác nhận `GET /ledger/audit` không truyền `action` trả về đủ các action vừa bổ sung, không cần biết trước tên action.
+- [x] `npm run build` + `test:unit` + full `test:e2e` xanh.
 
 ---
 
@@ -140,3 +140,46 @@
 - Đặt lệnh `tx.auditLog.create` ở cuối khối transaction (sau nhánh cập nhật công nợ `debtCredit`) thay vì ngay sau `tx.saleReturn.create` — theo đúng vị trí tương tự các chỗ khác trong repo (`users.service.ts`, `customers.service.ts` đều ghi audit là thao tác cuối cùng trong transaction trước khi trả về), và vì payload audit không phụ thuộc dữ liệu tạo ra ở các bước sau nó nên vị trí không ảnh hưởng tính đúng đắn — chỉ ảnh hưởng thứ tự đọc code.
 - Không thêm field mới vào `PushSaleReturnDto` — trường `note` sẵn có (dùng làm "lý do trả hàng" hiển thị trên `SaleReturn.note`) được tái dùng làm "lý do" trong audit payload, tránh nhân đôi khái niệm phía client.
 - Không sửa `postFromSaleReturn`/`safePost` (bút toán sổ cái) — audit trail cho hành vi "tạo trả hàng" là độc lập với việc bút toán có post thành công hay không (bút toán dùng `safePost` fail-soft, có audit `journal_post_failed` riêng nếu lỗi); ghi trong transaction tạo `SaleReturn` là đúng phạm vi "xóa đơn" mà spec §5.7 yêu cầu, không mở rộng sang phạm vi kế toán của G2+.
+
+---
+
+### Ghi chú review G2
+
+**Phương pháp rà soát:** Grep `auditLog\.create\(` (không phân biệt `this.prisma.auditLog.create` hay `tx.auditLog.create` trong transaction — cùng field name `auditLog`) trên toàn bộ `apps/api/src` → đúng 10 call site trong 7 file, không có pattern ghi nào khác (đã kiểm thêm không có `auditLog.createMany`, không có raw SQL `$executeRaw`/`$queryRaw` nào đụng bảng `audit_log`). 2/10 call site không truyền `action` bằng string literal mà bằng biến — đã truy ngược lên mọi nơi gọi để lấy giá trị thật thay vì bỏ qua:
+- `ledger.service.ts` (private helper `writeAudit`, dòng 52-69, tham số `action: string` — kiểu mở, không giới hạn) — truy ngược ra 4 lời gọi thật: `journal_blocked_period_lock` (dòng 107), `journal_post_failed` (dòng 151 — bên trong `safePost`, dòng 138-160, wrapper fail-soft được gọi từ 10 call site khác trong `suppliers.service.ts` (x2), `sync/sync.service.ts` (x3), `sync/sale-returns.service.ts` (x1), `sync/stock-ops.service.ts` (x4) mỗi khi một bút toán sổ cái post lỗi), `period_lock` (dòng 705), `period_unlock` (dòng 730).
+- `einvoice.service.ts` (private helper `writeEinvoiceAudit`, dòng 43-73) — tham số `action` gõ kiểu union đóng `'einvoice_issue' | 'einvoice_cancel' | 'einvoice_adjust'` (dòng 46) nên compiler tự giới hạn đúng 3 giá trị; xác nhận cả 3 lời gọi thật (dòng 315, 431, 553) đều nằm trong 3 giá trị này — không có giá trị nào khác lọt qua type union.
+
+**Danh sách đầy đủ 15 action string thật đang ghi `AuditLog`** (cột "Trước G2" = có mặt trong `defaultAuditActions` trước khi task này sửa hay không):
+
+| # | Action | Evidence (file:line) | Trước G2 |
+|---|--------|----------------------|----------|
+| 1 | `period_lock` | `apps/api/src/ledger/ledger.service.ts:705` (qua `writeAudit`) | Có |
+| 2 | `period_unlock` | `apps/api/src/ledger/ledger.service.ts:730` (qua `writeAudit`) | Có |
+| 3 | `journal_blocked_period_lock` | `apps/api/src/ledger/ledger.service.ts:107` (qua `writeAudit`) | Có |
+| 4 | `journal_post_failed` | `apps/api/src/ledger/ledger.service.ts:151` (qua `writeAudit`, gọi từ `safePost`, dòng 138-160) | **Thiếu** |
+| 5 | `product_price_change` | `apps/api/src/products/products.service.ts:262` | Có |
+| 6 | `user_create` | `apps/api/src/users/users.service.ts:123` | Có |
+| 7 | `user_role_change` | `apps/api/src/users/users.service.ts:223` | Có |
+| 8 | `user_password_reset` | `apps/api/src/users/users.service.ts:280` | Có |
+| 9 | `einvoice_issue` | `apps/api/src/einvoice/einvoice.service.ts:61` (qua `writeEinvoiceAudit`, gọi tại dòng 315) | Có |
+| 10 | `einvoice_cancel` | `apps/api/src/einvoice/einvoice.service.ts:61` (gọi tại dòng 431) | Có |
+| 11 | `einvoice_adjust` | `apps/api/src/einvoice/einvoice.service.ts:61` (gọi tại dòng 553) | Có |
+| 12 | `sale_return_create` | `apps/api/src/sync/sale-returns.service.ts:266` (thêm ở G1) | Có |
+| 13 | `debt_adjust` | `apps/api/src/customers/customers.service.ts:155` | **Thiếu** |
+| 14 | `bank_recon_locked` | `apps/api/src/reports/reports.service.ts:1779` (trong `lockBankRecon`) | **Thiếu** |
+| 15 | `ap_recon_locked` | `apps/api/src/reports/reports.service.ts:2184` (trong `lockApRecon`) | **Thiếu** |
+
+**4 action đã bổ sung vào `defaultAuditActions`** (`apps/api/src/ledger/ledger.service.ts:30-46`): `journal_post_failed`, `debt_adjust`, `bank_recon_locked`, `ap_recon_locked` — `journal_post_failed` chèn cạnh `journal_blocked_period_lock` (action liên quan gần nhất về mặt nghiệp vụ — cùng nhóm "sự kiện phát sinh khi post bút toán"); 3 action còn lại nối vào cuối mảng, sau `sale_return_create` (giữ đúng vị trí G1 để lại, không xáo trộn thứ tự cũ).
+
+**Test:**
+- `apps/api/src/ledger/ledger.service.spec.ts` (file mới) — 2 unit test, không dựng Nest DI container, khởi tạo thẳng `new LedgerService(fakePrisma)` (cùng pattern với `reports.service.spec.ts` đã có sẵn trong repo, ví dụ `new ReportsService(...)`). Test 1 gọi `listAudit(owner, {})` (không truyền `action`, y hệt cách `GET /ledger/audit` xử lý khi client — Flutter `ledger_page.dart` — không gửi query param `action`), bắt tham số thật truyền vào `prisma.auditLog.findMany` qua `jest.fn()`, khẳng định `where.action.in` chứa đủ toàn bộ 15 action ở bảng trên (`expect.arrayContaining`, không phụ thuộc thứ tự) và không có phần tử trùng lặp trong allowlist. Test 2 xác nhận khi caller truyền `action` tường minh thì dùng đúng giá trị đó (không rơi về allowlist) — giữ đúng hành vi cũ, tránh regression ngược.
+- `apps/api/test/customers-debt-adjust.e2e-spec.ts` (mở rộng test có sẵn `'lets owner and manager post signed debt adjustments with ledger and audit'`) — sau khối assertion cũ (kiểm `prisma.auditLog.findMany` trực tiếp ở DB), thêm khối mới: gọi thật `GET /ledger/audit` **không truyền `action`** qua HTTP (token owner), lọc kết quả trả về theo `entityId = customerId`, khẳng định có đủ 2 bản ghi (tăng nợ + giảm nợ) và `detailJson` của bản ghi mới nhất khớp payload thật (`amountVnd`, `reason`, `balanceBeforeVnd`, `balanceAfterVnd`). Đây là bằng chứng qua HTTP thật cho action đã xác nhận chắc chắn tồn tại trong DB (`debt_adjust`) — đúng yêu cầu DoD. `bank_recon_locked`/`ap_recon_locked`/`journal_post_failed` được phủ qua unit test ở trên thay vì dựng e2e riêng (DoD G2 cho phép rõ cách này).
+
+**Vì sao không viết e2e riêng cho `bank_recon_locked`/`ap_recon_locked`/`journal_post_failed`:** để gọi thành công `POST /reports/bank-recon/lock` hoặc `/ap-recon/lock` cần dựng đủ luồng import sao kê + khớp toàn bộ dòng + variance = 0 (xem `lockBankRecon`/`lockApRecon` trong `reports.service.ts`); để trigger `journal_post_failed` thật cần chủ động làm một bút toán post lỗi (qua `safePost`). Cả hai đều tốn setup không tương xứng với mục tiêu G2 (đảm bảo *allowlist* đầy đủ — không phải re-test nghiệp vụ đối soát/post bút toán, vốn đã có test riêng ở `bank-recon.e2e-spec.ts`/`ap-recon.e2e-spec.ts`/các e2e dùng `safePost`). Unit test kiểm tra trực tiếp mảng `defaultAuditActions` (qua hành vi `listAudit`) là đủ để khẳng định allowlist không bỏ sót — đúng phương án DoD đã cho phép.
+
+**Kết quả xác nhận:** `npm run build` xanh; `npm run test:unit` 78/78 pass (11 suite — tăng từ 76/76 · 10 suite baseline G1 nhờ 2 test mới trong `ledger.service.spec.ts`); `npm run test:e2e` (container Postgres 15 tạm, tên `tap-hoa-g2-e2e`, cổng host 55980, biến `TAP_HOA_SKIP_LOCAL_IDENTITY=1`, đã `docker stop`/`docker rm` sau khi xong — không đụng DB dev thật ở cổng 54422) 140/140 test pass, 39/39 suite pass — số suite/test HTTP giữ nguyên so với G1 vì chỉ mở rộng assertion trong `it()` có sẵn của `customers-debt-adjust.e2e-spec.ts`, không thêm `it()` mới ở lớp e2e.
+
+**Quyết định tự đưa ra khi implement:**
+- Bổ sung cả `journal_post_failed` dù đề bài task chỉ nêu tên `debt_adjust`/`bank_recon_locked`/`ap_recon_locked` — phát hiện qua bước "truy ngược biến" bắt buộc trong DoD (đọc `writeAudit` rồi rà từng lời gọi thay vì dừng ở chỗ định nghĩa). Đây là action thật, ghi bởi `safePost` — wrapper dùng ở 10 call site rải khắp `suppliers`/`sync`/`stock-ops` services mỗi khi một bút toán sổ cái post lỗi (fail-soft, không throw ra ngoài) — đúng tinh thần DoD "bổ sung MỌI action còn thiếu, không chỉ liệt kê tối thiểu trong đề bài". Bỏ sót action này sẽ khiến chủ quán không bao giờ thấy được các lần bút toán lỗi thầm lặng trong màn "Sổ · Nhật ký", dù đây chính xác là loại sự kiện "cần chủ biết" mà spec §5.7 hướng tới.
+- Không viết e2e đầy đủ cho `bank_recon_locked`/`ap_recon_locked`/`journal_post_failed` (lý do chi tiết ở mục trên) — chọn unit test kiểm tra allowlist trực tiếp, đúng phương án DoD đã cho phép rõ ràng ("có thể assert bằng cách kiểm tra trực tiếp mảng `defaultAuditActions`").
+- Không sắp xếp lại toàn bộ mảng `defaultAuditActions` theo alphabet hay theo nhóm nghiệp vụ — chỉ chèn 4 action mới (1 cạnh action liên quan gần nhất, 3 còn lại nối cuối mảng), giữ diff nhỏ, dễ review, và giữ nguyên vị trí G1 để lại thay vì xáo trộn không cần thiết.

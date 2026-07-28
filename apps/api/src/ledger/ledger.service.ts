@@ -31,6 +31,7 @@ export class LedgerService {
     'period_lock',
     'period_unlock',
     'journal_blocked_period_lock',
+    'journal_post_failed',
     'product_price_change',
     'user_create',
     'user_role_change',
@@ -39,6 +40,9 @@ export class LedgerService {
     'einvoice_cancel',
     'einvoice_adjust',
     'sale_return_create',
+    'debt_adjust',
+    'bank_recon_locked',
+    'ap_recon_locked',
   ];
 
   constructor(private readonly prisma: PrismaService) {}
