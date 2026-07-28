@@ -24,6 +24,8 @@
 
 ## Trạng thái
 
+> **Đợt 2 hoàn thành 100% — 6/6 gap đã vá (2026-07-28).** G1-G6 đều Done, DoD tick đủ, build/analyze/test xanh ở mọi task (API: build + unit + full e2e qua container Postgres riêng; Flutter: `flutter analyze` sạch + `flutter test` xanh, baseline tăng dần 172 → 175 → 177 → 188 test qua G3-G6).
+
 | Task | Mô tả | Ưu tiên | Status |
 |------|-------|---------|--------|
 | **G1** | Ghi AuditLog cho trả hàng/hủy đơn | Cao | Done (build xanh, unit 76/76, e2e 39 suite/140 test pass) |
@@ -31,7 +33,7 @@
 | **G3** | Lối "Xem nhanh, không mở ca" cho app ngoài quầy (owner/store_manager) | Cao | Done (flutter analyze sạch; flutter test 172/172 pass — 40 file) |
 | **G4** | Sửa `minQty` không sửa được sau khi tạo sản phẩm | Trung bình | Done (flutter analyze sạch — 0 issue toàn repo; flutter test 175/175 pass — 41 file, +3 so với baseline G3) |
 | **G5** | Cảnh báo khi bán khiến tồn về âm (được cấu hình cho phép) | Trung bình | Done (flutter analyze sạch — 0 issue toàn repo; flutter test 177/177 pass — 42 file, +2 so với baseline G4) |
-| **G6** | Đánh dấu `dead_letter` = "cần chủ xử lý" + khoá thao tác cho cashier | Trung bình | Chưa |
+| **G6** | Đánh dấu `dead_letter` = "cần chủ xử lý" + khoá thao tác cho cashier | Trung bình | Done (flutter analyze sạch — 0 issue toàn repo; flutter test 188/188 pass — 43 file, +11 so với baseline G5) |
 
 ---
 
@@ -106,11 +108,11 @@
 **Thiết kế đã chốt với user (2026-07-28):** không thêm trạng thái DB mới — coi `dead_letter` hiện có đúng là "nghiêm trọng" theo spec.
 
 **DoD:**
-- [ ] Dòng `dead_letter` trong `outbox_conflicts_page.dart` có nhãn/badge rõ ràng "Cần chủ xử lý".
-- [ ] Nút Thử lại / Bỏ qua trên dòng `dead_letter` bị ẩn hoặc khoá (disabled) khi role hiện tại là cashier; chỉ owner/store_manager thao tác được.
-- [ ] Dòng `error` (chưa tới `dead_letter`, còn tự retry) giữ nguyên hành vi cũ cho mọi role.
-- [ ] `flutter test` phủ: cashier thấy nhãn nhưng nút bị khoá trên `dead_letter`; owner/store_manager thao tác bình thường; `error` không đổi hành vi.
-- [ ] `flutter analyze` sạch trên path đụng.
+- [x] Dòng `dead_letter` trong `outbox_conflicts_page.dart` có nhãn/badge rõ ràng "Cần chủ xử lý".
+- [x] Nút Thử lại / Bỏ qua trên dòng `dead_letter` bị ẩn hoặc khoá (disabled) khi role hiện tại là cashier; chỉ owner/store_manager thao tác được.
+- [x] Dòng `error` (chưa tới `dead_letter`, còn tự retry) giữ nguyên hành vi cũ cho mọi role.
+- [x] `flutter test` phủ: cashier thấy nhãn nhưng nút bị khoá trên `dead_letter`; owner/store_manager thao tác bình thường; `error` không đổi hành vi.
+- [x] `flutter analyze` sạch trên path đụng.
 
 ---
 
@@ -300,3 +302,57 @@
 - **SnackBar hiện TRƯỚC `Navigator.pop()`, không phải sau** — dựa đúng theo thứ tự đã có sẵn của khối "Tạo hóa đơn thất bại" (show rồi mới pop); xác nhận qua test rằng `ScaffoldMessenger` được đăng ký ở `Scaffold` của trang bên dưới (không phải của sheet đang đóng) nên SnackBar sống sót qua việc pop, không bị mất theo animation đóng sheet.
 - **Không dedupe cảnh báo khi 1 sản phẩm xuất hiện nhiều lần** (vd vừa là dòng bán thường vừa là thành phần combo trong cùng đơn) — DoD không yêu cầu, và thông tin lặp vẫn đúng (phản ánh đúng tiến trình trừ tồn qua từng lần `_decrementStock`), không sai lệch — thêm dedupe sẽ là over-engineering ngoài 2 kịch bản DoD yêu cầu.
 - **Ngưỡng cảnh báo là `< 0` tuyệt đối, không có buffer/ngưỡng gần hết** — đúng yêu cầu "chỉ cảnh báo khi tồn SAU bán thực sự ÂM (< 0)"; tồn về đúng 0 KHÔNG kích hoạt cảnh báo (điều kiện `newQty < Decimal.zero` loại trừ đúng trường hợp bằng 0) — phân biệt rõ với "hàng sắp hết" (báo cáo tồn kho, ngoài phạm vi G5).
+
+---
+
+### Ghi chú review G6
+
+**Xác nhận lại mô tả bug so với code thật:** đúng như audit mô tả — `outbox_conflicts_page.dart` (trước G6) chỉ phân biệt `error`/`dead_letter` bằng icon + màu (dòng 150-163 cũ), không có nhãn "nghiêm trọng" và không role-gate gì cả: 2 nút hành động thật sự tồn tại trên mỗi dòng là **"Sửa"** (mở `OutboxEditSheet`) và **"Thử lại"** — không có nút literal "Bỏ qua" nào trong code (đã grep toàn bộ `apps/pos_app/lib` xác nhận không có "Bỏ qua"/"Ignore"/"Dismiss" nào liên quan outbox). Đọc kỹ `outbox_edit_sheet.dart` xác nhận nút "Sửa" **không phải chỉ xem** — nút "Lưu và thử lại" trong sheet đó gọi `saveRawJson`/`saveProductUpsertIdentity`/`saveInsufficientStockQtys`, cả 3 đều kết thúc bằng `_db.requeueOutbox(...)` giống hệt "Thử lại" (chỉ khác có sửa payload trước khi requeue) — nên cả 2 nút đều là "thao tác resolve" cần khoá như nhau cho cashier trên dòng `dead_letter`, không chỉ riêng "Thử lại".
+
+**Quyết định khoá nút — chọn "khoá visible-nhưng-disabled" (không ẩn hẳn):**
+- Lý do chính (đã cân nhắc kỹ, không chỉ theo gợi ý mặc định trong đề bài): đây là màn hình mà TOÀN BỘ mục đích là hiển thị vấn đề đồng bộ để người dùng biết mà xử lý — một dòng `dead_letter` không có nút nào cả sẽ trông như "hỏng"/"thiếu chức năng" hơn là "bị khoá có chủ đích", đặc biệt khi ngay dòng `error` bên cạnh (cùng danh sách, cùng layout) vẫn có đủ 2 nút. Nút khoá (xám, không bấm được) đặt cạnh badge "Cần chủ xử lý" tạo liên kết nhân-quả trực quan: cashier nhìn thấy ngay "có nút nhưng không dùng được — vì đây là lỗi cần chủ xử lý", từ đó biết cần báo chủ thay vì tưởng nhầm là lỗi hiển thị.
+- Nút bị ẩn hẳn (như cách `sync_diagnostics_page.dart` ẩn nút "Khôi phục từ bản sao lưu" với non-owner) phù hợp cho 1 hành động global/hiếm/phá huỷ có đúng 1 điều kiện gate cố định; ở đây điều kiện gate thay đổi **theo từng dòng trong cùng 1 danh sách** (dead_letter vs error) — ẩn/hiện nút nhấp nháy qua lại giữa các dòng khi cuộn sẽ rối hơn là giữ layout nhất quán (luôn 2 nút) và chỉ đổi trạng thái enable.
+- Áp dụng nhất quán cho cả nút bulk "Thử lại tất cả" ở AppBar (xem mục dưới) — cùng 1 ngôn ngữ hình ảnh "khoá = xám" trên toàn trang, không trộn ẩn/khoá.
+
+**Phát hiện thêm ngoài 3 gạch đầu dòng DoD — lỗ hổng ở nút bulk "Thử lại tất cả":** `OutboxConflictService.retryAll()` (trước G6) gọi `_db.listOutboxErrors()` — hàm này **gộp cả `error` lẫn `dead_letter`** (xem doc comment sẵn có tại `database.dart:573-578`) rồi requeue toàn bộ không phân biệt. Nếu chỉ khoá 2 nút per-row mà bỏ qua nút bulk này, cashier vẫn "gỡ" được mọi `dead_letter` chỉ bằng 1 cú bấm "Thử lại tất cả" ở AppBar — vô hiệu hoá hoàn toàn khoá per-row vừa thêm. Đây không phải yêu cầu liệt kê tường minh trong DoD (DoD chỉ nói "trên dòng dead_letter"), nhưng để lại lỗ hổng này sẽ khiến toàn bộ tính năng chỉ là "trang trí" — quyết định tự vá trong cùng file/scope (không đụng file ngoài phạm vi G6):
+- `OutboxConflictService.retryAll({bool includeDeadLetter = true})` (`outbox_conflict_service.dart:24-40`) — thêm tham số optional, mặc định `true` giữ nguyên 100% hành vi cũ cho mọi caller hiện có (kể cả test cũ `'retryAll requeues every error then ticks once'` không cần sửa). `outbox_conflicts_page.dart::_retryAll()` gọi `retryAll(includeDeadLetter: _canActOnDeadLetter)` — cashier tự động loại `dead_letter` khỏi lượt bulk, owner/store_manager không đổi.
+- Khoá thêm chính nút bulk khi rỗng tác dụng: getter `_hasBulkRetryableEntries` (`outbox_conflicts_page.dart:47-54`) — với cashier, chỉ `true` khi còn ít nhất 1 dòng `error` (không tính `dead_letter`); `onPressed` của nút "Thử lại tất cả" khoá khi giá trị này `false`, tránh tình huống bấm "thành công" giả (snackbar báo "Đã thử đồng bộ lại tất cả" dù không có gì được requeue thật).
+
+**Truyền `role` vào `OutboxConflictsPage` — đổi signature:**
+- Thêm `required this.role` (kiểu `String`, cùng kiểu với `AuthUser.role`) vào constructor `OutboxConflictsPage` — theo đúng convention `role: String` (không phải `AuthUser user`) đã dùng ở `SyncDiagnosticsPage` (file liền kề cùng thư mục `features/sync/`, cũng role-gate 1 hành động: nút "Khôi phục từ bản sao lưu" chỉ owner).
+- Nơi gọi duy nhất — `pos_page.dart::_openOutboxConflicts()` (dòng 559-572, qua nút "Đồng bộ lỗi" trên AppBar `PosPage`) — đã grep xác nhận không có call site nào khác (`QuickViewHubPage` từ G3 không điều hướng tới trang này) — thêm đúng 1 dòng `role: widget.role,` (field đã có sẵn trên `PosPage`, dùng lại y hệt cách `SyncDiagnosticsPage` đã được truyền `role: widget.role` ở block code ngay bên dưới trong cùng file).
+- Không có test nào từng import `outbox_conflicts_page.dart` trước G6 (đã grep `apps/pos_app/test`) nên đổi signature thành `required` không phá test cũ nào.
+
+**Badge "Cần chủ xử lý" — hiện cho MỌI role, không riêng cashier:** DoD (a) không ràng buộc theo role ("Dòng `dead_letter` ... có nhãn/badge" — là thuộc tính của bản ghi, không phải của người xem). Owner/store_manager cũng được lợi khi thấy badge này — giúp họ quét nhanh dòng nào "nghiêm trọng" (đã hết retry hạ tầng) giữa danh sách lẫn lộn với `error` thường. Dùng widget `Chip` (không phải `Container`/`Material` tự vẽ) vì đây đã là pattern có sẵn trong cùng thư mục (`sync_diagnostics_page.dart` dùng `Chip` cho nhãn "Cần sao lưu"/">1h") — màu `tertiaryContainer`/`onTertiaryContainer` khớp đúng `accentColor = theme.colorScheme.tertiary` đã dùng sẵn cho icon+text của dòng `dead_letter`, giữ nhất quán bảng màu trong cùng 1 dòng danh sách.
+
+**Phòng thủ kép (defense-in-depth) tại `_retryOne`/`_edit`:** ngoài khoá nút ở `build()`, cả 2 hàm xử lý đều re-check `entry.status == 'dead_letter' && !_canActOnDeadLetter` trước khi làm bất cứ điều gì, hiện SnackBar từ chối nếu không đủ quyền — theo đúng house style đã có sẵn trong `sync_diagnostics_page.dart::_openRestoreFlow` (comment gốc tại đó: "kiểm lại role tại đây... thay vì tin tưởng tuyệt đối vào việc ẩn nút"). Nhánh này không thể kích hoạt qua UI thật (nút đã `onPressed: null` nên `tester.tap` là no-op, không gọi tới hàm) — chấp nhận không có test riêng cho đúng nhánh này, cùng lý do `sync_diagnostics_page.dart` gốc cũng không có test nào (file đó không có test file).
+
+**Evidence (file:line) — sau khi sửa:**
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:8-16` — hàm thuần `outboxDeadLetterActionsAllowedForRole(String role)` (+ doc comment §6.3), cùng khuôn với `quickViewAllowedForRole` (G3) để unit-test độc lập không cần dựng widget tree.
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:22`, `28-31` — `required this.role` trong constructor + doc comment/field declaration.
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:44-64` — getter `_canActOnDeadLetter` (44-45), getter `_hasBulkRetryableEntries` (47-54), hàm `_denyDeadLetterAction()` (56-64).
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:93-102`, `143-150` — phòng thủ kép trong `_retryOne`/`_edit`.
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:119-124` — `_retryAll()` truyền `includeDeadLetter: _canActOnDeadLetter`.
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:170-186` — khoá nút bulk "Thử lại tất cả" ở AppBar (`onPressed` kiểm cả `_hasBulkRetryableEntries`).
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:211-216` — `isLockedForRole` tính trong `itemBuilder`.
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:236-258` — badge `Chip` "Cần chủ xử lý".
+- `apps/pos_app/lib/features/sync/outbox_conflicts_page.dart:277-293` — khoá 2 nút "Sửa"/"Thử lại" per-row bằng `isLockedForRole`.
+- `apps/pos_app/lib/features/sync/outbox_conflict_service.dart:24-40` — `retryAll({bool includeDeadLetter = true})`.
+- `apps/pos_app/lib/features/pos/pos_page.dart:567` — truyền `role: widget.role` khi tạo `OutboxConflictsPage`.
+
+**Test:**
+- `apps/pos_app/test/outbox_conflicts_page_test.dart` (file mới — chưa từng có test riêng cho trang này trước G6) — 8 test, theo đúng pattern widget test đã có ở G3 (`AppDatabase` in-memory thật + `MockOutboxWorker`, không mock `OutboxConflictService` vì đây là class cụ thể không phải interface): 1 test thuần cho `outboxDeadLetterActionsAllowedForRole`; nhóm "dead_letter role gate" phủ đủ 3 kịch bản DoD (cashier thấy badge nhưng 2 nút khoá + tap không đổi gì + không mở được sheet; owner thao tác "Thử lại" bình thường; store_manager mở được "Sửa" tới đúng `OutboxEditSheet`; `error` giữ nguyên hành vi cho cashier — không badge, 2 nút vẫn bấm được); nhóm "Thử lại tất cả" phủ thêm lỗ hổng bulk đã phát hiện (cashier bulk chỉ gỡ `error`, giữ nguyên `dead_letter`; nút bulk khoá hẳn khi danh sách chỉ toàn `dead_letter`; owner bulk vẫn gỡ được `dead_letter` như hành vi cũ).
+- `apps/pos_app/test/outbox_conflict_service_test.dart` — mở rộng group `retry` có sẵn, thêm 3 test cho `retryAll({bool includeDeadLetter})` ở tầng service (bổ sung cho test widget-level ở trên, phủ trực tiếp logic filter): mặc định `true` giữ hành vi cũ; `false` bỏ qua `dead_letter` nhưng vẫn requeue `error`; `false` không gọi `worker.tick()` khi danh sách chỉ có `dead_letter` (không có gì để thử lại thật).
+
+**Kết quả xác nhận:**
+- `flutter analyze` — "No issues found!" trên toàn bộ repo `pos_app` (không riêng path đụng).
+- `flutter test` (toàn bộ) — `+188: All tests passed!`, 0 failed. Đếm độc lập bằng `rg '^\s*(test|testWidgets)\(' apps/pos_app/test -c` (qua Grep tool) ra đúng **188 test / 43 file** (baseline G5 là 177/42 file — tăng đúng 11: +8 từ file mới `outbox_conflicts_page_test.dart`, +3 từ mở rộng `outbox_conflict_service_test.dart`, khớp chính xác).
+- File Windows generated (`generated_plugin_registrant.cc/.h`, `generated_plugins.cmake`) bị `flutter test`/`flutter analyze` đụng vào (đúng quirk môi trường đã ghi trong plan) nhưng `git diff --ignore-all-space` rỗng — đã `git restore` cả 3 file trước khi commit.
+
+**Quyết định tự đưa ra khi implement:**
+- **Khoá (disabled), không ẩn** — đã trình bày chi tiết ở trên; đây là quyết định được giao tường minh cho người thực thi task, chọn dựa trên phân tích UX cụ thể của chính màn hình này (danh sách trộn lẫn `error`/`dead_letter`, cần layout nhất quán) chứ không chỉ theo gợi ý mặc định.
+- **Gate luôn cả nút bulk "Thử lại tất cả"** dù DoD chỉ nêu "trên dòng dead_letter" — coi đây là thuộc phạm vi G6 (cùng file, cùng tính năng, cùng cơ chế `_db.listOutboxErrors()` đang bị khai thác), không phải mở rộng scope: để lại lỗ hổng này sẽ khiến 2 nút per-row bị khoá trở thành vô nghĩa (1 cú bấm bulk là bỏ qua được hết).
+- **Badge hiện cho mọi role** (không riêng cashier) — đọc đúng nghĩa đen DoD (a): badge mô tả mức độ nghiêm trọng của bản ghi, không phải quyền hạn người xem.
+- **Không đụng `outbox_edit_sheet.dart`** — file đó chỉ có 1 điểm vào duy nhất (`OutboxConflictsPage._edit()`, đã grep xác nhận), khoá đúng tại điểm vào là đủ; thêm role-check trùng lặp bên trong `OutboxEditSheet` sẽ là phòng thủ ba lớp không cần thiết cho 1 luồng chỉ có đúng 1 lối vào.
+- **Không thêm trạng thái DB mới / không đổi CHECK constraint của cột `status`** — đúng thiết kế đã chốt với user, dùng nguyên `dead_letter` sẵn có làm mốc "nghiêm trọng".
+- **Không viết test riêng cho nhánh phòng thủ kép trong `_retryOne`/`_edit`** — nhánh này không thể kích hoạt qua UI thật khi nút đã bị khoá đúng (tapping một nút `onPressed: null` là no-op ở tầng Flutter, không gọi vào hàm xử lý) — coverage của "nút bị khoá" (assertion `onPressed == null`) đã là bằng chứng hành vi mạnh hơn; thêm test giả lập gọi thẳng phương thức private là không khả thi và không cần thiết.

@@ -117,6 +117,22 @@ void main() {
           );
     }
 
+    Future<void> seedDeadLetterOutbox(String outboxRowId) async {
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion.insert(
+              id: outboxRowId,
+              entityType: 'sale',
+              payloadJson: jsonEncode({'id': 'sale-1'}),
+              createdAt: DateTime(2026),
+              status: const Value('dead_letter'),
+              lastError: const Value(outboxSyncRetryExhaustedReason),
+              retryCount: const Value(5),
+            ),
+          );
+    }
+
     test('requeue clears error and calls worker tick', () async {
       const outboxRowId = 'outbox-row-1';
       await seedErrorOutbox(outboxRowId);
@@ -143,6 +159,56 @@ void main() {
         isTrue,
       );
       verify(() => worker.tick()).called(1);
+    });
+
+    // §6.3 / G6: cashier không được tự "gỡ" dead_letter — điều này áp cho cả
+    // lối bulk, không chỉ nút Thử lại từng dòng (xem
+    // `outbox_conflicts_page.dart::_retryAll`).
+    test('retryAll(includeDeadLetter: true) — mặc định, requeue cả dead_letter '
+        '(hành vi cũ, dùng cho owner/store_manager)', () async {
+      await seedErrorOutbox('outbox-err');
+      await seedDeadLetterOutbox('outbox-dl');
+
+      await service.retryAll();
+
+      final rows = await db.select(db.outboxEntries).get();
+      expect(
+        rows.every((r) => r.status == 'pending' && r.lastError == null),
+        isTrue,
+      );
+      verify(() => worker.tick()).called(1);
+    });
+
+    test('retryAll(includeDeadLetter: false) — bỏ qua dead_letter, vẫn requeue '
+        'error (dùng cho cashier)', () async {
+      await seedErrorOutbox('outbox-err');
+      await seedDeadLetterOutbox('outbox-dl');
+
+      await service.retryAll(includeDeadLetter: false);
+
+      final errRow = await (db.select(
+        db.outboxEntries,
+      )..where((r) => r.id.equals('outbox-err'))).getSingle();
+      final dlRow = await (db.select(
+        db.outboxEntries,
+      )..where((r) => r.id.equals('outbox-dl'))).getSingle();
+      expect(errRow.status, 'pending');
+      expect(dlRow.status, 'dead_letter');
+      expect(dlRow.retryCount, 5);
+      verify(() => worker.tick()).called(1);
+    });
+
+    test('retryAll(includeDeadLetter: false) does not tick when only '
+        'dead_letter rows exist (nothing to retry)', () async {
+      await seedDeadLetterOutbox('outbox-dl-only');
+
+      await service.retryAll(includeDeadLetter: false);
+
+      final row = await (db.select(
+        db.outboxEntries,
+      )..where((r) => r.id.equals('outbox-dl-only'))).getSingle();
+      expect(row.status, 'dead_letter');
+      verifyNever(() => worker.tick());
     });
   });
 
