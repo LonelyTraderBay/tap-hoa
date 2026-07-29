@@ -58,6 +58,10 @@ describe('Phase 3 VAT summary e2e', () => {
     });
     await prisma.purchaseReceipt.deleteMany({ where: { storeId } });
     await prisma.saleLine.deleteMany({ where: { sale: { storeId } } });
+    await prisma.saleReturnLine.deleteMany({
+      where: { saleReturn: { storeId } },
+    });
+    await prisma.saleReturn.deleteMany({ where: { storeId } });
     await prisma.sale.deleteMany({ where: { storeId } });
     await prisma.shift.updateMany({
       where: { storeId, closedAt: null },
