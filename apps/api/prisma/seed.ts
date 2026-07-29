@@ -1,9 +1,12 @@
 // apps/api/prisma/seed.ts
 import { CashDirection, PrismaClient, Role } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 import { seedChartOfAccounts } from '../src/ledger/seed-accounts';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 async function main() {
   await seedChartOfAccounts(prisma);
