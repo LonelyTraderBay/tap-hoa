@@ -30,20 +30,26 @@ export class DevicesService {
     }
     try {
       // Optional dependency: present when installed + env configured.
+      // firebase-admin v14 removed the legacy `admin.xxx` namespace API
+      // (admin.apps / admin.credential.cert / admin.messaging()) — use the
+      // modular entrypoints instead, still requirable under CommonJS.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const admin = require('firebase-admin') as {
-        apps: unknown[];
+      const adminApp = require('firebase-admin/app') as {
+        getApps: () => unknown[];
         initializeApp: (opts: { credential: unknown }) => void;
-        credential: { cert: (s: unknown) => unknown };
-        messaging: () => AdminMessaging;
+        cert: (s: unknown) => unknown;
       };
-      if (!admin.apps.length) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const adminMessaging = require('firebase-admin/messaging') as {
+        getMessaging: () => AdminMessaging;
+      };
+      if (!adminApp.getApps().length) {
         const serviceAccount = JSON.parse(readFileSync(path, 'utf8'));
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
+        adminApp.initializeApp({
+          credential: adminApp.cert(serviceAccount),
         });
       }
-      this.messaging = admin.messaging();
+      this.messaging = adminMessaging.getMessaging();
       return this.messaging;
     } catch (error) {
       this.logger.warn(`Firebase admin init failed: ${String(error)}`);
