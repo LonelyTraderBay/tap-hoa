@@ -129,6 +129,17 @@ export class SaleReturnsService {
     ) {
       return { accepted: false, reason: 'invalid_return' };
     }
+    // H2: check trên chỉ đối chiếu NỘI BỘ giữa split và total của chính DTO —
+    // không chặn được payload lỗi (bug client) hoặc chỉnh tay qua raw-JSON
+    // editor của OutboxEditSheet đẩy totalRefundVnd lệch hẳn với tổng thực tế
+    // của dto.lines[]. Đối chiếu thêm với nguồn sự thật là lines[] trước khi
+    // ghi bất cứ gì vào DB — journal-builders dùng thẳng totalRefundVnd nên
+    // lệch ở đây sẽ ghi sai số tiền vào sổ cái. Toàn bộ là số nguyên VNĐ nên
+    // so sánh tuyệt đối, không cần buffer làm tròn.
+    const lineRefundSum = dto.lines.reduce((sum, l) => sum + l.lineRefundVnd, 0);
+    if (!Number.isSafeInteger(lineRefundSum) || lineRefundSum !== total) {
+      return { accepted: false, reason: 'refund_total_mismatch' };
+    }
     if (debtCredit > 0 && !sale.customerId) {
       return { accepted: false, reason: 'invalid_return' };
     }

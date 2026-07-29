@@ -2,6 +2,13 @@ export type ShiftCashInputs = {
   openingCash: number;
   saleCashTotal: number;
   saleTransferTotal: number;
+  /**
+   * SaleReturn.cashRefundVnd cộng dồn trong ca — tiền mặt đã ra khỏi ngăn
+   * kéo khi hoàn trả hàng, phải TRỪ khỏi expectedCashVnd. Chỉ phần hoàn
+   * bằng tiền mặt; SaleReturn.transferRefundVnd KHÔNG chạm tiền mặt nên
+   * không được cộng vào đây (xem loadShiftCashInputsWithClient).
+   */
+  saleReturnCashTotal: number;
   debtPaymentCashTotal: number;
   debtPaymentTransferTotal: number;
   voucherCashInTotal: number;
@@ -25,7 +32,8 @@ export function computeShiftCashSnapshot(
     inputs.saleCashTotal +
     inputs.debtPaymentCashTotal +
     inputs.voucherCashInTotal -
-    inputs.voucherCashOutTotal;
+    inputs.voucherCashOutTotal -
+    inputs.saleReturnCashTotal;
   const transferInShiftVnd =
     inputs.saleTransferTotal +
     inputs.debtPaymentTransferTotal +

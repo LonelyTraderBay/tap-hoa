@@ -68,6 +68,14 @@ export class ShiftsService {
       _sum: { cashAmount: true, transferAmount: true },
     });
 
+    // Trả hàng bán hoàn tiền mặt trong ca: tiền đã ra khỏi ngăn kéo, phải
+    // trừ khỏi expectedCashVnd. SaleReturn có shiftId trực tiếp (khác
+    // SupplierPayment) nên quy về đúng ca không cần join qua Sale gốc.
+    const saleReturnsAgg = await client.saleReturn.aggregate({
+      where: { shiftId },
+      _sum: { cashRefundVnd: true },
+    });
+
     const debtPayments = await client.debtLedgerEntry.findMany({
       where: { shiftId, type: 'payment' },
       select: { paymentMethod: true, amountVnd: true },
@@ -108,6 +116,7 @@ export class ShiftsService {
       openingCash: shift.openingCash,
       saleCashTotal: salesAgg._sum.cashAmount ?? 0,
       saleTransferTotal: salesAgg._sum.transferAmount ?? 0,
+      saleReturnCashTotal: saleReturnsAgg._sum.cashRefundVnd ?? 0,
       debtPaymentCashTotal,
       debtPaymentTransferTotal,
       voucherCashInTotal,

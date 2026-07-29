@@ -402,6 +402,107 @@ describe('Sync push', () => {
     expect(stock.qty.toString()).toBe('1');
   });
 
+  // H6 (docs/superpowers/plans/2026-07-28-h1-h6-deep-audit-fixes.md): spec
+  // (§3.5 inventory-stock-ops-design.md) mô tả thứ tự sau `sales`, nhưng
+  // commit ab65fcc ("đã harden ... thứ tự sync kho→bán") đã CỐ Ý đảo
+  // `pushInventory()` lên trước `pushSales()` — xác nhận bằng test phía
+  // trên ("processes purchase receipts before same-push sales"). Test này
+  // xác nhận vế còn lại (kho GIẢM tồn, không phải TĂNG).
+  //
+  // Lưu ý quan trọng phát hiện khi viết test này: sale dòng hàng THƯỜNG
+  // (không phải combo) KHÔNG có điều kiện `qty - delta >= 0` trong câu UPDATE
+  // thô (processSale, nhánh else) — server LUÔN chấp nhận sale kể cả khi âm
+  // tồn (xem test có sẵn cùng file 'accepts concurrent offline sales and
+  // allows negative stock', dòng ~495). Vì vậy "kết quả kiểm tra tồn kho
+  // (insufficient_stock) phụ thuộc thứ tự" không thể hiện qua việc SALE bị
+  // từ chối — mà hiện qua việc WASTAGE (có `requireNonNegative: true`) có bị
+  // từ chối hay không, tuỳ thuộc quy trình xử lý wastage TRƯỚC hay SAU sale
+  // (sale không tự giới hạn nên có thể "ăn" hết tồn trước khi wastage kịp
+  // trừ). Test dưới đây dựng đúng kịch bản đó: tồn gốc 5, sale bán 3 (luôn
+  // được chấp nhận), wastage hủy 3 CÙNG request — nếu kho xử lý TRƯỚC (thứ
+  // tự hiện tại, giữ nguyên): wastage trừ trên tồn gốc 5 → còn 2, được chấp
+  // nhận; sale trừ tiếp không giới hạn (2-3) → tồn cuối -1. Nếu đảo thứ tự
+  // (sale trước): sale trừ trước (5-3=2, luôn được chấp nhận), wastage trừ
+  // trên tồn còn 2 → âm (2-3=-1) → bị từ chối `insufficient_stock`, tồn cuối
+  // giữ 2 (chỉ sale áp dụng). Test này khoá đúng nhánh THỨ NHẤT (thứ tự hiện
+  // tại) làm bằng chứng chạy được cho quyết định giữ nguyên trong "Ghi chú
+  // review H6".
+  it('POST /sync/push processes wastage before same-push sale — giữ nguyên thứ tự kho→bán (H6)', async () => {
+    const login = await loginAsOwner(app);
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${login.accessToken}`);
+    const storeId = stores.body[0].id as string;
+    const product = await prisma.product.findUnique({
+      where: { sku: 'STING-330' },
+    });
+    if (!product) {
+      throw new Error('Seed product STING-330 not found');
+    }
+    // Tồn gốc 5: đủ cho wastage 3 nếu xét trên tồn gốc (kho xử lý trước,
+    // đúng thứ tự hiện tại), KHÔNG đủ nếu sale 3 (luôn được chấp nhận,
+    // không tự giới hạn) đã trừ tồn trước xuống còn 2 (5-3=2, thiếu 1 so
+    // với 3 mà wastage cần).
+    await prisma.productStoreStock.upsert({
+      where: {
+        productId_storeId: { productId: product.id, storeId },
+      },
+      create: { productId: product.id, storeId, qty: 5, minQty: 0 },
+      update: { qty: 5 },
+    });
+
+    const shiftId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/shifts/open')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({ storeId, openingCash: 0, clientId: shiftId })
+      .expect(201);
+
+    const wastageId = randomUUID();
+    const saleId = randomUUID();
+    const res = await request(app.getHttpServer())
+      .post('/sync/push')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .send({
+        deviceId: 'dev-wastage-then-sell',
+        wastages: [
+          {
+            id: wastageId,
+            storeId,
+            reasonCode: 'spoilage',
+            clientCreatedAt: new Date().toISOString(),
+            lines: [{ productId: product.id, qty: '3' }],
+          },
+        ],
+        sales: [
+          makeSaleDto(saleId, {
+            storeId,
+            shiftId,
+            soldById: login.user.id,
+            productId: product.id,
+            qty: '3',
+          }),
+        ],
+      })
+      .expect(201);
+
+    // Wastage được xử lý TRƯỚC (trên tồn gốc 5) nên được chấp nhận.
+    expect(res.body.acceptedWastageIds).toContain(wastageId);
+    expect(res.body.rejectedWastages).toEqual([]);
+    // Sale luôn được chấp nhận (không giới hạn tồn cho dòng hàng thường).
+    expect(res.body.acceptedIds).toContain(saleId);
+    expect(res.body.rejected).toEqual([]);
+
+    const stock = await prisma.productStoreStock.findUniqueOrThrow({
+      where: { productId_storeId: { productId: product.id, storeId } },
+    });
+    // 5 − 3 (wastage) − 3 (sale) = −1: cả hai đều áp dụng, đúng thứ tự
+    // kho→bán hiện tại (wastage trừ trên tồn gốc, sale trừ tiếp không giới
+    // hạn). Nếu đảo thứ tự, wastage sẽ bị từ chối và tồn cuối sẽ là 2 (5−3
+    // sale, wastage không áp dụng) thay vì −1.
+    expect(stock.qty.toString()).toBe('-1');
+  });
+
   it('POST /sync/push rejects invalid quantities and client money mismatches', async () => {
     const login = await loginAsOwner(app);
     const stores = await request(app.getHttpServer())
