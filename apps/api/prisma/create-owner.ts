@@ -1,8 +1,11 @@
 // One-shot production owner account bootstrap. Requires OWNER_PHONE and OWNER_PASSWORD.
 import { PrismaClient, Role } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
