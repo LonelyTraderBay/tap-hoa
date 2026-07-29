@@ -38,7 +38,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^22.10.2",
+    "@types/node": "^20.19.43",
     "@types/pdfkit": "^0.17.6",
     "@types/supertest": "^7.2.1",
     "jest": "^30.4.2",
@@ -46,6 +46,6 @@
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.9.3"
   }
 }
