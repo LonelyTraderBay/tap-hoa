@@ -83,8 +83,14 @@ export OWNER_PASSWORD="<strong one-time password>"
 docker compose -f docker-compose.prod.yml run --rm \
   -e OWNER_PHONE="$OWNER_PHONE" \
   -e OWNER_PASSWORD="$OWNER_PASSWORD" \
-  api npm run create-owner
+  api node dist/prisma/create-owner.js
 ```
+
+(`npm run create-owner` invokes `ts-node`, which fails inside this image —
+`tsconfig.json` isn't copied into the runtime stage. Run the compiled output
+directly instead; `npm run create-owner` still works when run outside Docker
+against a full repo checkout, e.g. the PowerShell flow in
+`production-secrets.md`.)
 
 Then disable or rotate any seed account as described in
 `docs/ops/production-secrets.md`.
